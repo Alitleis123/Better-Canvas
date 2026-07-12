@@ -1,16 +1,32 @@
-/*
- * Better Canvas — Canvas detection & page context.
- * The content script may be injected on any domain the user enabled, so we
- * confirm this is really a Canvas instance via DOM markers before doing work.
- */
+/* Better Canvas — Canvas detection + page-context identification. */
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
 
   let cachedIsCanvas = null;
 
-  const detect = (BC.detect = {
-    // True when the current page is a Canvas instance. Cached once positive.
+  function pageFromPath(path) {
+    if (!path) return "other";
+    if (path === "/" || path === "/dashboard" || path.startsWith("/dashboard")) return "dashboard";
+    if (/^\/courses\/\d+\/grades/.test(path)) return "grades";
+    if (/^\/courses\/\d+\/gradebook/.test(path)) return "gradebook";
+    if (/^\/courses\/\d+\/modules/.test(path)) return "modules";
+    if (/^\/courses\/\d+\/assignments\/\d+/.test(path)) return "assignment";
+    if (/^\/courses\/\d+\/assignments/.test(path)) return "assignments";
+    if (/^\/courses\/\d+\/discussion_topics/.test(path)) return "discussions";
+    if (/^\/courses\/\d+\/announcements/.test(path)) return "announcements";
+    if (/^\/courses\/\d+\/files/.test(path)) return "files";
+    if (/^\/courses\/\d+\/pages/.test(path)) return "pages";
+    if (/^\/courses\/\d+/.test(path)) return "course";
+    if (/^\/calendar/.test(path)) return "calendar";
+    if (/^\/conversations/.test(path)) return "inbox";
+    if (/^\/profile/.test(path)) return "profile";
+    if (/^\/accounts/.test(path)) return "admin";
+    if (/^\/files/.test(path)) return "files";
+    return "other";
+  }
+
+  BC.detect = {
     isCanvas() {
       if (cachedIsCanvas) return true;
       const hit =
@@ -28,24 +44,30 @@
       return !!hit;
     },
 
-    // Identify which kind of Canvas page we're on (used to scope features).
+    isInstructureDomain() {
+      return /(^|\.)instructure\.com$/.test(location.hostname);
+    },
+
     context() {
       const path = location.pathname;
       const courseId = BC.util.courseIdFromHref(path);
-      let page = "other";
-      if (
-        path === "/" ||
-        path === "/dashboard" ||
-        path.startsWith("/dashboard") ||
-        (document.body && /\bdashboard\b/.test(document.body.className)) ||
-        document.getElementById("DashboardCard_Container")
-      ) {
-        page = "dashboard";
-      }
-      if (courseId) {
-        page = /\/courses\/\d+\/grades/.test(path) ? "grades" : "course";
-      }
-      return { page, courseId };
+      let page = pageFromPath(path);
+      if (page === "other" && document.getElementById("DashboardCard_Container")) page = "dashboard";
+      return { page, courseId, path, search: location.search };
     },
-  });
+
+    waitFor(selector, timeout) {
+      const to = timeout || 5000;
+      return new Promise((resolve) => {
+        const found = document.querySelector(selector);
+        if (found) return resolve(found);
+        const obs = new MutationObserver(() => {
+          const n = document.querySelector(selector);
+          if (n) { obs.disconnect(); resolve(n); }
+        });
+        obs.observe(document.documentElement, { childList: true, subtree: true });
+        setTimeout(() => { obs.disconnect(); resolve(document.querySelector(selector)); }, to);
+      });
+    },
+  };
 })();

@@ -1,45 +1,48 @@
 :root {
-  --bc-accent: #0374b5;
+  --bc-accent: #4f46e5;
   --bc-bg: #ffffff;
-  --bc-fg: #2d3b45;
-  --bc-muted: #6b7780;
-  --bc-border: #d3d8dc;
+  --bc-fg: #1f2937;
+  --bc-muted: #6b7280;
+  --bc-border: #e5e7eb;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bc-bg:#1a1d24; --bc-fg:#e5e7eb; --bc-muted:#9ca3af; --bc-border:#2a2f3a; }
 }
 * { box-sizing: border-box; }
 body {
-  width: 300px;
-  margin: 0;
-  padding: 14px;
+  width: 320px; margin: 0; padding: 14px;
   font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: var(--bc-bg);
-  color: var(--bc-fg);
+  background: var(--bc-bg); color: var(--bc-fg);
 }
 .bc-pop-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .bc-pop-logo {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; border-radius: 8px;
+  width: 34px; height: 34px; border-radius: 10px;
   background: var(--bc-accent); color: #fff; font-weight: 800; font-size: 13px;
 }
-.bc-pop-header h1 { font-size: 16px; margin: 0; }
+.bc-pop-header h1 { font-size: 15px; margin: 0; }
+.bc-ver { font-size: 11px; color: var(--bc-muted); margin: 0; }
 .bc-site {
-  font-size: 12px; padding: 8px 10px; border-radius: 6px;
-  background: #f1f4f6; color: var(--bc-muted); margin-bottom: 12px;
+  font-size: 12px; padding: 8px 10px; border-radius: 8px;
+  background: rgba(0,0,0,.04); color: var(--bc-muted); margin-bottom: 12px;
 }
-.bc-site.is-active { background: #e3f3e9; color: #0b7a44; }
+.bc-site.is-active { background: #d1fae5; color: #065f46; }
+@media (prefers-color-scheme: dark) { .bc-site { background: rgba(255,255,255,.05); } }
 .bc-site button {
   margin-top: 8px; width: 100%; padding: 7px; border: none; border-radius: 6px;
   background: var(--bc-accent); color: #fff; cursor: pointer; font-weight: 600;
 }
-.bc-section { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.bc-section { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
 .bc-toggle, .bc-row {
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px; padding: 6px 0;
 }
-.bc-row select { padding: 4px 6px; border: 1px solid var(--bc-border); border-radius: 5px; }
+.bc-row select { padding: 4px 6px; border: 1px solid var(--bc-border); border-radius: 6px; background: var(--bc-bg); color: inherit; }
 .bc-toggle input { width: 18px; height: 18px; }
+.bc-actions { display: flex; gap: 6px; }
 .bc-btn {
-  width: 100%; padding: 9px; border: 1px solid var(--bc-border); border-radius: 7px;
-  background: #f5f5f5; color: var(--bc-fg); cursor: pointer; font-weight: 600;
+  flex: 1; padding: 8px; border: 1px solid var(--bc-border); border-radius: 8px;
+  background: var(--bc-bg); color: var(--bc-fg); cursor: pointer; font-weight: 600;
 }
 .bc-btn--primary { background: var(--bc-accent); color: #fff; border: none; }
 .bc-note { font-size: 11px; color: var(--bc-muted); text-align: center; margin: 10px 0 0; }

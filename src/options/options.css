@@ -1,18 +1,8 @@
-/* Better Canvas — options page reset. The real styling ships inside
-   settings-ui.js so the drawer and this page look identical. */
-html, body, #bc-settings-root {
-  height: 100%;
-  margin: 0;
-}
+/* Standalone options page container. Actual styling ships inside settings/index.js. */
+html, body, #bc-settings-root { height: 100%; margin: 0; }
 body {
-  background: #f6f6fb;
+  background: #f6f7fb;
   font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
 }
-@media (prefers-color-scheme: dark) {
-  body { background: #121119; }
-}
-/* Center the app on wide screens; full-bleed on narrow ones. */
-#bc-settings-root {
-  max-width: 920px;
-  margin: 0 auto;
-}
+@media (prefers-color-scheme: dark) { body { background: #121319; } }
+#bc-settings-root { max-width: 1080px; margin: 0 auto; padding: 12px; }

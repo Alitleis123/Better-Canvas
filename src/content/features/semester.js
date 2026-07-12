@@ -1,0 +1,87 @@
+/*
+ * Better Canvas — semester progress widget.
+ * "Week 9 of 15 · 43 days left" bar on the dashboard, computed from the
+ * enrollment term dates of the user's active courses.
+ */
+(function () {
+  "use strict";
+  const BC = (globalThis.BC = globalThis.BC || {});
+  BC.features = BC.features || {};
+
+  const DAY = 864e5;
+
+  const CSS = `
+    .bc-semester {
+      display: flex; align-items: center; gap: 12px; margin: 6px 0 12px; padding: 10px 14px;
+      border-radius: 10px; background: var(--bc-surface-2, #f3f4f6);
+      border: 1px solid var(--bc-border, #e5e7eb); font-size: 13px;
+    }
+    .bc-semester-label { font-weight: 600; white-space: nowrap; }
+    .bc-semester-track { flex: 1; height: 6px; border-radius: 999px; background: var(--bc-surface-3, #e5e7eb); overflow: hidden; }
+    .bc-semester-fill { height: 100%; background: var(--bc-accent, #0374b5); border-radius: 999px; transition: width .4s ease; }
+    .bc-semester-days { color: var(--bc-muted, #6b7280); white-space: nowrap; }
+  `;
+
+  function currentTerm(courses) {
+    const now = Date.now();
+    const counts = new Map();
+    for (const c of courses) {
+      const t = c.term;
+      if (!t || !t.start_at || !t.end_at) continue;
+      const s = new Date(t.start_at).getTime();
+      const e = new Date(t.end_at).getTime();
+      if (!(s <= now && now <= e)) continue;
+      const cur = counts.get(t.id) || { term: t, n: 0 };
+      cur.n++;
+      counts.set(t.id, cur);
+    }
+    let best = null;
+    for (const v of counts.values()) if (!best || v.n > best.n) best = v;
+    return best && best.term;
+  }
+
+  function render() {
+    BC.api.coursesWithScores().then((courses) => {
+      const term = currentTerm(courses);
+      if (!term) { BC.injector.removeNode("bc-semester"); return; }
+      const now = Date.now();
+      const s = new Date(term.start_at).getTime();
+      const e = new Date(term.end_at).getTime();
+      const pct = Math.min(100, Math.max(0, Math.round(((now - s) / (e - s)) * 100)));
+      const week = Math.max(1, Math.floor((now - s) / (7 * DAY)) + 1);
+      const weeks = Math.max(week, Math.round((e - s) / (7 * DAY)));
+      const daysLeft = Math.max(0, Math.ceil((e - now) / DAY));
+
+      const host = document.querySelector("#dashboard_header_container, #content") || document.body;
+      const node = BC.injector.ensureNode("bc-semester", host, () => {
+        const div = document.createElement("div");
+        div.className = "bc-semester";
+        div.innerHTML =
+          '<span class="bc-semester-label"></span>' +
+          '<div class="bc-semester-track"><div class="bc-semester-fill"></div></div>' +
+          '<span class="bc-semester-days"></span>';
+        const cards = document.getElementById("DashboardCard_Container");
+        if (cards && cards.parentNode) cards.parentNode.insertBefore(div, cards);
+        else host.appendChild(div);
+        return div;
+      });
+      node.querySelector(".bc-semester-label").textContent =
+        (term.name || "This term") + " · Week " + week + " of " + weeks;
+      node.querySelector(".bc-semester-fill").style.width = pct + "%";
+      node.querySelector(".bc-semester-days").textContent = daysLeft + " day" + (daysLeft === 1 ? "" : "s") + " left · " + pct + "%";
+    }).catch(() => {});
+  }
+
+  function apply(settings, ctx) {
+    const on = settings.dashboard && settings.dashboard.semesterProgress && ctx.page === "dashboard";
+    if (!on) {
+      BC.injector.removeNode("bc-semester");
+      BC.injector.setStyle("bc-semester-css", "");
+      return;
+    }
+    BC.injector.setStyle("bc-semester-css", CSS);
+    render();
+  }
+
+  BC.registry.register({ id: "semester", styles: ["bc-semester-css"], nodes: ["bc-semester"], apply });
+})();

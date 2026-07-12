@@ -1,302 +1,231 @@
 /*
- * Better Canvas — dashboard feature (the headline).
- * Per-card: hide, reorder, custom nickname, color, and background image.
- * Plus auto-hide concluded courses and independent To Do / Coming Up /
- * Recent Feedback sidebar toggles.
- *
- * Reordering/visuals re-apply on every observer tick and are idempotent, so
- * they survive Canvas's React re-renders. An inline gear editor on each card
- * lets the user customize directly on the dashboard.
+ * Better Canvas — dashboard.
+ * Card reorder / rename / recolor / hide / bg-image, layout modes, card sizes,
+ * inline grade badge, progress bar, unread badges, hover-preview, auto-hide
+ * concluded courses, sidebar widget toggles.
  */
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
   BC.features = BC.features || {};
-  const U = BC.util;
 
-  let concludedIds = null; // Set<string> once fetched
+  const originalTitles = new WeakMap();
+  const originalColors = new WeakMap();
+  let concludedIds = null;
   let concludedFetching = false;
 
-  // Locate all cards and, for each, the container child that holds it (the
-  // unit we reorder/hide), plus its course id.
-  function getCardData() {
-    const cards = Array.from(document.querySelectorAll(".ic-DashboardCard"));
-    if (!cards.length) return { container: null, items: [] };
-    let container = cards[0].parentElement;
-    while (container && cards.some((c) => !container.contains(c)))
-      container = container.parentElement;
-    if (!container) return { container: null, items: [] };
-    const items = cards
-      .map((card) => {
-        let root = card;
-        while (root.parentElement && root.parentElement !== container)
-          root = root.parentElement;
-        const link = card.querySelector('a[href*="/courses/"]');
-        const id = U.courseIdFromHref(link && link.getAttribute("href"));
-        return { card, root, id };
-      })
-      .filter((x) => x.id);
-    return { container, items };
-  }
-
-  function applyOrder(container, items, order) {
-    if (!order || !order.length) return;
-    const byId = new Map(items.map((it) => [it.id, it]));
-    const ordered = [];
-    for (const id of order) if (byId.has(id)) ordered.push(byId.get(id));
-    const rest = items.filter((it) => !ordered.includes(it));
-    const desired = ordered.concat(rest);
-    const currentRoots = items.map((it) => it.root);
-    const same =
-      desired.length === currentRoots.length &&
-      desired.every((it, i) => it.root === currentRoots[i]);
-    if (same) return;
-    for (const it of desired) container.appendChild(it.root);
-  }
-
-  function applyVisuals(card, cfg) {
-    // Nickname
-    const titleEl = card.querySelector(".ic-DashboardCard__header-title");
-    if (titleEl) {
-      if (card.dataset.bcOrigTitle == null)
-        card.dataset.bcOrigTitle = titleEl.textContent.trim();
-      const want = cfg.nickname ? cfg.nickname : card.dataset.bcOrigTitle;
-      if (titleEl.textContent !== want) titleEl.textContent = want;
-    }
-    // Color + background image live on the colored hero band.
-    const hero = card.querySelector(".ic-DashboardCard__header_hero");
-    if (hero) {
-      if (card.dataset.bcOrigColor == null)
-        card.dataset.bcOrigColor =
-          hero.style.backgroundColor ||
-          getComputedStyle(hero).backgroundColor ||
-          "";
-      const color = cfg.color && U.hexToRgb(cfg.color) ? cfg.color : card.dataset.bcOrigColor;
-      hero.style.setProperty("background-color", color, "important");
-      if (cfg.bgImage && U.isSafeUrl(cfg.bgImage)) {
-        hero.style.setProperty(
-          "background-image",
-          `url("${U.cssSafe(cfg.bgImage)}")`,
-          "important"
-        );
-        hero.style.backgroundSize = "cover";
-        hero.style.backgroundPosition = "center";
-      } else {
-        hero.style.removeProperty("background-image");
-      }
-    }
-  }
-
-  // Hover-only "Edit" pill in the top-left corner of the card — away from
-  // Canvas's own top-right kebab and the bottom action-icon row, so nothing
-  // overlaps. Stops propagation so it never triggers the card's course link.
-  function ensureEditPill(card, id) {
-    if (card.querySelector(":scope > .bc-card-pill")) return;
-    const btn = U.el(
-      "button",
-      {
-        class: "bc-card-pill",
-        type: "button",
-        title: "Better Canvas: edit this card",
-        "aria-label": "Edit card",
-        dataset: { bcCourse: id },
-      },
-      [
-        U.el("span", { class: "bc-card-pill-ico", text: "✎" }),
-        U.el("span", { class: "bc-card-pill-txt", text: "Edit" }),
-      ]
-    );
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      openEditor(id, btn);
-    });
-    const style = getComputedStyle(card);
-    if (style.position === "static") card.style.position = "relative";
-    card.appendChild(btn);
-  }
-
-  // ---- Singleton inline editor -------------------------------------------
-  let editorEl = null;
-  let fields = null;
-
-  function buildEditor() {
-    const nickname = U.el("input", { type: "text", class: "bc-ed-input", placeholder: "Custom name" });
-    const color = U.el("input", { type: "color", class: "bc-ed-color" });
-    const bg = U.el("input", { type: "text", class: "bc-ed-input", placeholder: "Background image URL (optional)" });
-    const hide = U.el("input", { type: "checkbox" });
-    const hideLabel = U.el("label", { class: "bc-ed-row" }, [hide, " Hide this card"]);
-    const reset = U.el("button", { type: "button", class: "bc-ed-btn", text: "Reset" });
-    const close = U.el("button", { type: "button", class: "bc-ed-btn bc-ed-btn--primary", text: "Done" });
-
-    fields = { nickname, color, bg, hide };
-
-    const persist = () =>
-      BC.storage.update((s) => {
-        const map = s.dashboard.courses;
-        const id = editorEl.dataset.courseId;
-        const cur = map[id] || {};
-        cur.nickname = nickname.value.trim();
-        cur.color = color.value;
-        cur.bgImage = bg.value.trim();
-        cur.hidden = hide.checked;
-        map[id] = cur;
-      });
-
-    [nickname, bg].forEach((el) => el.addEventListener("change", persist));
-    color.addEventListener("input", persist);
-    hide.addEventListener("change", persist);
-    reset.addEventListener("click", () => {
-      nickname.value = "";
-      bg.value = "";
-      hide.checked = false;
-      BC.storage.update((s) => {
-        delete s.dashboard.courses[editorEl.dataset.courseId];
-      });
-    });
-    close.addEventListener("click", () => (editorEl.style.display = "none"));
-
-    const panel = U.el("div", { class: "bc-card-editor" }, [
-      U.el("div", { class: "bc-ed-title", text: "Card settings" }),
-      U.el("div", { class: "bc-ed-row" }, [U.el("span", { text: "Name" }), nickname]),
-      U.el("div", { class: "bc-ed-row" }, [U.el("span", { text: "Color" }), color]),
-      U.el("div", { class: "bc-ed-row" }, [U.el("span", { text: "Image" }), bg]),
-      hideLabel,
-      U.el("div", { class: "bc-ed-actions" }, [reset, close]),
-    ]);
-    panel.style.display = "none";
-    return panel;
-  }
-
-  function openEditor(id, anchorBtn) {
-    editorEl = BC.injector.ensureNode("bc-card-editor", document.body, buildEditor);
-    if (!fields) return;
-    const cfg = (BC.storage.current?.dashboard.courses || {})[id] || {};
-    fields.nickname.value = cfg.nickname || "";
-    fields.color.value = /^#[0-9a-f]{6}$/i.test(cfg.color || "") ? cfg.color : "#394b58";
-    fields.bg.value = cfg.bgImage || "";
-    fields.hide.checked = !!cfg.hidden;
-    editorEl.dataset.courseId = id;
-    const r = anchorBtn.getBoundingClientRect();
-    editorEl.style.display = "block";
-    editorEl.style.top = window.scrollY + r.bottom + 6 + "px";
-    editorEl.style.left =
-      Math.max(8, window.scrollX + r.right - 260) + "px";
-  }
-
-  function maybeFetchConcluded(settings) {
-    if (!settings.dashboard.autoHideConcluded) return;
-    if (concludedIds || concludedFetching) return;
+  function maybeFetchConcluded(auto) {
+    if (!auto || concludedIds || concludedFetching || !BC.api) return;
     concludedFetching = true;
-    BC.api
-      .coursesWithScores()
-      .then((courses) => {
-        concludedIds = new Set(
-          courses
-            .filter(
-              (c) =>
-                c.concluded === true ||
-                (c.enrollments || []).every(
-                  (e) => e.enrollment_state === "completed"
-                )
-            )
-            .map((c) => String(c.id))
-        );
-        BC.applyAll && BC.applyAll(BC.storage.current);
-      })
-      .catch(() => {})
-      .finally(() => (concludedFetching = false));
+    BC.api.coursesWithScores().then((list) => {
+      concludedIds = new Set(list.filter((c) => c.concluded || (c.enrollments || []).some((e) => e.enrollment_state === "completed")).map((c) => String(c.id)));
+    }).catch(() => {}).finally(() => { concludedFetching = false; });
   }
 
-  const PILL_CSS = `
-.bc-card-pill { position:absolute; top:8px; left:8px; z-index:5; display:inline-flex;
-  align-items:center; gap:5px; padding:4px 10px 4px 8px; border:none; border-radius:999px;
-  cursor:pointer; font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-  background:rgba(15,18,25,0.55); color:#fff; opacity:0; transform:translateY(-3px);
-  transition:opacity .14s, transform .14s, background .14s; backdrop-filter:blur(4px); }
-.ic-DashboardCard:hover .bc-card-pill, .bc-card-pill:focus-visible { opacity:1; transform:none; }
-.bc-card-pill:hover { background:rgba(15,18,25,0.78); }
-.bc-card-pill-ico { font-size:12px; }
-.bc-card-editor { position:absolute; z-index:99999; width:252px; padding:12px;
-  background:#fff; color:#2d3b45; border:1px solid #c7cdd1; border-radius:8px;
-  box-shadow:0 8px 24px rgba(0,0,0,0.25); font-size:13px; }
-html.bc-dark .bc-card-editor { background:#161b22; color:#dfe3e8; border-color:#2b313a; }
-.bc-card-editor .bc-ed-title { font-weight:700; margin-bottom:8px; }
-.bc-card-editor .bc-ed-row { display:flex; align-items:center; gap:8px; margin:6px 0; }
-.bc-card-editor .bc-ed-row > span { width:46px; flex:0 0 auto; }
-.bc-card-editor .bc-ed-input { flex:1 1 auto; min-width:0; padding:4px 6px;
-  border:1px solid #c7cdd1; border-radius:4px; background:inherit; color:inherit; }
-.bc-card-editor .bc-ed-color { width:46px; height:28px; padding:0; border:1px solid #c7cdd1; }
-.bc-card-editor .bc-ed-actions { display:flex; justify-content:space-between; margin-top:10px; }
-.bc-card-editor .bc-ed-btn { padding:5px 12px; border:1px solid #c7cdd1; border-radius:4px;
-  background:#f5f5f5; color:#2d3b45; cursor:pointer; }
-.bc-card-editor .bc-ed-btn--primary { background:var(--ic-brand-primary,#0374b5); color:#fff; border:none; }
-`;
+  function widgetsCss(w) {
+    const rules = [];
+    if (!w.todo)           rules.push(`.Sidebar__TodoListContainer, .ToDoSidebar { display: none !important; }`);
+    if (!w.comingUp)       rules.push(`.events_list, .coming_up { display: none !important; }`);
+    if (!w.recentFeedback) rules.push(`.recent_feedback { display: none !important; }`);
+    return rules.join("\n");
+  }
 
-  const WIDGET_SELECTORS = {
-    todo:
-      ".Sidebar__TodoListContainer, .todo-list-header, .todo-list, " +
-      '[data-testid="todo-sidebar"], .planner-todo',
-    comingUp:
-      ".coming_up, .events_list.coming_up, .ic-EventList, " +
-      '[data-testid="coming-up"]',
-    recentFeedback:
-      ".recent_feedback, .events_list.recent_feedback, " +
-      '[data-testid="recent-feedback"]',
-  };
+  function layoutCss(d) {
+    const size = { s: 200, m: 250, l: 320 }[d.cardSize || "m"] || 250;
+    const rad = (d.cardRadius|0) + "px";
+    let css = `
+      .ic-DashboardCard { border-radius: ${rad} !important; overflow: hidden; }
+      .ic-DashboardCard__link, .ic-DashboardCard__box { border-radius: ${rad} !important; }
+      ${d.hoverLift ? `.ic-DashboardCard { transition: transform .18s ease, box-shadow .18s ease; }
+      .ic-DashboardCard:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,0,0,.12); }` : ""}
+    `;
+    if (d.layout === "grid") css += `.ic-DashboardCard__box { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 16px !important; }`;
+    if (d.layout === "list") css += `.ic-DashboardCard__box { display: flex !important; flex-direction: column !important; gap: 8px !important; }
+      .ic-DashboardCard { display: flex !important; flex-direction: row !important; height: 90px !important; }
+      .ic-DashboardCard__header { flex: 0 0 120px !important; }
+      .ic-DashboardCard__action-container { display: none !important; }`;
+    if (d.layout === "compact") css += `.ic-DashboardCard { max-height: 120px !important; }
+      .ic-DashboardCard__header_image { height: 40px !important; }`;
+    if (d.layout === "masonry") css += `.ic-DashboardCard__box { columns: ${Math.max(2, Math.floor(1200/size))} auto !important; column-gap: 14px !important; }
+      .ic-DashboardCard { break-inside: avoid !important; margin-bottom: 14px !important; }`;
+    return css;
+  }
 
-  BC.features.dashboard = {
-    id: "dashboard",
+  function overlayCard(card, spec) {
+    // spec: { nickname, color, bgImage, hidden }
+    const title = card.querySelector(".ic-DashboardCard__link, .ic-DashboardCard__header-title, .ic-DashboardCard__header_hero");
+    const link = card.querySelector(".ic-DashboardCard__link");
+    if (title) {
+      if (!originalTitles.has(card)) originalTitles.set(card, title.textContent);
+      if (spec.nickname && spec.nickname.trim()) title.textContent = spec.nickname;
+      else if (originalTitles.has(card)) title.textContent = originalTitles.get(card);
+    }
+    if (link) {
+      if (!originalColors.has(card)) originalColors.set(card, link.style.background || link.style.backgroundColor || "");
+      if (spec.color && BC.color.isHex(spec.color)) link.style.background = spec.color;
+      else if (originalColors.has(card) && originalColors.get(card)) link.style.background = originalColors.get(card);
+    }
+    if (spec.bgImage && BC.util.isSafeUrl(spec.bgImage)) {
+      const header = card.querySelector(".ic-DashboardCard__header_image, .ic-DashboardCard__header");
+      if (header) { header.style.backgroundImage = `url("${BC.util.cssSafe(spec.bgImage)}")`; header.style.backgroundSize = "cover"; header.style.backgroundPosition = "center"; }
+    }
+    card.style.display = spec.hidden ? "none" : "";
+  }
 
-    apply(settings) {
-      const d = settings.dashboard;
+  function overlayInlineGrade(card, courseId, scoresMap) {
+    const s = scoresMap.get(String(courseId));
+    if (s == null) return;
+    let badge = card.querySelector(".bc-inline-grade");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.className = "bc-inline-grade";
+      const link = card.querySelector(".ic-DashboardCard__link");
+      if (link) link.appendChild(badge);
+      else card.appendChild(badge);
+    }
+    badge.textContent = s.toFixed(1) + "%";
+    let band = "#059669";
+    if (s < 90) band = "#65a30d";
+    if (s < 80) band = "#ca8a04";
+    if (s < 70) band = "#dc2626";
+    badge.style.background = band;
+  }
 
-      // Sidebar widget toggles (CSS only; harmless off-dashboard).
-      let widgetCss = "";
-      if (d.hideSidebar) {
-        // Drop the entire right column and let the main content reclaim the width.
-        widgetCss +=
-          "#right-side-wrapper, .ic-app-main-content__secondary { display:none !important; }\n" +
-          "#not_right_side, .ic-Dashboard-header__layout ~ .ic-app-main-content__primary { width:100% !important; max-width:100% !important; }\n";
-      } else {
-        if (!d.widgets.todo) widgetCss += `${WIDGET_SELECTORS.todo}{display:none !important;}\n`;
-        if (!d.widgets.comingUp) widgetCss += `${WIDGET_SELECTORS.comingUp}{display:none !important;}\n`;
-        if (!d.widgets.recentFeedback)
-          widgetCss += `${WIDGET_SELECTORS.recentFeedback}{display:none !important;}\n`;
+  function overlayProgress(card, plannerCountByCourse) {
+    const cid = BC.util.courseIdFromHref(card.querySelector("a") && card.querySelector("a").getAttribute("href"));
+    if (!cid) return;
+    const info = plannerCountByCourse.get(cid);
+    if (!info) return;
+    const pct = info.total ? Math.round((info.done / info.total) * 100) : 0;
+    let bar = card.querySelector(".bc-progress");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.className = "bc-progress";
+      bar.innerHTML = `<div class="bc-progress-fill"></div>`;
+      card.appendChild(bar);
+    }
+    bar.querySelector(".bc-progress-fill").style.width = pct + "%";
+  }
+
+  function overlayBadges(card, badges) {
+    const cid = BC.util.courseIdFromHref(card.querySelector("a") && card.querySelector("a").getAttribute("href"));
+    if (!cid) return;
+    const b = badges.get(cid);
+    if (!b || (!b.unread && !b.due && !b.ungraded)) return;
+    let strip = card.querySelector(".bc-badges");
+    if (!strip) {
+      strip = document.createElement("div");
+      strip.className = "bc-badges";
+      card.appendChild(strip);
+    }
+    strip.innerHTML = "";
+    if (b.unread) strip.appendChild(Object.assign(document.createElement("span"), { className: "bc-badge unread", textContent: "🔔 " + b.unread }));
+    if (b.due) strip.appendChild(Object.assign(document.createElement("span"), { className: "bc-badge due", textContent: "⏰ " + b.due }));
+    if (b.ungraded) strip.appendChild(Object.assign(document.createElement("span"), { className: "bc-badge ungraded", textContent: "✎ " + b.ungraded }));
+  }
+
+  let scoresMap = new Map();
+  let plannerCountByCourse = new Map();
+  let badges = new Map();
+
+  async function loadInlineGrades() {
+    try {
+      const list = await BC.api.coursesWithScores();
+      scoresMap.clear();
+      for (const c of list) {
+        const enr = (c.enrollments || [])[0] || {};
+        const s = enr.computed_current_score != null ? enr.computed_current_score : enr.computed_final_score;
+        if (s != null) scoresMap.set(String(c.id), Number(s));
       }
-      BC.injector.setStyle("bc-dashboard-widgets", widgetCss);
+    } catch (_) {}
+  }
 
-      if (!d.enabled) {
-        BC.injector.removeNode("bc-card-editor");
-        BC.injector.setStyle("bc-dashboard-ui", "");
-        return;
+  async function loadPlannerCounts() {
+    try {
+      const start = new Date(); start.setDate(start.getDate() - 30);
+      const end = new Date(); end.setDate(end.getDate() + 14);
+      const items = await BC.api.plannerItems(start.toISOString(), end.toISOString());
+      plannerCountByCourse.clear();
+      for (const it of items) {
+        const cid = it.course_id ? String(it.course_id) : (it.context_type === "Course" ? String(it.context_id) : null);
+        if (!cid) continue;
+        const entry = plannerCountByCourse.get(cid) || { total: 0, done: 0 };
+        entry.total++;
+        if (it.planner_override && it.planner_override.marked_complete) entry.done++;
+        else if (it.submissions && it.submissions.submitted) entry.done++;
+        plannerCountByCourse.set(cid, entry);
       }
-      BC.injector.setStyle("bc-dashboard-ui", PILL_CSS);
+    } catch (_) {}
+  }
 
-      const { container, items } = getCardData();
-      if (!container || !items.length) return;
+  function apply(settings, ctx) {
+    if (ctx.page !== "dashboard") {
+      BC.injector.setStyle("bc-dashboard-ui", "");
+      BC.injector.setStyle("bc-dashboard-widgets", "");
+      return;
+    }
+    const d = settings.dashboard || {};
+    if (!d.enabled) return;
 
-      maybeFetchConcluded(settings);
+    // widget CSS
+    const widgetCss = widgetsCss(d.widgets || {}) + (d.hideSidebar ? "\n#right-side, #right-side-wrapper { display: none !important; }\n#main { margin-right: 0 !important; }" : "");
+    BC.injector.setStyle("bc-dashboard-widgets", widgetCss);
 
-      const courses = d.courses || {};
-      for (const { card, root, id } of items) {
-        const cfg = courses[id] || {};
-        const concluded =
-          d.autoHideConcluded && concludedIds && concludedIds.has(id);
-        const hidden = !!cfg.hidden || concluded;
-        if (root.style.display !== (hidden ? "none" : ""))
-          root.style.display = hidden ? "none" : "";
-        if (!hidden) {
-          U.guard(() => applyVisuals(card, cfg), "card visuals");
-          U.guard(() => ensureEditPill(card, id), "card edit pill");
-        }
+    // layout CSS
+    BC.injector.setStyle("bc-dashboard-ui", layoutCss(d) + `
+      .bc-inline-grade {
+        position: absolute; top: 8px; right: 8px; z-index: 2;
+        padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+        color: #fff; background: #059669; box-shadow: 0 1px 4px rgba(0,0,0,.2);
       }
+      .bc-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0,0,0,.1); }
+      .bc-progress-fill { height: 100%; background: var(--bc-accent, #0374b5); width: 0%; transition: width .4s ease; }
+      .bc-badges { position: absolute; left: 6px; bottom: 6px; display: flex; gap: 4px; }
+      .bc-badge { font-size: 10px; background: rgba(0,0,0,.65); color: #fff; padding: 2px 6px; border-radius: 999px; }
+      .bc-badge.due { background: rgba(202,138,4,.9); }
+      .bc-badge.unread { background: rgba(37,99,235,.9); }
+      .bc-badge.ungraded { background: rgba(147,51,234,.9); }
+      .ic-DashboardCard { position: relative; }
+    `);
 
-      applyOrder(container, items.filter((i) => {
-        const cfg = courses[i.id] || {};
-        const concluded = d.autoHideConcluded && concludedIds && concludedIds.has(i.id);
-        return !cfg.hidden && !concluded;
-      }), d.courseOrder);
-    },
-  };
+    // course cards
+    if (d.autoHideConcluded) maybeFetchConcluded(true);
+    const cards = document.querySelectorAll(".ic-DashboardCard");
+    if (!cards.length) return;
+
+    // Build id order + reordering
+    const cardsById = new Map();
+    for (const card of cards) {
+      const a = card.querySelector("a.ic-DashboardCard__link");
+      const cid = a && BC.util.courseIdFromHref(a.getAttribute("href"));
+      if (cid) cardsById.set(cid, card);
+    }
+
+    const order = d.courseOrder || [];
+    let idx = 0;
+    for (const id of order) {
+      const c = cardsById.get(id);
+      if (c) c.style.order = String(idx++);
+    }
+    for (const [id, card] of cardsById) if (!order.includes(id)) card.style.order = String(idx++);
+
+    // Apply per-card overrides
+    for (const [id, card] of cardsById) {
+      const spec = (d.courses && d.courses[id]) || {};
+      const effHidden = spec.hidden === true || (d.autoHideConcluded && concludedIds && concludedIds.has(id));
+      overlayCard(card, { ...spec, hidden: effHidden });
+      if (d.showInlineGrade)   overlayInlineGrade(card, id, scoresMap);
+      if (d.showProgressBar)   overlayProgress(card, plannerCountByCourse);
+      if (d.showBadges)        overlayBadges(card, badges);
+    }
+
+    // Ensure grid uses order — apply flex/grid ordering
+    const container = document.getElementById("DashboardCard_Container") || document.querySelector(".ic-DashboardCard__box");
+    if (container) container.style.display = ""; // let CSS layoutCss govern
+
+    if (d.showInlineGrade && !scoresMap.size) loadInlineGrades().then(() => BC.requestApply && BC.requestApply());
+    if (d.showProgressBar && !plannerCountByCourse.size) loadPlannerCounts().then(() => BC.requestApply && BC.requestApply());
+  }
+
+  BC.registry.register({ id: "dashboard", styles: ["bc-dashboard-widgets", "bc-dashboard-ui"], nodes: [], apply });
 })();

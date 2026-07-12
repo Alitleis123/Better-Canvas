@@ -1,128 +1,145 @@
-/*
- * Better Canvas — navigation feature.
- * Global left nav and per-course nav: hide, reorder, and add custom links.
- * Hiding uses CSS (:has) so it survives re-renders with zero DOM churn;
- * reordering and custom links touch the DOM but only when the result differs.
- */
+/* Better Canvas — global + course navigation editing, breadcrumbs, quick-search, course tabs. */
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
   BC.features = BC.features || {};
-  const U = BC.util;
 
-  // Place known nodes (in the given key order) first, keep the rest after.
-  function reorder(container, keyOf, order) {
-    if (!container || !order || !order.length) return;
-    const items = Array.from(container.children).filter(
-      (n) => n.tagName === "LI"
-    );
-    const byKey = new Map();
+  function applyGlobalNav(nav) {
+    const list = document.querySelector("#menu");
+    if (!list) return;
+    const hidden = new Set(nav.hidden || []);
+    let css = "";
+    for (const k of hidden) css += `#${BC.util.cssSafe(k)} { display: none !important; }\n`;
+    BC.injector.setStyle("bc-nav-global-hidden", css);
+
+    // Reorder using flexbox order
+    const orderMap = new Map();
+    (nav.order || []).forEach((k, i) => orderMap.set(k, i));
+    const items = list.querySelectorAll(":scope > li");
     for (const li of items) {
-      const k = keyOf(li);
-      if (k) byKey.set(k, li);
+      const a = li.querySelector("a");
+      const id = a && a.id;
+      if (id && orderMap.has(id)) { li.style.order = String(orderMap.get(id)); li.style.display = ""; }
     }
-    const ordered = [];
-    for (const k of order) if (byKey.has(k)) ordered.push(byKey.get(k));
-    const rest = items.filter((li) => !ordered.includes(li));
-    const desired = ordered.concat(rest);
-    // Skip if DOM already matches to avoid feedback loops.
-    const same =
-      desired.length === items.length &&
-      desired.every((n, i) => n === items[i]);
-    if (same) return;
-    for (const li of desired) container.appendChild(li);
+    list.style.display = "flex"; list.style.flexDirection = "column";
+
+    // Custom links
+    let customList = document.getElementById("bc-nav-custom");
+    if (customList) customList.remove();
+    if ((nav.customLinks || []).length) {
+      customList = document.createElement("ul");
+      customList.id = "bc-nav-custom";
+      customList.setAttribute("data-bc-node", "bc-nav-custom");
+      customList.style.listStyle = "none"; customList.style.padding = "0"; customList.style.margin = "8px 0 0";
+      for (const l of nav.customLinks) {
+        if (!BC.util.isSafeHttpUrl(l.url)) continue;
+        const li = document.createElement("li");
+        const a = document.createElement("a");
+        a.href = l.url; a.textContent = l.label || l.url;
+        if (l.newTab) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
+        a.style.cssText = "display:flex; align-items:center; gap:8px; padding:8px 10px; color:inherit; text-decoration:none;";
+        li.appendChild(a);
+        customList.appendChild(li);
+      }
+      list.parentNode.insertBefore(customList, list.nextSibling);
+    }
   }
 
-  function ensureCustomLinks(container, scope, links) {
-    if (!container) return;
-    // Remove stale custom links no longer in settings.
-    container
-      .querySelectorAll(`li[data-bc-link="${scope}"]`)
-      .forEach((li) => {
-        const idx = Number(li.getAttribute("data-bc-link-idx"));
-        if (!links[idx]) li.remove();
-      });
-    links.forEach((link, idx) => {
-      if (!link || !link.url || !U.isSafeUrl(link.url)) return;
-      let li = container.querySelector(
-        `li[data-bc-link="${scope}"][data-bc-link-idx="${idx}"]`
-      );
-      if (li) {
-        const a = li.querySelector("a");
-        if (a) {
-          a.href = link.url;
-          a.textContent = link.label || link.url;
-          a.target = link.newTab ? "_blank" : "_self";
-        }
-        return;
+  function applyCourseNav(nav) {
+    const list = document.querySelector("#section-tabs");
+    if (!list) return;
+    const hiddenSet = new Set((nav.hidden || []).map((s) => s.toLowerCase()));
+    const orderIdx = new Map(); (nav.order || []).forEach((s, i) => orderIdx.set(String(s).toLowerCase(), i));
+    const lis = list.querySelectorAll(":scope > li");
+    for (const li of lis) {
+      const label = (li.textContent || "").trim().toLowerCase();
+      li.style.display = hiddenSet.has(label) ? "none" : "";
+      if (orderIdx.has(label)) { li.style.order = String(orderIdx.get(label)); }
+    }
+    list.style.display = "flex"; list.style.flexDirection = "column";
+
+    // Course custom links
+    let existing = document.getElementById("bc-course-custom");
+    if (existing) existing.remove();
+    if ((nav.customLinks || []).length) {
+      existing = document.createElement("ul");
+      existing.id = "bc-course-custom";
+      existing.setAttribute("data-bc-node", "bc-course-custom");
+      existing.style.listStyle = "none"; existing.style.padding = "0"; existing.style.margin = "8px 0 0";
+      for (const l of nav.customLinks) {
+        if (!BC.util.isSafeHttpUrl(l.url)) continue;
+        const li = document.createElement("li");
+        const a = document.createElement("a");
+        a.href = l.url; a.textContent = l.label || l.url;
+        if (l.newTab) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
+        a.style.cssText = "display:block; padding:6px 10px; color:inherit; text-decoration:none; border-radius:6px;";
+        li.appendChild(a);
+        existing.appendChild(li);
       }
-      const anchor = U.el("a", {
-        href: link.url,
-        target: link.newTab ? "_blank" : "_self",
-        rel: "noopener",
-        class: scope === "global" ? "ic-app-header__menu-list-link" : "",
-        text: link.label || link.url,
-      });
-      li = U.el(
-        "li",
-        {
-          class:
-            scope === "global"
-              ? "menu-item ic-app-header__menu-list-item"
-              : "section",
-          dataset: { bcLink: scope, bcLinkIdx: String(idx) },
-        },
-        [anchor]
-      );
-      container.appendChild(li);
+      list.parentNode.insertBefore(existing, list.nextSibling);
+    }
+  }
+
+  function applyBreadcrumbs(mode) {
+    let css = "";
+    if (mode === "hidden") css = ".ic-app-crumbs { display: none !important; }";
+    else if (mode === "compact") css = ".ic-app-crumbs { font-size: 12px !important; padding: 4px 8px !important; }";
+    BC.injector.setStyle("bc-breadcrumbs", css);
+  }
+
+  function applyCourseTabs(settings) {
+    const enabled = settings.navigation && settings.navigation.courseTabs;
+    if (!enabled) {
+      BC.injector.setStyle("bc-course-tabs", "");
+      BC.injector.removeNode("bc-course-tabs");
+      return;
+    }
+    // Render pinned quick-switch bar at the top of the content area on course pages.
+    const cards = (BC.cache && BC.cache.peek("GET " + location.origin + "/api/v1/dashboard/dashboard_cards")) || null;
+    if (!cards) return; // will populate after dashboard cards load
+    const target = document.querySelector("#main");
+    if (!target) return;
+    const bar = BC.injector.ensureNode("bc-course-tabs", target, () => {
+      const el = document.createElement("div");
+      el.className = "bc-course-tabs";
+      target.prepend(el);
+      return el;
     });
+    bar.innerHTML = "";
+    const pinned = new Set((settings.dashboard.pinned || []).map(String));
+    const items = cards.filter((c) => pinned.has(String(c.id)) || pinned.size === 0).slice(0, 12);
+    const cur = BC.util.courseIdFromHref(location.pathname);
+    for (const c of items) {
+      const a = document.createElement("a");
+      a.className = "bc-ct-tab" + (String(c.id) === cur ? " active" : "");
+      a.href = "/courses/" + c.id;
+      a.title = c.shortName || c.originalName;
+      a.textContent = c.shortName || c.originalName || ("Course " + c.id);
+      a.style.setProperty("--tint", c.color || "#0374b5");
+      bar.appendChild(a);
+    }
+    BC.injector.setStyle("bc-course-tabs", `
+      .bc-course-tabs {
+        display: flex; gap: 6px; overflow-x: auto;
+        padding: 6px 10px; background: transparent;
+        border-bottom: 1px solid var(--bc-d-border, #e5e7eb);
+      }
+      .bc-ct-tab {
+        display:inline-block; padding: 4px 10px; border-radius: 999px;
+        background: rgba(0,0,0,.05); color: inherit; text-decoration:none;
+        border-left: 4px solid var(--tint, #0374b5); font-size: 12px; white-space: nowrap;
+      }
+      .bc-ct-tab.active { background: var(--tint); color: #fff; }
+    `);
   }
 
-  BC.features.navigation = {
-    id: "navigation",
+  function apply(settings) {
+    const nav = settings.navigation || {};
+    if (nav.global) applyGlobalNav(nav.global);
+    if (nav.course) applyCourseNav(nav.course);
+    applyBreadcrumbs(nav.breadcrumbs || "default");
+    applyCourseTabs(settings);
+  }
 
-    apply(settings) {
-      const nav = settings.navigation;
-
-      // ---- Global (left) nav ------------------------------------------
-      const hideCss = (nav.global.hidden || [])
-        .map((id) => `li:has(> a#${U.cssSafe(id)}), a#${U.cssSafe(id)}`)
-        .filter(Boolean);
-      let css = hideCss.length ? `${hideCss.join(", ")} { display:none !important; }\n` : "";
-
-      const globalList = document.querySelector(
-        "#menu, .ic-app-header__menu-list"
-      );
-      if (globalList) {
-        reorder(
-          globalList,
-          (li) => {
-            const a = li.querySelector("a[id^='global_nav_']");
-            return a ? a.id : null;
-          },
-          nav.global.order
-        );
-        ensureCustomLinks(globalList, "global", nav.global.customLinks || []);
-      }
-
-      // ---- Per-course nav ---------------------------------------------
-      const courseList = document.getElementById("section-tabs");
-      if (courseList) {
-        const labelOf = (li) =>
-          (li.querySelector("a")?.textContent || "").trim().toLowerCase();
-        // Hide by label.
-        const hidden = new Set(
-          (nav.course.hidden || []).map((s) => String(s).toLowerCase())
-        );
-        Array.from(courseList.querySelectorAll("li.section")).forEach((li) => {
-          if (li.hasAttribute("data-bc-link")) return;
-          li.style.display = hidden.has(labelOf(li)) ? "none" : "";
-        });
-        reorder(courseList, labelOf, (nav.course.order || []).map((s) => s.toLowerCase()));
-        ensureCustomLinks(courseList, "course", nav.course.customLinks || []);
-      }
-
-      BC.injector.setStyle("bc-navigation", css);
-    },
-  };
+  BC.registry.register({ id: "navigation", styles: ["bc-nav-global-hidden", "bc-breadcrumbs", "bc-course-tabs"], nodes: ["bc-course-tabs", "bc-nav-custom", "bc-course-custom"], apply });
 })();

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Better Canvas",
-  "version": "1.0.0",
-  "description": "Fully customize Instructure Canvas: hide/reorder/rename/recolor dashboard cards, real dark mode, theming, navigation control, custom backgrounds, custom CSS, and grade tools. Privacy-first, no telemetry.",
+  "version": "3.0.0",
+  "description": "The most comprehensive Canvas LMS customizer. Dark mode everywhere, theme creator + rotation, kanban planner, Pomodoro, GPA + rubric predictor, quiz draft saver, module progress, study insights — free, local, no telemetry.",
   "browser_specific_settings": {
     "gecko": {
       "id": "better-canvas@local.extension",
@@ -15,7 +15,7 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "permissions": ["storage", "scripting", "alarms"],
+  "permissions": ["storage", "scripting", "alarms", "contextMenus", "notifications"],
   "optional_host_permissions": ["*://*/*"],
   "host_permissions": ["*://*.instructure.com/*"],
   "background": {
@@ -28,21 +28,62 @@
       "all_frames": false,
       "js": [
         "src/shared/defaults.js",
+        "src/shared/themes.js",
         "src/content/core/util.js",
+        "src/content/core/datetime.js",
+        "src/content/core/color.js",
         "src/content/core/storage.js",
         "src/content/core/detect.js",
         "src/content/core/injector.js",
+        "src/content/core/lifecycle.js",
+        "src/content/core/ui.js",
+        "src/content/core/cache.js",
         "src/content/core/api.js",
-        "src/shared/settings-ui.js",
+        "src/content/core/alarms.js",
+        "src/content/core/toast.js",
+        "src/content/core/shortcuts.js",
+        "src/content/core/commandPalette.js",
+        "src/shared/settings/state.js",
+        "src/shared/settings/components.js",
+        "src/shared/settings/index.js",
         "src/content/features/theming.js",
         "src/content/features/cosmetics.js",
         "src/content/features/navigation.js",
         "src/content/features/dashboard.js",
         "src/content/features/todo.js",
         "src/content/features/grades.js",
+        "src/content/features/notifications.js",
+        "src/content/features/files.js",
+        "src/content/features/announcements.js",
+        "src/content/features/calendar.js",
+        "src/content/features/previews.js",
+        "src/content/features/productivity.js",
+        "src/content/features/accessibility.js",
+        "src/content/features/instructor.js",
+        "src/content/features/quizsaver.js",
+        "src/content/features/modules.js",
+        "src/content/features/semester.js",
+        "src/content/features/discussions.js",
+        "src/content/features/insights.js",
+        "src/content/features/syllabus.js",
+        "src/content/features/rotation.js",
+        "src/content/features/onboarding.js",
         "src/content/features/settings-panel.js",
         "src/content/core/observer.js",
         "src/content/content.js"
+      ]
+    },
+    {
+      "matches": ["*://*.instructure.com/*"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true,
+      "js": [
+        "src/shared/defaults.js",
+        "src/shared/themes.js",
+        "src/content/core/datetime.js",
+        "src/content/core/color.js",
+        "src/content/frame.js"
       ]
     }
   ],

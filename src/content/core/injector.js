@@ -41,7 +41,9 @@
       if (!node || !node.isConnected) {
         node = factory();
         node.setAttribute("data-bc-node", id);
-        (parent || document.body || document.documentElement).appendChild(node);
+        // Factories may attach the node themselves (e.g. prepend); only
+        // append as a fallback when it is still detached.
+        if (!node.isConnected) (parent || document.body || document.documentElement).appendChild(node);
       }
       return node;
     },
