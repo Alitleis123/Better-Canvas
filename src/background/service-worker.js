@@ -10,6 +10,7 @@ const CONTENT_JS = [
   "src/content/core/util.js",
   "src/content/core/datetime.js",
   "src/content/core/color.js",
+  "src/shared/tokens.js",
   "src/content/core/storage.js",
   "src/content/core/detect.js",
   "src/content/core/injector.js",
@@ -56,6 +57,7 @@ const FRAME_JS = [
   "src/shared/themes.js",
   "src/content/core/datetime.js",
   "src/content/core/color.js",
+  "src/shared/tokens.js",
   "src/content/frame.js",
 ];
 

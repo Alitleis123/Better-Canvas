@@ -14,7 +14,7 @@
     .bc-instr-post { border-left: 3px solid var(--bc-accent, #0374b5) !important; padding-left: 8px; }
     .bc-instr-tag {
       display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px;
-      background: var(--bc-accent, #0374b5); color: #fff; font-size: 10px; font-weight: 700; vertical-align: middle;
+      background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); font-size: var(--bc-text-3xs, 10px); font-weight: 700; vertical-align: middle;
     }
     .bc-flash { outline: 2px solid var(--bc-accent, #0374b5); outline-offset: 2px; }
   `;
@@ -61,7 +61,7 @@
           a.insertAdjacentElement("afterend", tag);
         }
       });
-    } catch (_) {}
+    } catch (e) { BC.diag.push("discussions", e); }
   }
 
   function buildBar(bar, d) {

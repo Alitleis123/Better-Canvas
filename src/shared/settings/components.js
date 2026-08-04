@@ -11,6 +11,37 @@
 
   const C = (BC.SettingsComponents = {});
 
+  // ---- live bindings ------------------------------------------------------
+  // Controls own their DOM for their whole lifetime. The UI used to tear the
+  // whole tab down on every state change, which destroyed the very control the
+  // user was touching: the checkbox's CSS transition never ran (a transition
+  // needs the element to survive the style change), the caret was lost after one
+  // character, and a slider drag died on the first movement. Instead each control
+  // registers a sync(state) that re-reads the store and writes only what differs.
+  // For the control just touched that's a no-op, so the native interaction is
+  // never interrupted; for every other control it's the cross-row reactivity
+  // channel a pure "controls own their DOM" approach would lack.
+  let binds = [];
+
+  // Shadow-DOM safe: the drawer lives in a shadow root, where
+  // document.activeElement reports the HOST, not the focused input.
+  const focused = (n) => n.getRootNode().activeElement === n;
+
+  C.bindings = {
+    reset() { binds = []; },
+    add(node, fn) { binds.push({ node, fn }); return node; },
+    sync(state) {
+      for (let i = binds.length - 1; i >= 0; i--) {
+        const b = binds[i];
+        // isConnected is shadow-inclusive, so controls detached by a tab switch or
+        // a sub-panel redraw prune themselves — no bookkeeping at the call sites.
+        if (!b.node.isConnected) { binds.splice(i, 1); continue; }
+        BC.util.guard(() => b.fn(state), "bc-sync");
+      }
+    },
+  };
+  const bind = (node, fn) => C.bindings.add(node, fn);
+
   // Section wrapper with title + optional description.
   C.section = function ({ title, description, children }) {
     const body = h("div.bc-section-body", null, children);
@@ -21,23 +52,40 @@
     ]);
   };
 
-  // Row: label + control.
-  C.row = function ({ label, hint, control, warn }) {
-    return h("div.bc-row", null, [
+  // Row: label + control. `enabledWhen(state)` is optional and purely additive —
+  // omit it and behaviour is identical to before. With it, the row greys out and
+  // goes inert when its parent toggle is off, which nothing did previously.
+  C.row = function ({ label, hint, control, warn, enabledWhen }) {
+    const ctl = h("div.bc-row-control", null, control);
+    const row = h("div.bc-row", null, [
       h("div.bc-row-label", null, [
         h("div.bc-row-title", null, label),
         hint ? h("div.bc-row-hint", null, hint) : null,
         warn ? h("div.bc-row-warn", null, warn) : null,
       ]),
-      h("div.bc-row-control", null, control),
+      ctl,
     ]);
+    if (enabledWhen) bind(row, (s) => {
+      const on = !!enabledWhen(s);
+      if (row.classList.contains("bc-row-off") === on) row.classList.toggle("bc-row-off", !on);
+      ctl.toggleAttribute("inert", !on);
+    });
+    return row;
   };
 
   // On/off switch.
   C.switch = function ({ get, set, ariaLabel }) {
     const input = el("input", { type: "checkbox", checked: !!get(), "aria-label": ariaLabel || "toggle" });
-    input.addEventListener("change", () => set(input.checked));
-    const track = h("span.bc-switch", null, [input, h("span.bc-switch-thumb", null)]);
+    // <label>, not <span>: a click anywhere on the track — including the thumb —
+    // is forwarded to the checkbox. The spec skips label activation when the
+    // event target is already the labeled control, so this can't double-toggle.
+    const track = h("label.bc-switch", null, [input, h("span.bc-switch-thumb", null)]);
+    // Paint synchronously so the track fills in the same frame as the click,
+    // without waiting on the store round-trip.
+    const paint = () => track.classList.toggle("bc-on", input.checked);
+    paint();
+    input.addEventListener("change", () => { paint(); set(input.checked); });
+    bind(track, () => { const v = !!get(); if (input.checked !== v) input.checked = v; paint(); });
     return track;
   };
 
@@ -49,6 +97,7 @@
       sel.appendChild(opt);
     }
     sel.addEventListener("change", () => set(sel.value));
+    bind(sel, () => { const v = String(get()); if (sel.value !== v) sel.value = v; });
     return sel;
   };
 
@@ -65,6 +114,9 @@
       } else { set(v); }
     });
     wrap.appendChild(inp); wrap.appendChild(warn);
+    // Never write into a field the user is typing in — that's what cost the caret
+    // after a single character.
+    bind(inp, () => { const v = get() ?? ""; if (!focused(inp) && inp.value !== String(v)) inp.value = String(v); });
     return wrap;
   };
 
@@ -72,6 +124,7 @@
     const ta = el("textarea", { class: "bc-textarea", placeholder: placeholder || "", rows: rows || 4 });
     ta.value = get() || "";
     ta.addEventListener("input", () => set(ta.value));
+    bind(ta, () => { const v = get() ?? ""; if (!focused(ta) && ta.value !== String(v)) ta.value = String(v); });
     return ta;
   };
 
@@ -85,6 +138,7 @@
       if (!isFinite(v)) return;
       set(v);
     });
+    bind(inp, () => { const v = get(); if (!focused(inp) && inp.value !== String(v ?? "")) inp.value = v ?? ""; });
     return inp;
   };
 
@@ -92,7 +146,19 @@
     const wrap = h("div.bc-slider", null);
     const rng = el("input", { type: "range", min: min ?? 0, max: max ?? 100, step: step ?? 1, value: get() ?? 0 });
     const val = h("span.bc-slider-val", null, format ? format(get()) : String(get()));
-    rng.addEventListener("input", () => { const v = parseFloat(rng.value); val.textContent = format ? format(v) : String(v); set(v); });
+    const label = (v) => { const t = format ? format(v) : String(v); if (val.textContent !== t) val.textContent = t; };
+    // The readout updates on every input event (free, local); the store write is
+    // throttled. A single drag used to fire 30-60 writes per second, each one
+    // rebuilding the panel and destroying the range input under the pointer.
+    const commit = BC.util.throttle((v) => set(v), 100);
+    rng.addEventListener("input", () => { const v = parseFloat(rng.value); label(v); commit(v); });
+    rng.addEventListener("change", () => set(parseFloat(rng.value)));  // definitive final value
+    bind(rng, () => {
+      if (focused(rng)) return;             // never fight an in-progress drag
+      const v = get();
+      if (rng.value !== String(v)) rng.value = v;
+      label(v);
+    });
     wrap.appendChild(rng); wrap.appendChild(val);
     return wrap;
   };
@@ -102,7 +168,16 @@
     const cur = get() || "";
     const picker = el("input", { type: "color", value: cur || "#000000" });
     const text   = el("input", { type: "text", class: "bc-color-text", value: cur, placeholder: "#rrggbb" });
-    picker.addEventListener("input", () => { text.value = picker.value; set(picker.value); });
+    // Dragging in the native picker fires input continuously — throttle the store
+    // write and take the definitive value on change.
+    const commit = BC.util.throttle((v) => set(v), 100);
+    picker.addEventListener("input", () => { text.value = picker.value; commit(picker.value); });
+    picker.addEventListener("change", () => set(picker.value));
+    bind(wrap, () => {
+      const v = get() || "";
+      if (!focused(text) && text.value !== v) text.value = v;
+      if (!focused(picker) && v && picker.value !== v) picker.value = v;
+    });
     text.addEventListener("input", () => {
       const v = text.value.trim();
       if (v === "" && allowEmpty) { set(""); return; }
@@ -165,6 +240,7 @@
     const chips = h("div.bc-chips", null);
     const inp = el("input", { type: "text", class: "bc-tags-inp", placeholder: placeholder || "add tag…" });
     function refresh() {
+      wrap.dataset.bcSig = (get() || []).join(" ");
       chips.innerHTML = "";
       for (const t of (get() || [])) {
         const chip = h("span.bc-chip", null, [t, h("button.bc-chip-x", { type: "button", onclick: () => { set((get() || []).filter((x) => x !== t)); refresh(); } }, "×")]);
@@ -183,6 +259,7 @@
     });
     refresh();
     wrap.appendChild(chips); wrap.appendChild(inp);
+    bind(wrap, () => { if (wrap.dataset.bcSig !== (get() || []).join(" ")) refresh(); });
     return wrap;
   };
 
@@ -190,6 +267,7 @@
   C.links = function ({ get, set }) {
     const wrap = h("div.bc-links", null);
     function render() {
+      wrap.dataset.bcSig = String((get() || []).length);
       wrap.innerHTML = "";
       (get() || []).forEach((lnk, i) => {
         const row = h("div.bc-link-row", null, [
@@ -207,6 +285,9 @@
       wrap.appendChild(add);
     }
     render();
+    // Key on LENGTH only. Keying on content would rebuild the row while the user
+    // is typing a URL into it and destroy the caret.
+    bind(wrap, () => { if (wrap.dataset.bcSig !== String((get() || []).length)) render(); });
     return wrap;
   };
 
@@ -242,6 +323,7 @@
         set(combo); recording = false; refresh(); btn.blur();
       }
     });
+    bind(btn, () => { if (!recording) refresh(); });
     return btn;
   };
 })();

@@ -12,7 +12,7 @@
     .bc-mod-bar { display: flex; align-items: center; gap: 8px; margin: 6px 12px 8px; }
     .bc-mod-track { flex: 1; height: 6px; border-radius: 999px; background: var(--bc-surface-3, #e5e7eb); overflow: hidden; }
     .bc-mod-fill { height: 100%; background: var(--bc-accent, #0374b5); border-radius: 999px; transition: width .4s ease; }
-    .bc-mod-fill.done { background: #059669; }
+    .bc-mod-fill.done { background: var(--bc-success, #047857); }
     .bc-mod-label { font-size: 12px; color: var(--bc-muted, #6b7280); white-space: nowrap; }
     .bc-mod-summary {
       display: flex; align-items: center; gap: 12px; margin: 8px 0; padding: 10px 14px;
@@ -37,6 +37,7 @@
     if (bar) return bar;
     bar = document.createElement("div");
     bar.className = "bc-mod-bar";
+    bar.setAttribute("data-bc-node", "bc-mod-bar");   // declared below so teardown removes it
     bar.innerHTML = '<div class="bc-mod-track"><div class="bc-mod-fill"></div></div><span class="bc-mod-label"></span>';
     const header = host.querySelector(".header, .ig-header");
     if (header) header.insertAdjacentElement("afterend", bar);
@@ -68,7 +69,7 @@
       const fill = summary.querySelector(".bc-mod-fill");
       fill.style.width = pct + "%";
       fill.classList.toggle("done", pct >= 100);
-    }).catch(() => {});
+    }).catch((e) => BC.diag.push("modules", e));
   }
 
   function apply(settings, ctx) {
@@ -83,5 +84,7 @@
     render(ctx.courseId);
   }
 
-  BC.registry.register({ id: "modules", styles: ["bc-mod-css"], nodes: ["bc-mod-summary"], apply });
+  // bc-mod-bar was injected per module but never declared, so disabling the
+  // extension left stale progress bars sitting inside Canvas's module headers.
+  BC.registry.register({ id: "modules", styles: ["bc-mod-css"], nodes: ["bc-mod-summary", "bc-mod-bar"], apply });
 })();

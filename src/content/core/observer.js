@@ -8,11 +8,24 @@
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
 
-  function isOurs(node) {
-    if (!node || node.nodeType !== 1) return false;
-    if (node.hasAttribute && (node.hasAttribute("data-bc-node") || node.hasAttribute("data-better-canvas"))) return true;
-    if (node.classList && node.classList.length) {
-      for (const c of node.classList) if (c.indexOf("bc-") === 0) return true;
+  // Ownership is an ANCESTOR property, not a node property. Features routinely
+  // write bare text nodes and unclassed children inside their own panels
+  // (innerHTML with an <h3>, <option> children, day-spacer <div>s), and judging
+  // those by the node alone reports them as foreign — which turns our own render
+  // into another applyAll. Walking up also covers text nodes, which the old
+  // nodeType===1 check rejected outright.
+  // Stop before <body>/<html>: we put bc-dark and bc-focus on documentElement, so
+  // walking all the way to the root would report EVERY node as ours the moment
+  // dark mode is on and switch the observer off entirely. Our own nodes are always
+  // either checked directly (some are children of documentElement) or live inside
+  // a marked container below body.
+  function ownedBy(node) {
+    let n = node && node.nodeType === 1 ? node : node && node.parentElement;
+    const body = document.body;
+    for (; n && n !== body && n !== document.documentElement; n = n.parentElement) {
+      if (n.hasAttribute && (n.hasAttribute("data-bc-node") || n.hasAttribute("data-better-canvas"))) return true;
+      const cl = n.classList;
+      if (cl && cl.length) for (const c of cl) if (c.indexOf("bc-") === 0) return true;
     }
     return false;
   }
@@ -23,19 +36,22 @@
     start(onChange) {
       if (observer._started) return;
       observer._started = true;
-      const trigger = BC.util.debounce(onChange, 180);
+      // onChange is content.js's requestApply, already debounced 120ms. A second
+      // debounce here only added latency and jitter.
+      const trigger = onChange;
 
       const mo = new MutationObserver((mutations) => {
         for (const m of mutations) {
           if (m.type === "childList") {
+            if (ownedBy(m.target)) continue;   // churn inside one of our own subtrees
             let allOurs = true;
-            for (const n of m.addedNodes) { if (!isOurs(n)) { allOurs = false; break; } }
+            for (const n of m.addedNodes) { if (!ownedBy(n)) { allOurs = false; break; } }
             if (allOurs) {
-              for (const n of m.removedNodes) { if (!isOurs(n)) { allOurs = false; break; } }
+              for (const n of m.removedNodes) { if (!ownedBy(n)) { allOurs = false; break; } }
             }
             if (!allOurs) { trigger(); return; }
           } else if (m.type === "attributes") {
-            if (m.target && !isOurs(m.target)) { trigger(); return; }
+            if (m.target && !ownedBy(m.target)) { trigger(); return; }
           }
         }
       });

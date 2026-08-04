@@ -115,21 +115,28 @@
       a.href = "/courses/" + c.id;
       a.title = c.shortName || c.originalName;
       a.textContent = c.shortName || c.originalName || ("Course " + c.id);
-      a.style.setProperty("--tint", c.color || "#0374b5");
+      const tint = c.color || "#0374b5";
+      a.style.setProperty("--tint", tint);
+      // Course colours are arbitrary and user-chosen, so the label colour has to be
+      // computed per course. Forcing white made light course colours unreadable.
+      a.style.setProperty("--tint-fg", BC.color.contrastText(tint));
       bar.appendChild(a);
     }
     BC.injector.setStyle("bc-course-tabs", `
       .bc-course-tabs {
-        display: flex; gap: 6px; overflow-x: auto;
-        padding: 6px 10px; background: transparent;
-        border-bottom: 1px solid var(--bc-d-border, #e5e7eb);
+        display: flex; gap: var(--bc-space-2, 6px); overflow-x: auto;
+        padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px); background: transparent;
+        border-bottom: 1px solid var(--bc-border, #e5e7eb);
       }
       .bc-ct-tab {
-        display:inline-block; padding: 4px 10px; border-radius: 999px;
-        background: rgba(0,0,0,.05); color: inherit; text-decoration:none;
-        border-left: 4px solid var(--tint, #0374b5); font-size: 12px; white-space: nowrap;
+        display:inline-block; padding: 4px var(--bc-space-4, 10px);
+        border-radius: var(--bc-radius-pill, 999px);
+        background: var(--bc-surface-4, rgba(0,0,0,.05)); color: inherit; text-decoration:none;
+        border-left: 4px solid var(--tint, #0374b5);
+        font-size: var(--bc-text-xs, 12px); white-space: nowrap;
       }
-      .bc-ct-tab.active { background: var(--tint); color: #fff; }
+      .bc-ct-tab.active { background: var(--tint); color: var(--tint-fg, var(--bc-accent-contrast, #fff)); }
+      .bc-ct-tab:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px; }
     `);
   }
 

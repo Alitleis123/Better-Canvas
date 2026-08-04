@@ -7,7 +7,7 @@
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
 
-  BC.VERSION = "3.0.0";
+  BC.VERSION = "3.1.0";
   BC.SETTINGS_KEY = "bcSettings";
   BC.LOCAL_KEY = "bcLocal";
   BC.PROFILES_KEY = "bcProfiles";
@@ -74,7 +74,7 @@
   };
 
   BC.defaults = {
-    version: 3,
+    version: 4,
     enabled: true,
     activeProfile: "default",
     firstRun: true,
@@ -88,24 +88,17 @@
       hoverLift: true,
       showInlineGrade: false,
       showProgressBar: false,
-      showBadges: false,           // unread announcements / due count / ungraded
-      showSparkline: false,
-      hoverPreview: false,
-      courseSearch: true,
+      showBadges: false,           // due-count badge on each card
+      showSparkline: false,        // grade trend sparkline from local history
+      courseSearch: true,          // filter box above the card grid
       semesterProgress: true,      // "Week 9 of 15" term progress bar
-      groupBy: "none",             // none | term | custom | status
-      customGroups: [],            // [{id, name, courseIds:[]}]
-      pinned: [],                  // course ids
+      pinned: [],                  // course ids — read by the course quick-switch bar
       courseOrder: [],
       widgets: {
         todo: true,
         comingUp: true,
         recentFeedback: true,
         gpa: false,
-        streak: false,
-        weekly: false,
-        announcements: false,
-        calendar: false,
       },
       hideSidebar: false,
       courses: {},                 // per-course: {hidden, nickname, color, bgImage, bgGradient, note}
@@ -135,19 +128,10 @@
       },
       recurring: [],               // [{id, title, courseId, rule, at, until}]
       tags: [],                    // user-defined tag names
-      local: {                     // local-only augmentation of tasks
-        priorities: {},            // {itemKey: 1|2|3}
-        tagsByItem: {},            // {itemKey: [tag]}
-        notes: {},                 // {itemKey: text}
-        stars: {},                 // {itemKey: bool}
-        snoozed: {},               // {itemKey: iso}
-        subtasks: {},              // {itemKey: [{text, done}]}
-        estimates: {},             // {itemKey: minutes}
-        links: {},                 // {itemKey: url}
-        status: {},                // {itemKey: "doing"} — kanban middle column
-        scheduled: {},             // {itemKey: {ymd, start: "HH:MM", dur: minutes}}
-        recurringDone: {},         // {ruleId: {ymd: true}}
-      },
+      // Per-task augmentation (stars, snoozes, subtasks, kanban status, …) lives in
+      // bcLocal.todo, NOT here. Every one of those is written on a micro-interaction,
+      // and a bcSettings write re-applies all ~24 features and blows away the open
+      // settings drawer's DOM. See MIGRATIONS[4].
     },
 
     theming: {
@@ -157,7 +141,6 @@
       darkBg: "",
       lightPreset: "default",      // default | rose | forest | ocean | sand | solarized
       accentColor: "",
-      perCourseAccent: {},         // {courseId: "#rrggbb"}
       font: "",
       fontSizeScale: "m",          // xs|s|m|l|xl
       lineHeight: 1.5,
@@ -173,7 +156,6 @@
       roundedUI: true,
       sidebarWidth: 0,             // 0 = default; else px
       logo: { mode: "default", url: "", text: "" }, // default | hide | replace | text
-      perPage: { grades: "", inbox: "" },  // accent override per page
       rotation: { enabled: false, mode: "daily", themeIds: [] }, // auto theme cycling
     },
 
@@ -183,7 +165,6 @@
       breadcrumbs: "default",      // default | compact | hidden
       courseTabs: false,           // pinned quick-switch bar
       quickSearch: true,           // ⌘K palette shortcut
-      recentPages: true,
     },
 
     cosmetics: {
@@ -197,20 +178,17 @@
         opacity: 100,
       },
       customCss: "",
-      cssTemplates: [],            // user's saved CSS snippets [{name, css}]
     },
 
     grades: {
       gpaScale: "standard-4",
-      customScale: [],             // [{min, points, letter}]
       creditsByCourse: {},
-      whatIfEnabled: true,
+      panelEnabled: true,          // show the Grade Tools panel (was mislabelled whatIfEnabled)
       autoRefresh: false,
       autoRefreshMin: 5,
       rubricPredictor: true,
       goals: {},                   // {courseId: {target: number, notify: bool}}
       showTrendChart: true,
-      showImpactSim: true,
       showWeightDonut: true,
       showMissingWarning: true,
     },
@@ -226,30 +204,24 @@
         goalBreach: true,
         streakAtRisk: true,
       },
-      perCourse: {},               // {courseId: {dueSoon, newGrade, ...}}
       quietHours: { enabled: false, start: "22:00", end: "07:00" },
       badgeCount: true,
-      history: [],                 // {iso, type, title, url}
+      // Toast history lives in bcLocal.notifHistory — it's written from the notify
+      // path, and a bcSettings write there re-applies every feature.
     },
 
     files: {
       enabled: false,
       starred: [],                 // file ids
-      recent: [],                  // last 20 accessed
-      library: { enabled: false }, // opt-in cross-course listing
     },
 
     announcements: {
       aggregator: false,
-      unreadBadge: true,
-      digestDay: 1,                // 0=Sun..6=Sat, 1=Monday
     },
 
     calendar: {
       icsExport: true,
       miniOnDashboard: false,
-      events: [],                  // personal events
-      timeBlock: false,
       syllabusExtract: true,       // offer to add syllabus dates to planner
     },
 
@@ -271,15 +243,13 @@
     productivity: {
       focusMode: false,
       readingRuler: false,
-      stickyNotes: true,           // enable feature; notes stored below
-      highlights: true,
+      stickyNotes: true,           // enable feature; notes stored in bcLocal
       autoSaveDrafts: true,
       quizDraftSaver: true,
       wordCount: true,
       printFriendly: true,
       copyUrlButton: true,
       readingProgress: true,
-      studyLog: {},                // {courseId: totalMinutes}
     },
 
     accessibility: {
@@ -296,7 +266,6 @@
 
     shortcuts: {
       enabled: true,
-      vimMode: false,
       bindings: {
         commandPalette: "Mod+K",
         settings: "Mod+Shift+S",
@@ -346,15 +315,70 @@
     return BC.migrate(merged, carry);
   };
 
-  BC.SETTINGS_VERSION = 3;
+  BC.SETTINGS_VERSION = 4;
 
   // Each entry upgrades settings from (v-1) to v. `carry` collects data that
   // must move to the bcLocal store — storage.load() persists it there.
+  //
+  // Removing a key from BC.defaults is NOT enough to remove it from an existing
+  // user: mergeDefaults() iterates the STORED object, so an orphaned key survives
+  // every load, gets re-saved, and keeps showing up in exported JSON. Only an
+  // explicit delete here actually cleans it up.
   BC.MIGRATIONS = {
     3(s, carry) {
       const gh = s.grades && s.grades.gradeHistory;
       if (gh && typeof gh === "object" && Object.keys(gh).length) carry.gradeHistory = gh;
       if (s.grades) delete s.grades.gradeHistory;
+    },
+
+    4(s, carry) {
+      carry.local = carry.local || {};
+
+      // --- moves to bcLocal (render-path writes must not touch bcSettings) ---
+      if (s.todo && s.todo.local && Object.keys(s.todo.local).length) carry.local.todo = s.todo.local;
+      if (s.todo) delete s.todo.local;
+      if (s.notifications && Array.isArray(s.notifications.history) && s.notifications.history.length) {
+        carry.local.notifHistory = s.notifications.history;
+      }
+      if (s.notifications) delete s.notifications.history;
+
+      // --- rename: the flag always gated the whole panel, it was just mislabelled ---
+      // Assign unconditionally. Migrations run AFTER defaults are merged in, so
+      // panelEnabled is already sitting at its default here — guarding on
+      // "panelEnabled === undefined" would never fire and would silently re-enable
+      // the panel for anyone who had turned it off. The version gate already
+      // guarantees this runs at most once.
+      if (s.grades) {
+        if (s.grades.whatIfEnabled !== undefined) s.grades.panelEnabled = s.grades.whatIfEnabled;
+        delete s.grades.whatIfEnabled;
+        delete s.grades.customScale;
+        delete s.grades.showImpactSim;
+      }
+
+      // --- removals: settings that were wired to UI but had no implementation ---
+      if (s.dashboard) {
+        delete s.dashboard.groupBy;
+        delete s.dashboard.customGroups;
+        delete s.dashboard.hoverPreview;
+        if (s.dashboard.widgets) {
+          delete s.dashboard.widgets.streak;       // duplicated the planner streak chip
+          delete s.dashboard.widgets.weekly;       // duplicated todo.ring
+          delete s.dashboard.widgets.announcements; // duplicated announcements.aggregator
+          delete s.dashboard.widgets.calendar;     // duplicated calendar.miniOnDashboard
+        }
+      }
+      if (s.theming) { delete s.theming.perCourseAccent; delete s.theming.perPage; }
+      if (s.navigation) delete s.navigation.recentPages;
+      if (s.cosmetics) delete s.cosmetics.cssTemplates;
+      if (s.notifications) delete s.notifications.perCourse;
+      if (s.files) { delete s.files.recent; delete s.files.library; }
+      if (s.announcements) { delete s.announcements.unreadBadge; delete s.announcements.digestDay; }
+      if (s.calendar) { delete s.calendar.events; delete s.calendar.timeBlock; }
+      if (s.productivity) { delete s.productivity.highlights; delete s.productivity.studyLog; }
+      if (s.shortcuts) delete s.shortcuts.vimMode;
+
+      // Sanitize a stored value whose options no longer exist.
+      if (s.todo && ["list", "kanban", "timeblock"].indexOf(s.todo.view) === -1) s.todo.view = "list";
     },
   };
 

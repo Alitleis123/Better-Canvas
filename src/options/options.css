@@ -1,8 +1,10 @@
-/* Standalone options page container. Actual styling ships inside settings/index.js. */
+/* Standalone options page container. Actual styling ships inside settings/index.js.
+   Colours come from the design tokens that options.js paints into this document, so
+   the page tracks the user's theme instead of guessing from prefers-color-scheme. */
 html, body, #bc-settings-root { height: 100%; margin: 0; }
 body {
-  background: #f6f7fb;
-  font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  background: var(--bc-surface-1, #f6f7fb);
+  color: var(--bc-text, #1f2937);
+  font-family: var(--bc-font-sans, ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif);
 }
-@media (prefers-color-scheme: dark) { body { background: #121319; } }
 #bc-settings-root { max-width: 1080px; margin: 0 auto; padding: 12px; }

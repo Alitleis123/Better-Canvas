@@ -19,7 +19,10 @@
       const start = new Date(); start.setDate(start.getDate() - 14);
       const end = new Date(); end.setDate(end.getDate() + 90);
       const items = await BC.api.plannerItems(start.toISOString(), end.toISOString());
-      const local = (BC.storage.current && BC.storage.current.calendar && BC.storage.current.calendar.events) || [];
+      // Personal events were advertised but nothing ever wrote them and there was no
+      // UI, so the setting is gone. bcLocal.calendarEvents is left as the read path
+      // in case the feature is built later; today it's simply empty.
+      const local = (BC.storage.local && BC.storage.local.calendarEvents) || [];
       const lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Better Canvas//EN","CALSCALE:GREGORIAN"];
       for (const it of items) {
         const due = it.plannable_date || (it.plannable && it.plannable.due_at); if (!due) continue;
@@ -57,19 +60,19 @@
 
   const CSS = `
     .bc-mini-cal {
-      background: var(--bc-d-bg2, #fff); border: 1px solid var(--bc-d-border, #e5e7eb);
+      background: var(--bc-surface-2, #fff); border: 1px solid var(--bc-border, #e5e7eb);
       border-radius: 10px; padding: 12px; margin-bottom: 12px;
     }
     .bc-mini-cal h4 { margin: 0 0 8px; font-size: 14px; }
     .bc-mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
     .bc-mini-cell {
       aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center;
-      font-size: 12px; border-radius: 4px; background: var(--bc-d-bg3, #f7fafc); color: var(--bc-d-text, inherit);
+      font-size: 12px; border-radius: 4px; background: var(--bc-surface-3, #f7fafc); color: var(--bc-text, inherit);
       position: relative;
     }
-    .bc-mini-cell.today { background: var(--bc-accent, #0374b5); color: #fff; }
+    .bc-mini-cell.today { background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); }
     .bc-mini-cell.has::after { content:""; position: absolute; right: 4px; top: 4px; width: 5px; height: 5px; background: var(--bc-accent, #0374b5); border-radius: 50%; }
-    .bc-mini-cell.today.has::after { background: #fff; }
+    .bc-mini-cell.today.has::after { background: var(--bc-accent-contrast, #fff); }
   `;
 
   async function renderMini(mount) {
@@ -79,7 +82,15 @@
     let items = [];
     try {
       items = await BC.api.plannerItems(first.toISOString(), last.toISOString());
-    } catch (_) {}
+    } catch (e) {
+      // A swallowed failure rendered an empty month grid, which is indistinguishable
+      // from "nothing is due" — the most misleading failure mode in the extension.
+      BC.diag.push("calendar:mini", e);
+      if (BC.ui) {
+        mount.replaceChildren(BC.ui.errorState("Couldn't load this month.", () => renderMini(mount)));
+        return;
+      }
+    }
     const dueByDay = new Set();
     for (const it of items) {
       const d = it.plannable_date || (it.plannable && it.plannable.due_at);

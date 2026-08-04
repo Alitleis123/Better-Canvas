@@ -47,6 +47,39 @@
       };
     },
 
+    // Short-circuiting structural compare. Replaces the settings store's
+    // stringify-and-compare, which serialized the whole tree several times per
+    // keystroke; this bails on the first difference and allocates nothing.
+    deepEqual(a, b) {
+      if (a === b) return true;
+      if (a == null || b == null || typeof a !== "object" || typeof b !== "object") return false;
+      const aa = Array.isArray(a);
+      if (aa !== Array.isArray(b)) return false;
+      if (aa) {
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) if (!util.deepEqual(a[i], b[i])) return false;
+        return true;
+      }
+      const ak = Object.keys(a);
+      if (ak.length !== Object.keys(b).length) return false;
+      for (const k of ak) { if (!(k in b) || !util.deepEqual(a[k], b[k])) return false; }
+      return true;
+    },
+
+    // Bounded-concurrency map. Promise.all over every course at once meant up to
+    // ~400 simultaneous paginated requests from the dashboard, which Canvas
+    // rate-limits — taking every other feature down with it.
+    async mapLimit(items, limit, worker) {
+      const list = Array.from(items || []);
+      const out = new Array(list.length);
+      let i = 0;
+      const runners = Array.from({ length: Math.max(1, Math.min(limit, list.length)) }, async () => {
+        while (i < list.length) { const n = i++; out[n] = await worker(list[n], n); }
+      });
+      await Promise.all(runners);
+      return out;
+    },
+
     whenBody(cb) {
       if (document.body) return cb();
       const obs = new MutationObserver(() => { if (document.body) { obs.disconnect(); cb(); } });

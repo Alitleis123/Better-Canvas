@@ -32,14 +32,14 @@
       border: 1px solid var(--bc-border, #e5e7eb);
       border-radius: 12px; padding: 14px;
       color: var(--bc-text, inherit);
-      font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font: var(--bc-text-md, 14px)/var(--bc-leading-body, 1.4) var(--bc-font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
     }
     .bc-todo-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
     .bc-todo-title { font-weight: 700; font-size: 15px; margin: 0; flex: 1; }
     .bc-todo-ring { width: 46px; height: 46px; flex: 0 0 46px; }
     .bc-todo-week { display: flex; align-items: center; gap: 6px; }
     .bc-todo-week button { background: transparent; border: 1px solid var(--bc-border, #e5e7eb); border-radius: 999px; padding: 2px 8px; cursor: pointer; color: inherit; }
-    .bc-todo-week button:hover { background: rgba(0,0,0,.05); }
+    .bc-todo-week button:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
     .bc-todo-controls { display: flex; gap: 6px; margin-bottom: 10px; }
     .bc-todo-controls select { padding: 4px 6px; border-radius: 6px; border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
     .bc-todo-day-header { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--bc-muted, #6b7280); margin: 10px 0 6px; }
@@ -47,28 +47,48 @@
       display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center;
       padding: 8px 10px; border-radius: 10px; background: var(--bc-surface-3, #f7fafc); margin-bottom: 6px;
     }
-    .bc-todo-item.done .bc-todo-name { opacity: .55; text-decoration: line-through; }
+    /* Tokens rather than opacity: fading already-AA text pushes it below AA. */
+    .bc-todo-item.done .bc-todo-name { color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); text-decoration: line-through; }
     .bc-todo-check {
       width: 22px; height: 22px; border-radius: 50%;
       border: 2px solid var(--bc-todo-accent, var(--bc-accent, #0374b5));
       background: transparent; cursor: pointer;
     }
     .bc-todo-check.done { background: var(--bc-todo-accent, var(--bc-accent, #0374b5)); }
-    .bc-todo-check.done::after { content: "✓"; color: #fff; font-size: 14px; line-height: 20px; display: block; text-align: center; }
+    .bc-todo-check.done::after { content: "✓"; color: var(--bc-accent-contrast, #fff); font-size: var(--bc-text-md, 14px); line-height: 20px; display: block; text-align: center; }
     .bc-todo-name { color: inherit; text-decoration: none; }
     .bc-todo-name:hover { text-decoration: underline; }
     .bc-todo-course { font-size: 11px; color: var(--bc-muted, #6b7280); }
     .bc-todo-due { font-size: 11px; color: var(--bc-muted, #6b7280); }
     .bc-todo-actions { display: flex; gap: 4px; }
     .bc-todo-btn { background: transparent; border: 1px solid var(--bc-border, #e5e7eb); border-radius: 6px; padding: 2px 6px; font-size: 11px; cursor: pointer; color: inherit; }
-    .bc-todo-btn:hover { background: rgba(0,0,0,.05); }
+    .bc-todo-btn:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
     .bc-todo-new { display: flex; gap: 6px; margin-top: 8px; }
     .bc-todo-new input { flex: 1; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
-    .bc-todo-new button { padding: 6px 10px; border-radius: 6px; background: var(--bc-accent, #0374b5); color: #fff; border: 0; cursor: pointer; }
+    .bc-todo-new button { padding: 6px 10px; border-radius: var(--bc-radius-md, 6px); background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); border: 0; cursor: pointer; font: inherit; }
     .bc-todo-empty { color: var(--bc-muted, #6b7280); font-size: 13px; padding: 6px 0; }
+    .bc-todo-snoozed { margin-top: var(--bc-space-4, 10px); border-top: 1px solid var(--bc-border, #e5e7eb); padding-top: var(--bc-space-2, 6px); }
+    .bc-todo-snoozed > summary { cursor: pointer; font-size: var(--bc-text-xs, 12px); color: var(--bc-muted, #6b7280); }
+    .bc-todo-snoozed > summary:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px; }
+    .bc-todo-snoozed-row { display: flex; align-items: center; gap: var(--bc-space-3, 8px); padding: var(--bc-space-1, 4px) 0; font-size: var(--bc-text-sm, 13px); }
+    .bc-todo-snoozed-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bc-todo-snoozed-when { color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); font-size: var(--bc-text-xs, 12px); }
+    .bc-todo-wake {
+      border: 1px solid var(--bc-border, #e5e7eb); background: var(--bc-surface-3, #f7fafc);
+      color: var(--bc-text, #1b2430); border-radius: var(--bc-radius-md, 6px);
+      font: inherit; font-size: var(--bc-text-xs, 12px); padding: 1px var(--bc-space-2, 6px); cursor: pointer;
+    }
+    .bc-todo-wake:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
     .bc-todo-tools { display: flex; align-items: center; gap: 8px; padding: 6px 0 0; border-top: 1px dashed var(--bc-border, #e5e7eb); margin-top: 10px; font-size: 12px; }
     .bc-todo-tools button { background: transparent; border: 0; cursor: pointer; color: var(--bc-accent, #0374b5); }
-    .bc-todo-streak { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
+    /* A real button now: it exposes grace/repair state and can repair a broken day. */
+    .bc-todo-streak {
+      display: inline-flex; align-items: center; gap: 4px; font-weight: 600;
+      border: 0; background: transparent; color: inherit; font: inherit;
+      cursor: pointer; padding: 2px 4px; border-radius: var(--bc-radius-md, 6px);
+    }
+    .bc-todo-streak:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
+    .bc-todo-streak:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 1px; }
     .bc-todo-pom { margin-left: auto; }
     .bc-todo-kanban { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
     .bc-kan-col { background: var(--bc-surface-3, #f7fafc); border-radius: 8px; padding: 8px; min-height: 120px; }
@@ -79,7 +99,7 @@
     .bc-todo-pop {
       position: absolute; z-index: 30; width: 260px; padding: 10px;
       background: var(--bc-surface-2, #fff); border: 1px solid var(--bc-border, #e5e7eb);
-      border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); font-size: 12px;
+      border-radius: var(--bc-radius-lg, 10px); box-shadow: var(--bc-shadow-3, 0 8px 24px rgba(0,0,0,.18)); font-size: var(--bc-text-xs, 12px);
     }
     .bc-todo-pop h5 { margin: 0 0 8px; font-size: 12px; }
     .bc-todo-pop label { display: block; margin: 6px 0 2px; color: var(--bc-muted, #6b7280); }
@@ -89,7 +109,7 @@
     }
     .bc-todo-pop .bc-sub { display: flex; gap: 6px; align-items: center; margin: 3px 0; }
     .bc-todo-pop .bc-sub input[type="checkbox"] { width: auto; }
-    .bc-todo-pop .bc-sub span.done { text-decoration: line-through; opacity: .55; }
+    .bc-todo-pop .bc-sub span.done { text-decoration: line-through; color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); }
     .bc-todo-pop .bc-pop-close { position: absolute; top: 6px; right: 8px; border: 0; background: transparent; cursor: pointer; color: inherit; }
     .bc-todo-tags { font-size: 10px; color: var(--bc-muted, #6b7280); }
     .bc-todo-tags b { font-weight: 600; background: var(--bc-surface-3, #eef2f7); border-radius: 4px; padding: 0 4px; margin-right: 3px; }
@@ -100,10 +120,10 @@
     .bc-tb-hour.bc-drop { background: rgba(3,116,181,.12); }
     .bc-tb-block {
       position: absolute; left: 50px; right: 4px; border-radius: 6px; padding: 2px 6px;
-      background: var(--bc-todo-accent, var(--bc-accent, #0374b5)); color: #fff; font-size: 11px;
+      background: var(--bc-todo-accent, var(--bc-accent, #0374b5)); color: var(--bc-accent-contrast, #fff); font-size: var(--bc-text-2xs, 11px);
       overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: grab;
     }
-    .bc-tb-block button { float: right; border: 0; background: transparent; color: #fff; cursor: pointer; padding: 0 2px; }
+    .bc-tb-block button { float: right; border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0 2px; }
     .bc-tb-tray { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
     .bc-tb-tray .bc-tb-chip {
       border: 1px dashed var(--bc-border, #e5e7eb); border-radius: 999px; padding: 2px 10px;
@@ -113,22 +133,22 @@
 
   const POM_CSS = `
     .bc-pom-dock {
-      position: fixed; right: 18px; bottom: 18px; z-index: 9999;
+      position: fixed; right: 18px; bottom: 18px; z-index: var(--bc-z-dock, 2147480000);
       display: flex; align-items: center; gap: 8px; padding: 8px 12px;
       background: var(--bc-surface-2, #fff); color: var(--bc-text, #111);
       border: 1px solid var(--bc-border, #e5e7eb); border-radius: 999px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.22);
-      font: 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      box-shadow: var(--bc-shadow-3, 0 8px 24px rgba(0,0,0,.22));
+      font: var(--bc-text-sm, 13px)/1.2 var(--bc-font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
     }
     .bc-pom-dock b { font-variant-numeric: tabular-nums; }
-    .bc-pom-dock.bc-break b { color: #059669; }
+    .bc-pom-dock.bc-break b { color: var(--bc-success, #047857); }
     .bc-pom-dock button { border: 0; background: transparent; cursor: pointer; font-size: 13px; color: inherit; padding: 0 2px; }
     .bc-pom-task { max-width: 140px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--bc-muted, #6b7280); }
     .bc-pom-stats {
-      position: fixed; right: 18px; bottom: 64px; z-index: 9999; width: 200px; padding: 10px;
+      position: fixed; right: 18px; bottom: 64px; z-index: var(--bc-z-popover, 2147481500); width: 200px; padding: 10px;
       background: var(--bc-surface-2, #fff); color: var(--bc-text, #111);
       border: 1px solid var(--bc-border, #e5e7eb); border-radius: 10px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.22); font-size: 12px;
+      box-shadow: var(--bc-shadow-3, 0 8px 24px rgba(0,0,0,.22)); font-size: 12px;
     }
   `;
 
@@ -139,7 +159,19 @@
     filterCourse: "all",
     items: [],
     lastFetchKey: "",
+    fetchedAt: 0,
   };
+
+  // Per-task augmentation moved from settings.todo.local to bcLocal.todo. Every one
+  // of these is written on a micro-interaction (star, snooze, drag, subtask tick),
+  // and content.js only subscribes to bcSettings — so a settings write there
+  // re-applied all ~24 features AND wiped the open settings drawer's DOM mid-typing.
+  // bcLocal writes don't trigger applyAll, so each call site re-renders just the
+  // widget instead.
+  function tlocal() { return (BC.storage.local && BC.storage.local.todo) || {}; }
+  function writeTodoLocal(mutator) {
+    return BC.storage.updateLocal((d) => { mutator((d.todo = d.todo || {})); });
+  }
 
   function keyForItem(it) {
     if (it.bcVirtual) return "rec:" + it.bcRuleId + ":" + it.bcYmd;
@@ -151,7 +183,7 @@
   function expandRecurring(settings, start, end) {
     const rules = settings.todo.recurring || [];
     if (!rules.length) return [];
-    const doneMap = (settings.todo.local && settings.todo.local.recurringDone) || {};
+    const doneMap = tlocal().recurringDone || {};
     const out = [];
     for (const r of rules) {
       if (!r || !r.id || !r.title) continue;
@@ -195,7 +227,7 @@
     const R = 20, C = 2 * Math.PI * R;
     const off = C - Math.round((pct / 100) * C);
     return `<svg class="bc-todo-ring" viewBox="0 0 46 46" aria-label="${pct}% complete">
-      <circle cx="23" cy="23" r="${R}" fill="none" stroke="rgba(0,0,0,.1)" stroke-width="4"/>
+      <circle cx="23" cy="23" r="${R}" fill="none" stroke="var(--bc-surface-4, rgba(0,0,0,.1))" stroke-width="4"/>
       <circle cx="23" cy="23" r="${R}" fill="none" stroke="${accent}" stroke-width="4"
               stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}"
               transform="rotate(-90 23 23)"/>
@@ -209,13 +241,19 @@
     start.setHours(0, 0, 0, 0);
     const end = new Date(start); end.setDate(end.getDate() + days);
     const key = start.toISOString() + "/" + end.toISOString();
-    if (state.lastFetchKey === key) return state.items;
+    // TTL, not "fetched once ever". Without it, completing something in Canvas's own
+    // To Do list never showed up in the widget for the rest of the session. The
+    // underlying BC.api call is cached and de-duplicated, so an expired check is
+    // usually a cache hit rather than a request.
+    const ttl = (BC.api.TTL && BC.api.TTL.planner) || 30000;
+    if (state.lastFetchKey === key && Date.now() - state.fetchedAt < ttl) return state.items;
     state.lastFetchKey = key;
     try {
       const items = await BC.api.plannerItems(start.toISOString(), end.toISOString());
       const merged = (items || []).concat(expandRecurring(settings, start, end));
       merged.sort((a, b) => new Date(a.plannable_date || 0) - new Date(b.plannable_date || 0));
       state.items = merged;
+      state.fetchedAt = Date.now();
       return state.items;
     } catch (e) {
       state.lastFetchKey = ""; // allow retry
@@ -245,14 +283,18 @@
   function setComplete(it, complete, settings, container) {
     if (it.bcVirtual) {
       it.bcDone = complete;
-      return BC.storage.update((d) => {
-        const rd = (d.todo.local.recurringDone = d.todo.local.recurringDone || {});
+      return writeTodoLocal((L) => {
+        const rd = (L.recurringDone = L.recurringDone || {});
         const m = (rd[it.bcRuleId] = rd[it.bcRuleId] || {});
         if (complete) m[it.bcYmd] = true; else delete m[it.bcYmd];
-      }).then(() => render(settings, container, true));
+      })
+        .then(() => (complete ? recordStreakDay() : null))
+        .then(() => render(settings, container, true));
     }
     const override = it.planner_override && it.planner_override.id;
     return BC.api.setPlannerComplete(it.plannable_type, (it.plannable && it.plannable.id) || it.plannable_id, complete, override)
+      // Record only on success, so a failed write can't inflate the streak.
+      .then(() => (complete ? recordStreakDay() : null))
       .then(() => {
         it.planner_override = it.planner_override || {};
         it.planner_override.marked_complete = complete;
@@ -261,24 +303,79 @@
       .catch((e) => BC.toast.error("Couldn't update: " + e.message));
   }
 
-  function todayStreak(items) {
-    // Simple: count consecutive prior days with at least one completed item.
-    const doneByDay = new Map();
-    for (const it of items) {
-      if (!isComplete(it)) continue;
-      const d = new Date(it.plannable_date || it.plannable && it.plannable.due_at || it.created_at || Date.now());
-      const k = BC.dt.ymd(d);
-      doneByDay.set(k, (doneByDay.get(k) || 0) + 1);
-    }
-    let streak = 0;
-    const cursor = new Date(); cursor.setHours(0,0,0,0);
-    for (let i = 0; i < 90; i++) {
+  // ---- streaks -------------------------------------------------------------
+  // The previous todayStreak() derived the streak from state.items — a 7-day fetch
+  // window — while walking back 90 days, so it could never report a real streak, and
+  // the advertised grace-days / monthly-repairs settings were read by nothing.
+  // Activity has to be RECORDED.
+  function recordStreakDay() {
+    return BC.storage.updateLocal((d) => {
+      const s = (d.streak = d.streak || { days: {}, repairs: {}, repaired: {}, best: 0 });
+      const k = BC.dt.ymd(new Date());
+      s.days = s.days || {};
+      s.days[k] = (s.days[k] || 0) + 1;
+      // Bounded: 120 days is more than the walk below ever looks at.
+      const keys = Object.keys(s.days).sort();
+      while (keys.length > 120) delete s.days[keys.shift()];
+    });
+  }
+
+  // Grace is DERIVED during the walk rather than persisted — persisting a running
+  // "grace used" counter invites drift. Only repairs (a genuine consumable) and the
+  // best-ever streak are stored.
+  function streakState(settings) {
+    const st = (BC.storage.local && BC.storage.local.streak) || {};
+    const days = st.days || {};
+    const repaired = st.repaired || {};
+    const cfg = (settings && settings.todo && settings.todo.streaks) || {};
+    const graceAllowed = Math.max(0, cfg.graceDays | 0);
+    const repairsAllowed = Math.max(0, cfg.repairsAvailable | 0);
+    const month = BC.dt.ymd(new Date()).slice(0, 7);
+    const repairsUsed = ((st.repairs || {})[month]) | 0;
+    const todayKey = BC.dt.ymd(new Date());
+
+    // Where recorded history begins. Past that point there is no data — which is
+    // NOT the same as a missed day. Without this the walk runs off the end into the
+    // days before the user ever installed the extension, silently burning grace and
+    // inventing a broken streak (so the chip would offer to "repair" a day that
+    // predates the install). ymd is YYYY-MM-DD, so string order is date order.
+    const known = Object.keys(days).concat(Object.keys(repaired)).sort();
+    const earliest = known.length ? known[0] : todayKey;
+
+    let current = 0, graceUsed = 0, brokenGap = null;
+    const cursor = new Date(); cursor.setHours(0, 0, 0, 0);
+    for (let i = 0; i < 120; i++) {
       const k = BC.dt.ymd(cursor);
-      if (doneByDay.has(k)) streak++; else if (i > 0) break;
+      if (days[k] > 0 || repaired[k]) current++;
+      else if (k === todayKey) { /* today isn't a miss until midnight */ }
+      else if (k < earliest) break;      // no history here, so not a miss
+      else if (graceUsed < graceAllowed) graceUsed++;
+      else { brokenGap = k; break; }
       cursor.setDate(cursor.getDate() - 1);
     }
-    return streak;
+
+    return {
+      current,
+      best: Math.max(st.best | 0, current),
+      graceLeft: Math.max(0, graceAllowed - graceUsed),
+      repairsLeft: Math.max(0, repairsAllowed - repairsUsed),
+      brokenGap,
+      todayActive: days[todayKey] > 0 || !!repaired[todayKey],
+    };
   }
+
+  function repairStreak(ymd) {
+    const month = BC.dt.ymd(new Date()).slice(0, 7);
+    return BC.storage.updateLocal((d) => {
+      const s = (d.streak = d.streak || { days: {}, repairs: {}, repaired: {}, best: 0 });
+      (s.repaired = s.repaired || {})[ymd] = true;
+      s.repairs = s.repairs || {};
+      s.repairs[month] = (s.repairs[month] | 0) + 1;
+    });
+  }
+
+  // Exported so the streak-at-risk notification can reuse the same computation.
+  BC.todo = Object.assign(BC.todo || {}, { streakState });
 
   function ensureMount() {
     const target = document.querySelector(".Sidebar__TodoListContainer, .ToDoSidebar")
@@ -349,7 +446,7 @@
         <button>Add</button>
       </div>` : ""}
       <div class="bc-todo-tools">
-        ${t.streaks && t.streaks.enabled ? `<span class="bc-todo-streak" title="Daily task streak">🔥 <span data-streak>0</span> day streak</span>` : ""}
+        ${t.streaks && t.streaks.enabled ? `<button type="button" class="bc-todo-streak" title="Daily task streak">🔥 <span data-streak>0</span> day streak</button>` : ""}
         ${t.pomodoro && t.pomodoro.enabled ? `<button class="bc-todo-pom" data-pom>▶ Pomodoro</button>` : ""}
       </div>
     `;
@@ -398,7 +495,32 @@
 
     // Streak
     const streakEl = container.querySelector("[data-streak]");
-    if (streakEl) streakEl.textContent = String(todayStreak(state.items));
+    const streakChip = container.querySelector(".bc-todo-streak");
+    if (streakEl) {
+      const ss = streakState(settings);
+      streakEl.textContent = String(ss.current);
+      if (streakChip) {
+        streakChip.title = ss.current + "-day streak · best " + ss.best +
+          " · " + ss.graceLeft + " grace day" + (ss.graceLeft === 1 ? "" : "s") + " left" +
+          " · " + ss.repairsLeft + " repair" + (ss.repairsLeft === 1 ? "" : "s") + " left this month";
+        streakChip.onclick = () => {
+          if (ss.brokenGap && ss.repairsLeft > 0) {
+            if (confirm("Repair your streak for " + ss.brokenGap + "? " + ss.repairsLeft + " repair(s) left this month.")) {
+              repairStreak(ss.brokenGap).then(() => render(settings, container, true));
+            }
+          } else if (ss.brokenGap) {
+            BC.toast.info("No streak repairs left this month");
+          } else {
+            BC.toast.info(streakChip.title);
+          }
+        };
+      }
+      // Persist a new personal best, but only when it actually increases.
+      const storedBest = ((BC.storage.local && BC.storage.local.streak && BC.storage.local.streak.best) | 0);
+      if (ss.current > storedBest) {
+        BC.storage.updateLocal((d) => { (d.streak = d.streak || {}).best = ss.current; });
+      }
+    }
 
     // Pomodoro launcher
     const pom = container.querySelector("[data-pom]");
@@ -433,7 +555,27 @@
     }
     if (!t.showCompleted) items = items.filter((it) => !isComplete(it));
 
-    if (!items.length) { list.innerHTML = `<div class="bc-todo-empty">Nothing due in this window 🎉</div>`; return; }
+    // Snooze finally does something. The button wrote todo.local.snoozed and
+    // toasted "Snoozed until tomorrow", but nothing ever read the map — the item
+    // just stayed put.
+    const snz = tlocal().snoozed || {};
+    const now = Date.now();
+    const sleeping = [];
+    const expired = [];
+    items = items.filter((it) => {
+      const at = snz[keyForItem(it)];
+      if (!at) return true;
+      if (new Date(at).getTime() > now) { sleeping.push(it); return false; }
+      expired.push(keyForItem(it));   // woken naturally; drop the key below
+      return true;
+    });
+    // Self-healing: clear expired entries in one batched write so the map can't grow
+    // without bound.
+    if (expired.length) {
+      writeTodoLocal((L) => { for (const k of expired) delete (L.snoozed || {})[k]; });
+    }
+
+    if (!items.length && !sleeping.length) { list.innerHTML = `<div class="bc-todo-empty">Nothing due in this window 🎉</div>`; return; }
 
     if (t.view === "kanban") { renderKanban(list, items, settings, container); return; }
     if (t.view === "timeblock") { renderTimeBlock(list, items, settings, container); return; }
@@ -448,10 +590,10 @@
         key = BC.dt.fmtDay(d);
       } else if (groupBy === "course") key = it.context_name || (it.plannable && it.plannable.context_name) || "Personal";
       else if (groupBy === "priority") {
-        const p = (settings.todo.local && settings.todo.local.priorities && settings.todo.local.priorities[keyForItem(it)]) || 3;
+        const p = (tlocal().priorities || {})[keyForItem(it)] || 3;
         key = "P" + p;
       } else if (groupBy === "tag") {
-        const tags = ((settings.todo.local && settings.todo.local.tagsByItem) || {})[keyForItem(it)] || [];
+        const tags = (tlocal().tagsByItem || {})[keyForItem(it)] || [];
         key = tags.length ? tags[0] : "Untagged";
       } else if (groupBy === "none") key = "Tasks";
       if (!groups.has(key)) groups.set(key, []);
@@ -463,7 +605,30 @@
       html += `<div class="bc-todo-day-header">${BC.util.escapeHtml(k)}</div>`;
       for (const it of group) html += itemHtml(it, settings);
     }
+    // Snoozed items stay reachable via a collapsed <details> — zero JS state, and it
+    // makes the snooze reversible instead of a black hole.
+    if (sleeping.length) {
+      html += `<details class="bc-todo-snoozed"><summary>💤 Snoozed (${sleeping.length})</summary>`;
+      for (const it of sleeping) {
+        const k = keyForItem(it);
+        const title = (it.plannable && it.plannable.title) || it.plannable_type || "Task";
+        const until = snz[k] ? BC.dt.fmtDay(new Date(snz[k])) : "";
+        html += `<div class="bc-todo-snoozed-row">
+          <span class="bc-todo-snoozed-name">${BC.util.escapeHtml(title)}</span>
+          <span class="bc-todo-snoozed-when">${BC.util.escapeHtml(until)}</span>
+          <button type="button" class="bc-todo-wake" data-wake="${BC.util.escapeHtml(k)}">Wake</button>
+        </div>`;
+      }
+      html += `</details>`;
+    }
     list.innerHTML = html;
+
+    list.querySelectorAll(".bc-todo-wake").forEach((el) => {
+      el.addEventListener("click", () => {
+        const k = el.getAttribute("data-wake");
+        writeTodoLocal((L) => { delete (L.snoozed || {})[k]; }).then(() => renderList(settings, container));
+      });
+    });
 
     list.querySelectorAll(".bc-todo-check").forEach((el) => {
       el.addEventListener("click", () => {
@@ -479,22 +644,25 @@
     list.querySelectorAll(".bc-todo-star").forEach((el) => {
       el.addEventListener("click", () => {
         const k = el.getAttribute("data-key");
-        BC.storage.update((d) => { d.todo.local.stars[k] = !d.todo.local.stars[k]; }).then(() => renderList(settings, container));
+        writeTodoLocal((L) => { const st = (L.stars = L.stars || {}); st[k] = !st[k]; }).then(() => renderList(settings, container));
       });
     });
 
     list.querySelectorAll(".bc-todo-snooze").forEach((el) => {
       el.addEventListener("click", () => {
         const k = el.getAttribute("data-key");
-        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-        BC.storage.update((d) => { d.todo.local.snoozed[k] = tomorrow.toISOString(); });
+        // Tomorrow 08:00 local rather than now+24h: predictable, and snoozing late
+        // at night doesn't push the item into the following evening.
+        const wake = new Date(); wake.setDate(wake.getDate() + 1); wake.setHours(8, 0, 0, 0);
+        writeTodoLocal((L) => { (L.snoozed = L.snoozed || {})[k] = wake.toISOString(); })
+          .then(() => renderList(settings, container));
         BC.toast.info("Snoozed until tomorrow");
       });
     });
   }
 
   function renderKanban(list, items, settings, container) {
-    const status = (settings.todo.local && settings.todo.local.status) || {};
+    const status = tlocal().status || {};
     const cols = { todo: [], doing: [], done: [] };
     for (const it of items) {
       if (isComplete(it)) cols.done.push(it);
@@ -530,8 +698,8 @@
         if (!it) return;
         const target = colEl.dataset.col;
         const key = keyForItem(it);
-        BC.storage.update((d) => {
-          const st = (d.todo.local.status = d.todo.local.status || {});
+        writeTodoLocal((L) => {
+          const st = (L.status = L.status || {});
           if (target === "doing") st[key] = "doing"; else delete st[key];
         }).then(() => {
           const complete = isComplete(it);
@@ -557,8 +725,8 @@
     const today = new Date();
     const day = state.windowStart && BC.dt.startOfDay(winStart) > BC.dt.startOfDay(today) ? winStart : today;
     const ymd = BC.dt.ymd(day);
-    const sched = (settings.todo.local && settings.todo.local.scheduled) || {};
-    const estimates = (settings.todo.local && settings.todo.local.estimates) || {};
+    const sched = tlocal().scheduled || {};
+    const estimates = tlocal().estimates || {};
 
     const unscheduled = items.filter((it) => !isComplete(it) && !(sched[keyForItem(it)] && sched[keyForItem(it)].ymd === ymd));
     let hours = "";
@@ -590,8 +758,8 @@
 
     const saveSlot = (it, h) => {
       const key = keyForItem(it);
-      BC.storage.update((d) => {
-        const sc = (d.todo.local.scheduled = d.todo.local.scheduled || {});
+      writeTodoLocal((L) => {
+        const sc = (L.scheduled = L.scheduled || {});
         sc[key] = { ymd, start: String(h).padStart(2, "0") + ":00", dur: estimates[key] || 60 };
       }).then(() => render(settings, container, true));
     };
@@ -614,7 +782,7 @@
     });
     list.querySelectorAll("[data-unsched]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        BC.storage.update((d) => { delete (d.todo.local.scheduled || {})[btn.dataset.unsched]; })
+        writeTodoLocal((L) => { delete (L.scheduled || {})[btn.dataset.unsched]; })
           .then(() => render(settings, container, true));
       });
     });
@@ -623,7 +791,7 @@
   // Item detail popover: priority, tags, subtasks, note, time estimate.
   function openDetail(anchor, key, settings, container) {
     container.querySelectorAll(".bc-todo-pop").forEach((p) => p.remove());
-    const local = settings.todo.local || {};
+    const local = tlocal();
     const tags = (local.tagsByItem || {})[key] || [];
     const subs = ((local.subtasks || {})[key] || []).slice();
     const pop = document.createElement("div");
@@ -663,8 +831,8 @@
       });
     }
     function saveSubs() {
-      BC.storage.update((d) => {
-        const m = (d.todo.local.subtasks = d.todo.local.subtasks || {});
+      writeTodoLocal((L) => {
+        const m = (L.subtasks = L.subtasks || {});
         m[key] = subs;
       });
     }
@@ -672,22 +840,22 @@
 
     const pri = pop.querySelector("[data-pri]");
     pri.value = String((local.priorities || {})[key] || 3);
-    pri.addEventListener("change", () => BC.storage.update((d) => {
-      (d.todo.local.priorities = d.todo.local.priorities || {})[key] = parseInt(pri.value, 10);
+    pri.addEventListener("change", () => writeTodoLocal((L) => {
+      (L.priorities = L.priorities || {})[key] = parseInt(pri.value, 10);
     }));
     pop.querySelector("[data-tags]").addEventListener("change", (e) => {
       const arr = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
-      BC.storage.update((d) => { (d.todo.local.tagsByItem = d.todo.local.tagsByItem || {})[key] = arr; });
+      writeTodoLocal((L) => { (L.tagsByItem = L.tagsByItem || {})[key] = arr; });
     });
     pop.querySelector("[data-est]").addEventListener("change", (e) => {
       const v = parseInt(e.target.value, 10);
-      BC.storage.update((d) => {
-        const m = (d.todo.local.estimates = d.todo.local.estimates || {});
+      writeTodoLocal((L) => {
+        const m = (L.estimates = L.estimates || {});
         if (v > 0) m[key] = v; else delete m[key];
       });
     });
     pop.querySelector("[data-note]").addEventListener("change", (e) => {
-      BC.storage.update((d) => { (d.todo.local.notes = d.todo.local.notes || {})[key] = e.target.value; });
+      writeTodoLocal((L) => { (L.notes = L.notes || {})[key] = e.target.value; });
     });
     pop.querySelector("[data-newsub]").addEventListener("keydown", (e) => {
       if (e.key !== "Enter") return;
@@ -711,7 +879,7 @@
     const idx = state.items.indexOf(it);
     const key = keyForItem(it);
     const complete = isComplete(it);
-    const local = settings.todo.local || {};
+    const local = tlocal();
     const p = (it.plannable && it.plannable.title) || it.plannable_title || "Untitled";
     const url = (it.html_url || (it.plannable && it.plannable.html_url) || "").toString();
     const due = it.plannable_date || (it.plannable && it.plannable.due_at) || null;
@@ -777,6 +945,7 @@
   }
 
   function stopPomodoro() {
+    stopPomTick();
     BC.storage.updateLocal((d) => {
       if (d.pomodoro) { d.pomodoro.phase = null; d.pomodoro.taskTitle = ""; }
     }).then(() => { BC.injector.removeNode("bc-pom-dock"); BC.toast.info("Pomodoro stopped"); });
@@ -816,10 +985,16 @@
       (p.taskTitle ? `<br>On: ${BC.util.escapeHtml(p.taskTitle)}` : "");
   }
 
+  let pomTimer = null;
+  function stopPomTick() {
+    if (pomTimer) { clearInterval(pomTimer); pomTimer = null; }
+  }
+
   function ensurePomodoroDock(settings) {
     const p = (BC.storage.local || {}).pomodoro;
     if (!p || !p.phase || !settings || !settings.todo.pomodoro || settings.todo.pomodoro.enabled === false) {
       BC.injector.removeNode("bc-pom-dock");
+      stopPomTick();
       return;
     }
     BC.injector.setStyle("bc-pom-css", POM_CSS);
@@ -845,11 +1020,14 @@
       return d;
     });
 
-    BC.lifecycle.bag("todo").once("pom-tick", () => {
-      BC.lifecycle.bag("todo").interval(() => {
+    // Held by handle rather than marked with once(): the mark was never cleared, so
+    // the 1s tick kept running (and querySelector-ing) for the life of the tab long
+    // after the timer was stopped.
+    if (!pomTimer) {
+      pomTimer = BC.lifecycle.bag("todo").interval(() => {
         const cur = (BC.storage.local || {}).pomodoro;
         const el = document.querySelector('[data-bc-node="bc-pom-dock"]');
-        if (!cur || !cur.phase) { BC.injector.removeNode("bc-pom-dock"); return; }
+        if (!cur || !cur.phase) { BC.injector.removeNode("bc-pom-dock"); stopPomTick(); return; }
         if (!el) return;
         const remaining = cur.endsAt - Date.now();
         if (remaining <= 0) { advancePomodoro(BC.storage.current); return; }
@@ -862,7 +1040,7 @@
         if (taskEl) taskEl.textContent = cur.taskTitle || "";
         el.classList.toggle("bc-break", cur.phase !== "work");
       }, 1000);
-    });
+    }
   }
 
   function apply(settings, ctx) {
@@ -900,5 +1078,13 @@
     styles: ["bc-todo-clean", "bc-todo-widget-css", "bc-todo-hide", "bc-pom-css"],
     nodes: ["bc-todo-widget", "bc-pom-dock"],
     apply,
+    unmount() {
+      // The bag clear already killed the interval; null the handle so a re-enable
+      // starts a fresh one instead of assuming one is still live.
+      pomTimer = null;
+      state.lastFetchKey = "";
+      state.fetchedAt = 0;
+      state.items = [];
+    },
   });
 })();

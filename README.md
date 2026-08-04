@@ -1,4 +1,4 @@
-# Better Canvas 3.0
+# Better Canvas 3.1
 
 The most feature-complete browser extension for Instructure Canvas — free forever, local-only, no accounts, no telemetry.
 
@@ -17,7 +17,7 @@ The most feature-complete browser extension for Instructure Canvas — free fore
 - **12 built-in preset themes** with one-click apply.
 - **Theme creator** — save your current look as a named custom theme, export/import as JSON, share without accounts.
 - **Theme rotation** — cycle through selected themes daily or weekly.
-- Accent color (with per-course overrides), custom font stack, five font-size scales, line-height + letter-spacing sliders.
+- Accent color, custom font stack, five font-size scales, line-height + letter-spacing sliders.
 - Density (Compact/Default/Spacious/Cozy), global corner-radius slider, rounded-vs-square UI toggle, sidebar-width control.
 - **Color-blind modes** (Protanopia/Deuteranopia/Tritanopia via SVG filters).
 - **High-contrast**, **reduced-motion**, master **animation-speed slider**.
@@ -27,17 +27,17 @@ The most feature-complete browser extension for Instructure Canvas — free fore
 ### Dashboard
 - Card layouts: **Grid / List / Masonry / Compact**, with size and radius sliders.
 - Drag-reorder, rename, recolor, hide, background-image per card.
-- **Inline grade badge**, **progress bar**, unread/due/ungraded **badges**, **grade sparkline**.
-- **Hover-preview** cards, course search bar, hover-lift animation.
+- **Inline grade badge**, **progress bar**, **due-count badge**, **grade sparkline** from locally recorded history.
+- Course search bar, hover-lift animation.
 - **Semester progress bar** — "Week 9 of 15 · 43 days left" from your term dates.
 - Auto-hide concluded courses.
-- Widgets: To Do, Coming Up, Recent Feedback, GPA, Streak, Weekly ring, Announcements, Mini Calendar.
+- Widgets: To Do, Coming Up, Recent Feedback, and an estimated-**GPA** card.
 
 ### Planner / To Do
 Three modes:
 - **Canvas default** — untouched.
 - **Clean circles** — CSS restyle of the native list.
-- **Planner widget** — completion **ring**, week nav, course filter, groupings (day/course/priority/tag/none), views (list/day/week/**kanban**/time-block), custom accent, star / snooze, personal tasks.
+- **Planner widget** — completion **ring**, week nav, course filter, groupings (day/course/priority/tag/none), views (list/**kanban**/time-block), custom accent, star / snooze, personal tasks.
 - **Kanban board** with drag-and-drop status columns; dropping on Done completes the Canvas item.
 - **Time-block view** — drag tasks onto a 7am–10pm day grid to schedule them.
 - **Recurring tasks** (daily / weekly with weekday mask / monthly), **subtasks**, **tags**, and **priorities** with an item-detail popover.
@@ -50,21 +50,21 @@ Three modes:
 - **Rubric predictor** on assignment pages: slide each criterion and see the projected score plus its impact on your course grade.
 - **Grade goals** with breach notifications.
 - **What-if** grades (Canvas built-in stays on).
-- **GPA calculator**: Standard 4.0 / 4.3 scale (A+ = 4.3) / High-school unweighted / custom scale.
+- **GPA calculator**: Standard 4.0 / 4.3 scale (A+ = 4.3) / High-school unweighted.
 - Auto-refresh grades page (configurable interval).
 
 ### Notifications
 - In-page toasts and **browser notifications** (opt-in via permission).
 - Types: due-soon, new grade, new announcement, goal breach, streak-at-risk.
-- Per-type toggles, per-course toggles, **quiet hours** window, toolbar **badge counter**.
+- Per-type toggles, **quiet hours** window, toolbar **badge counter** for items due in 24 hours.
 - Configurable lead times (defaults 1h/4h/1d).
 
 ### Files
 - **Cross-course library** — one panel that lists every file across every course, with search + type + course + sort filters.
-- **Star / favorite** files, recent-files section, one-click open.
+- **Star / favorite** files, one-click open.
 
 ### Announcements
-- **Aggregator** on the dashboard: all courses, unread first, weekly digest.
+- **Aggregator** on the dashboard: recent announcements across all your courses, newest first.
 
 ### Modules & courses
 - **Module progress bars** — per-module completion on the modules page plus a course-wide summary.
@@ -80,7 +80,6 @@ Three modes:
 - **.ics export** of Canvas assignments + personal events (download).
 - **Mini month view** on dashboard.
 - **Syllabus date extraction** — scan the syllabus page for dates and add the ones you pick to the planner.
-- Personal events (local, exportable).
 
 ### Navigation
 - Reorder / hide global-nav items; add custom global links.
@@ -90,10 +89,9 @@ Three modes:
 ### Command palette & shortcuts
 - **⌘K / Ctrl-K palette** — jump to any tab, any course, any command.
 - **Rebindable shortcuts** for every action (⌘⇧S settings, ⌘⇧D dark, ⌘⇧T quick task, ⌘⇧N quick note, g d/g/i/c to navigate).
-- Optional **vim-style j/k** on list pages.
 
 ### Productivity
-- **Focus mode** on assignment pages.
+- **Focus mode** on any Canvas page.
 - **Reading ruler** and **reading-progress bar** on long pages.
 - **Sticky notes** anywhere on Canvas, per URL.
 - **Auto-save drafts** for every textarea, restored on next visit.
@@ -113,7 +111,7 @@ Three modes:
 - **Grade trend sparklines** and **Pomodoro session history** in the same tab.
 
 ### Instructor helpers
-- **Roster CSV export**, attendance quick-mark (P/A buttons + CSV), SpeedGrader **ungraded-count badges**.
+- **Roster CSV export**, attendance quick-mark (P/A buttons + CSV), **ungraded-count badges** on the assignments index.
 
 ### Backgrounds & CSS
 - Full-page background: solid / gradient / image / **repeating pattern** (dots, grid, diagonal, topography), blur + opacity.
@@ -152,7 +150,7 @@ Better Canvas makes **no external network requests**. All Canvas calls go to you
 - **Reads (GET):** dashboard cards, courses/scores/terms, planner items, assignment groups, rubrics, modules, files, announcements, course people.
 - **Writes (planner only):** mark a task complete, add a personal task (planner widget + syllabus extract). Uses Canvas's CSRF token — same as the Canvas UI. Nothing else is ever written — no grades, no quiz answers.
 
-Settings and local data (notes, drafts, quiz drafts, study time, grade history) live in browser extension storage. Telemetry is hard-wired **off**.
+Settings live in `bcSettings`. Everything device-local — sticky notes, drafts, quiz drafts, study time, grade history, and planner metadata (stars, snoozes, subtasks, kanban status, streaks) — lives in `bcLocal`. Export/import carries both, so a backup round-trips your planner state as well as your settings. Telemetry is hard-wired **off**.
 
 ---
 
@@ -165,8 +163,11 @@ manifest.json / manifest.firefox.json    per-browser MV3 manifests
 build.ps1                                copy src/ + right manifest into dist/{chrome,firefox}
 src/
   shared/
-    defaults.js                          settings schema + deep-merge
+    defaults.js                          settings schema + deep-merge + migrations
     themes.js                            preset themes + isDarkActive
+    tokens.js                            the single design-token emitter, shared by the
+                                         page, the drawer's shadow root, the options
+                                         page and the popup (+ the readability guard)
     settings/
       state.js                           undo/redo store, subscribe, adapter
       components.js                      Switch/Select/Slider/Sortable/Tags/Links/Keybind…
@@ -177,6 +178,7 @@ src/
       lifecycle.js     feature registry + per-feature listener/interval bags + BC.diag
       ui.js            shared panel/card/tabs/skeleton/empty/error components
       datetime.js, color.js, cache.js, api.js, alarms.js, toast.js
+      (color.js also carries the WCAG contrast helpers the token guard uses)
       shortcuts.js, commandPalette.js
     features/
       theming.js       dark/light palettes, accent, font, density, radius, focus ring, colorblind

@@ -105,45 +105,44 @@
     :root[data-bc-rounded="0"] select, :root[data-bc-rounded="0"] .Button { border-radius: 0 !important; }
   `;
 
-  // Mode-aware surface vars: light values on :root, dark values under html.bc-dark.
-  // --bc-d-* stay as aliases so older CSS keeps working — they now resolve per-mode
-  // instead of always dark (which used to darken panels in light mode).
-  function varBlock(pl, pd) {
-    return `:root {
-      --bc-surface-1: ${pl.bg}; --bc-surface-2: ${pl.bg2}; --bc-surface-3: ${pl.bg3};
-      --bc-border: ${pl.border}; --bc-text: ${pl.text}; --bc-muted: ${pl.muted};
-      --bc-link: ${pl.link}; --bc-accent: ${pl.accent};
-      --bc-d-bg: var(--bc-surface-1); --bc-d-bg2: var(--bc-surface-2); --bc-d-bg3: var(--bc-surface-3);
-      --bc-d-border: var(--bc-border); --bc-d-text: var(--bc-text); --bc-d-muted: var(--bc-muted);
-      --bc-d-link: var(--bc-link);
-    }
-    html.bc-dark {
-      --bc-surface-1: ${pd.bg}; --bc-surface-2: ${pd.bg2}; --bc-surface-3: ${pd.bg3};
-      --bc-border: ${pd.border}; --bc-text: ${pd.text}; --bc-muted: ${pd.muted};
-      --bc-link: ${pd.link}; --bc-accent: ${pd.accent};
-    }`;
+  // The mode-independent half never changes, so build it once rather than
+  // reassembling a multi-KB string on every observer tick.
+  let staticCssCache = null;
+  function staticSheet() {
+    if (staticCssCache == null) staticCssCache = staticCSS + "\n" + BC.tokens.staticCss();
+    return staticCssCache;
   }
 
-  function apply(settings, ctx) {
-    const t = settings.theming;
-    const doc = document.documentElement;
-    const active = BC.isDarkActive(settings);
-    doc.classList.toggle("bc-dark", active);
+  // Memoized against a signature of every input that affects the output.
+  let lastSig = null;
+  let lastCss = "";
 
-    const pals = BC.color.themePalettes(t);
+  function buildCss(settings) {
+    const t = settings.theming;
     const fontSize = FONT_SCALE[t.fontSizeScale || "m"] || 1;
     const lineHeight = t.lineHeight || 1.5;
     const letter = t.letterSpacing || 0;
     const density = DENSITY_PAD[t.density] || 1;
 
-    const fontRule = t.font
-      ? `:root, html body, .ic-app { font-family: ${BC.util.cssSafe(t.font)} !important; }`
+    // cssSafe only strips <>, which is not enough for a value interpolated into a
+    // declaration — a stack of `Inter; } html{display:none} .x {` would escape it.
+    const font = BC.tokens.safeFontStack(t.font);
+    const fontRule = font
+      ? `:root, html body, .ic-app { font-family: ${font} !important; }
+         :root { --bc-font-sans: ${font}; }`
       : "";
 
+    // The !important root font-size is for Canvas's own text; the custom
+    // properties are what let OUR components scale predictably alongside it.
     const scaleRule = `:root, html body {
       font-size: calc(14px * ${fontSize}) !important;
       line-height: ${lineHeight} !important;
       letter-spacing: ${letter}px !important;
+    }
+    :root {
+      --bc-font-scale: ${fontSize};
+      --bc-line-height: ${lineHeight};
+      --bc-letter-spacing: ${letter}px;
     }`;
     const densityRule = `:root { --bc-density: ${density}; }`;
     const radiusRule  = `:root { --bc-radius: ${t.radius|0}px; }`;
@@ -163,48 +162,6 @@
       .ic-app-header__logomark img, .ic-app-header__logomark-container img { visibility: hidden !important; }`;
     }
 
-    const bodyLogoTextEl = document.getElementById("bc-logo-text");
-    if (t.logo && t.logo.mode === "text" && t.logo.text) {
-      const holder = document.querySelector(".ic-app-header__logomark, .ic-app-header__logomark-container");
-      if (holder) {
-        if (!bodyLogoTextEl) {
-          const s = document.createElement("span");
-          s.id = "bc-logo-text";
-          s.className = "bc-logo-text";
-          s.textContent = t.logo.text.slice(0, 24);
-          holder.style.position = "relative";
-          holder.appendChild(s);
-        } else {
-          bodyLogoTextEl.textContent = t.logo.text.slice(0, 24);
-        }
-      }
-    } else if (bodyLogoTextEl) {
-      bodyLogoTextEl.remove();
-    }
-
-    // Data attributes toggle CSS branches
-    doc.toggleAttribute("data-bc-accent", !!(BC.color.normalizeHex(t.accentColor) || (lp && lp.accent)));
-    doc.setAttribute("data-bc-density", t.density || "default");
-    doc.setAttribute("data-bc-radius",  String(t.radius|0));
-    doc.setAttribute("data-bc-focus",   t.focusRing || "default");
-    doc.setAttribute("data-bc-cursor",  t.cursor || "default");
-    doc.setAttribute("data-bc-hc",      t.highContrast ? "1" : "0");
-    doc.setAttribute("data-bc-motion",  (t.reducedMotion || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)) ? "0" : "1");
-    doc.setAttribute("data-bc-rounded", t.roundedUI ? "1" : "0");
-    if (t.colorBlind && t.colorBlind !== "off") {
-      doc.style.filter = BC.color.colorBlindFilter(t.colorBlind);
-    } else {
-      doc.style.filter = "";
-    }
-    // Anim speed
-    doc.style.setProperty("--bc-anim-speed", String(t.animSpeed || 1));
-    // Sidebar width
-    if (t.sidebarWidth && t.sidebarWidth > 0) {
-      doc.style.setProperty("--bc-sidebar-w", t.sidebarWidth + "px");
-    } else {
-      doc.style.removeProperty("--bc-sidebar-w");
-    }
-
     // Dyslexia font override
     const dyslexiaRule = (settings.accessibility && settings.accessibility.dyslexiaFont)
       ? `:root, html body, .ic-app, .ic-DashboardCard, .ic-Sidebar { font-family: "Comic Sans MS", "OpenDyslexic", Verdana, sans-serif !important; letter-spacing: 0.03em !important; }`
@@ -215,12 +172,89 @@
       ? `button, .btn, .Button, a[role=button], input[type=checkbox], input[type=radio] { min-height: 40px !important; min-width: 40px !important; }`
       : "";
 
-    const css = staticCSS + "\n" + varBlock(pals.light, pals.dark) + "\n" + scaleRule + "\n" + densityRule + "\n" + radiusRule + "\n" +
-                lightBgRule + "\n" + fontRule + "\n" + logoRule + "\n" + dyslexiaRule + "\n" + largeTargets + "\n" +
-                `.bc-logo-text { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color: var(--bc-text); font-weight:700; font-size: 13px; letter-spacing:.03em; }`;
-
-    BC.injector.setStyle("bc-theming", css);
+    return BC.tokens.css(t) + "\n" + scaleRule + "\n" + densityRule + "\n" + radiusRule + "\n" +
+           lightBgRule + "\n" + fontRule + "\n" + logoRule + "\n" + dyslexiaRule + "\n" + largeTargets + "\n" +
+           `.bc-logo-text { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color: var(--bc-text); font-weight:700; font-size: var(--bc-text-sm); letter-spacing:.03em; }`;
   }
 
-  BC.registry.register({ id: "theming", styles: ["bc-theming"], nodes: [], apply });
+  // Imperative root state. Cheap, but every write is guarded: an unguarded
+  // classList or attribute write re-serializes the attribute even when the value
+  // is unchanged, which is both a style invalidation and an observer self-trigger,
+  // ~5x/second forever.
+  function applyRootState(settings) {
+    const t = settings.theming;
+    const doc = document.documentElement;
+    const active = BC.isDarkActive(settings);
+    if (doc.classList.contains("bc-dark") !== active) doc.classList.toggle("bc-dark", active);
+
+    const lp = (BC.LIGHT_PRESETS || {})[t.lightPreset];
+    const attr = (k, v) => { if (doc.getAttribute(k) !== v) doc.setAttribute(k, v); };
+    const wantAccent = !!(BC.color.normalizeHex(t.accentColor) || (lp && lp.accent));
+    if (doc.hasAttribute("data-bc-accent") !== wantAccent) doc.toggleAttribute("data-bc-accent", wantAccent);
+    attr("data-bc-density", t.density || "default");
+    attr("data-bc-radius", String(t.radius | 0));
+    attr("data-bc-focus", t.focusRing || "default");
+    attr("data-bc-cursor", t.cursor || "default");
+    attr("data-bc-hc", t.highContrast ? "1" : "0");
+    attr("data-bc-motion", (t.reducedMotion || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)) ? "0" : "1");
+    attr("data-bc-rounded", t.roundedUI ? "1" : "0");
+
+    const filter = (t.colorBlind && t.colorBlind !== "off") ? BC.color.colorBlindFilter(t.colorBlind) : "";
+    if (doc.style.filter !== filter) doc.style.filter = filter;
+
+    // Clamped: the durations are calc(Nms / speed), so a corrupted import setting
+    // this to 0 would produce division by zero across every animation.
+    const speed = String(BC.util.clamp(Number(t.animSpeed) || 1, 0.25, 4));
+    if (doc.style.getPropertyValue("--bc-anim-speed") !== speed) doc.style.setProperty("--bc-anim-speed", speed);
+
+    const sw = (t.sidebarWidth && t.sidebarWidth > 0) ? t.sidebarWidth + "px" : "";
+    if (doc.style.getPropertyValue("--bc-sidebar-w") !== sw) {
+      if (sw) doc.style.setProperty("--bc-sidebar-w", sw);
+      else doc.style.removeProperty("--bc-sidebar-w");
+    }
+
+    // Text-mode logo replacement is a real node, so it can't live in a stylesheet.
+    const existing = document.getElementById("bc-logo-text");
+    if (t.logo && t.logo.mode === "text" && t.logo.text) {
+      const label = String(t.logo.text).slice(0, 24);
+      if (!existing) {
+        const holder = document.querySelector(".ic-app-header__logomark, .ic-app-header__logomark-container");
+        if (holder) {
+          const s = document.createElement("span");
+          s.id = "bc-logo-text";
+          s.className = "bc-logo-text";
+          s.setAttribute("data-bc-node", "bc-logo-text");
+          s.textContent = label;
+          holder.style.position = "relative";
+          holder.appendChild(s);
+        }
+      } else if (existing.textContent !== label) {
+        existing.textContent = label;
+      }
+    } else if (existing) {
+      existing.remove();
+    }
+  }
+
+  function apply(settings, ctx) {
+    const t = settings.theming;
+    const a = settings.accessibility || {};
+    const cos = (settings.cosmetics && settings.cosmetics.background && settings.cosmetics.background.mode) || "";
+
+    BC.injector.setStyle("bc-static", staticSheet());
+
+    const sig = BC.tokens.signature(t) + "|" + (a.dyslexiaFont ? 1 : 0) + (a.largeTargets ? 1 : 0) + "|" + cos;
+    if (sig !== lastSig) { lastSig = sig; lastCss = buildCss(settings); }
+    BC.injector.setStyle("bc-theming", lastCss);
+
+    applyRootState(settings);
+  }
+
+  BC.registry.register({
+    id: "theming", styles: ["bc-static", "bc-theming"], nodes: ["bc-logo-text"], apply,
+    // Teardown removes our stylesheets, so the memo has to be invalidated or a
+    // re-enable would skip rebuilding them. (The root-level inline state is cleared
+    // centrally in content.js's teardown.)
+    unmount() { lastSig = null; },
+  });
 })();

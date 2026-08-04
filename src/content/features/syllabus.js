@@ -19,7 +19,8 @@
       border-top: 1px solid var(--bc-border, #e5e7eb); }
     .bc-syl-item:first-child { border-top: 0; }
     .bc-syl-date { color: var(--bc-muted, #6b7280); white-space: nowrap; font-variant-numeric: tabular-nums; }
-    .bc-syl-item.added { opacity: .5; }
+    /* A token rather than opacity: fading already-AA text drops it below AA. */
+    .bc-syl-item.added { color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); }
     .bc-syl-actions { margin-top: 10px; display: none; gap: 8px; }
     .bc-syl.open .bc-syl-actions { display: flex; }
   `;

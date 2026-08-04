@@ -11,11 +11,11 @@
   const CSS = `
     .bc-tts-btn {
       display: inline-flex; align-items: center; gap: 4px;
-      background: transparent; border: 1px solid var(--bc-d-border, #e5e7eb);
+      background: transparent; border: 1px solid var(--bc-border, #e5e7eb);
       border-radius: 6px; padding: 2px 6px; font-size: 12px; cursor: pointer;
       color: inherit; margin-left: 6px;
     }
-    .bc-tts-btn.playing { background: var(--bc-accent, #0374b5); color: #fff; }
+    .bc-tts-btn.playing { background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); }
   `;
 
   function installTts() {
@@ -26,14 +26,22 @@
       const btn = document.createElement("button");
       btn.className = "bc-tts-btn";
       btn.type = "button";
+      btn.setAttribute("data-bc-node", "bc-tts-btn");   // declared below, so teardown removes it
+      btn.setAttribute("aria-pressed", "false");
       btn.textContent = "🔊 Speak";
       btn.addEventListener("click", () => {
         try {
-          if (window.speechSynthesis.speaking) { window.speechSynthesis.cancel(); btn.classList.remove("playing"); return; }
+          if (window.speechSynthesis.speaking) {
+            window.speechSynthesis.cancel();
+            btn.classList.remove("playing");
+            btn.setAttribute("aria-pressed", "false");
+            return;
+          }
           const utter = new SpeechSynthesisUtterance((el.textContent || "").slice(0, 20000));
           utter.rate = 1.05;
-          utter.onend = () => btn.classList.remove("playing");
+          utter.onend = () => { btn.classList.remove("playing"); btn.setAttribute("aria-pressed", "false"); };
           btn.classList.add("playing");
+          btn.setAttribute("aria-pressed", "true");
           window.speechSynthesis.speak(utter);
         } catch (e) { BC.toast.error("TTS failed"); }
       });
@@ -46,6 +54,9 @@
     if (document.getElementById("bc-cb-filters")) return;
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("id", "bc-cb-filters");
+    // Marks the node as ours for the observer's ownership check and makes it
+    // removable by teardown — an id alone is invisible to both.
+    svg.setAttribute("data-bc-node", "bc-cb-filters");
     svg.setAttribute("aria-hidden", "true");
     svg.setAttribute("width", "0"); svg.setAttribute("height", "0");
     svg.style.position = "absolute";
@@ -64,5 +75,16 @@
     if (a.tts) installTts();
   }
 
-  BC.registry.register({ id: "accessibility", styles: ["bc-a11y-css"], nodes: [], apply });
+  BC.registry.register({
+    id: "accessibility", styles: ["bc-a11y-css"], nodes: ["bc-cb-filters", "bc-tts-btn"], apply,
+    // The _bcTts expandos outlived teardown, so after a disable/enable cycle
+    // installTts() skipped every element it had already marked and the Speak buttons
+    // (which teardown had just removed) never came back.
+    unmount() {
+      for (const el of document.querySelectorAll(".show-content, .description, .assignment-description, .announcement, .discussion-topic-body")) {
+        delete el._bcTts;
+      }
+      if (window.speechSynthesis && window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+    },
+  });
 })();

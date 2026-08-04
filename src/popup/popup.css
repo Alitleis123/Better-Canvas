@@ -1,48 +1,75 @@
-:root {
-  --bc-accent: #4f46e5;
-  --bc-bg: #ffffff;
-  --bc-fg: #1f2937;
-  --bc-muted: #6b7280;
-  --bc-border: #e5e7eb;
-}
-@media (prefers-color-scheme: dark) {
-  :root { --bc-bg:#1a1d24; --bc-fg:#e5e7eb; --bc-muted:#9ca3af; --bc-border:#2a2f3a; }
-}
+/* Popup styling. Consumes the shared design tokens that popup.js emits, so the
+   toolbar panel finally tracks the user's theme — accent, palette, radius, and font
+   stack. It previously declared its own third set of hardcoded variables plus a
+   prefers-color-scheme block and ignored the theme entirely. Fallbacks keep it
+   legible if tokens haven't been painted yet. */
 * { box-sizing: border-box; }
 body {
   width: 320px; margin: 0; padding: 14px;
-  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: var(--bc-bg); color: var(--bc-fg);
+  font-family: var(--bc-font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  font-size: var(--bc-text-md, 14px);
+  line-height: var(--bc-leading-body, 1.4);
+  background: var(--bc-surface-2, #ffffff);
+  color: var(--bc-text, #1f2937);
+  accent-color: var(--bc-accent, #4f46e5);
 }
-.bc-pop-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+:focus-visible {
+  outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5));
+  outline-offset: 2px;
+}
+
+.bc-pop-header { display: flex; align-items: center; gap: var(--bc-space-4, 10px); margin-bottom: var(--bc-space-5, 12px); }
 .bc-pop-logo {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; border-radius: 10px;
-  background: var(--bc-accent); color: #fff; font-weight: 800; font-size: 13px;
+  width: 34px; height: 34px; border-radius: var(--bc-radius-lg, 10px);
+  background: var(--bc-accent, #4f46e5); color: var(--bc-accent-contrast, #fff);
+  font-weight: 800; font-size: var(--bc-text-sm, 13px);
 }
-.bc-pop-header h1 { font-size: 15px; margin: 0; }
-.bc-ver { font-size: 11px; color: var(--bc-muted); margin: 0; }
+.bc-pop-header h1 { font-size: var(--bc-text-lg, 15px); margin: 0; }
+.bc-ver { font-size: var(--bc-text-2xs, 11px); color: var(--bc-muted, #6b7280); margin: 0; }
+
 .bc-site {
-  font-size: 12px; padding: 8px 10px; border-radius: 8px;
-  background: rgba(0,0,0,.04); color: var(--bc-muted); margin-bottom: 12px;
+  font-size: var(--bc-text-xs, 12px);
+  padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px);
+  border-radius: var(--bc-radius-md, 8px);
+  background: var(--bc-surface-4, rgba(0,0,0,.04));
+  color: var(--bc-muted, #6b7280);
+  margin-bottom: var(--bc-space-5, 12px);
 }
-.bc-site.is-active { background: #d1fae5; color: #065f46; }
-@media (prefers-color-scheme: dark) { .bc-site { background: rgba(255,255,255,.05); } }
+.bc-site.is-active {
+  background: var(--bc-success-bg, #d1fae5);
+  color: var(--bc-success, #065f46);
+}
 .bc-site button {
-  margin-top: 8px; width: 100%; padding: 7px; border: none; border-radius: 6px;
-  background: var(--bc-accent); color: #fff; cursor: pointer; font-weight: 600;
+  margin-top: var(--bc-space-3, 8px); width: 100%; padding: 7px;
+  border: none; border-radius: var(--bc-radius-md, 6px);
+  background: var(--bc-accent, #4f46e5); color: var(--bc-accent-contrast, #fff);
+  cursor: pointer; font-family: inherit; font-weight: var(--bc-weight-semibold, 600);
 }
-.bc-section { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+
+.bc-section { display: flex; flex-direction: column; gap: var(--bc-space-3, 8px); margin-bottom: var(--bc-space-6, 14px); }
 .bc-toggle, .bc-row {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 10px; padding: 6px 0;
+  gap: var(--bc-space-4, 10px); padding: var(--bc-space-2, 6px) 0;
+  cursor: pointer;
 }
-.bc-row select { padding: 4px 6px; border: 1px solid var(--bc-border); border-radius: 6px; background: var(--bc-bg); color: inherit; }
+.bc-row select {
+  padding: var(--bc-space-1, 4px) var(--bc-space-2, 6px);
+  border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-md, 6px);
+  background: var(--bc-surface-2, #fff); color: inherit; font: inherit;
+}
 .bc-toggle input { width: 18px; height: 18px; }
-.bc-actions { display: flex; gap: 6px; }
+
+.bc-actions { display: flex; gap: var(--bc-space-2, 6px); }
 .bc-btn {
-  flex: 1; padding: 8px; border: 1px solid var(--bc-border); border-radius: 8px;
-  background: var(--bc-bg); color: var(--bc-fg); cursor: pointer; font-weight: 600;
+  flex: 1; padding: var(--bc-space-3, 8px);
+  border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-md, 8px);
+  background: var(--bc-surface-2, #fff); color: var(--bc-text, #1f2937);
+  cursor: pointer; font-family: inherit; font-weight: var(--bc-weight-semibold, 600);
 }
-.bc-btn--primary { background: var(--bc-accent); color: #fff; border: none; }
-.bc-note { font-size: 11px; color: var(--bc-muted); text-align: center; margin: 10px 0 0; }
+.bc-btn:hover { background: var(--bc-surface-4, rgba(0,0,0,.04)); }
+.bc-btn--primary {
+  background: var(--bc-accent, #4f46e5); color: var(--bc-accent-contrast, #fff); border: none;
+}
+.bc-btn--primary:hover { background: var(--bc-accent-hover, var(--bc-accent, #4f46e5)); }
+.bc-note { font-size: var(--bc-text-2xs, 11px); color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); text-align: center; margin: var(--bc-space-4, 10px) 0 0; }

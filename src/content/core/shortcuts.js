@@ -9,10 +9,15 @@
 
   function isTypingTarget(t) {
     if (!t) return false;
+    if (t.isContentEditable) return true;
     const tag = (t.tagName || "").toLowerCase();
     if (tag === "input" || tag === "textarea" || tag === "select") return true;
-    if (t.isContentEditable) return true;
-    return false;
+    // ARIA text widgets report neither a form tag nor contentEditable on the event
+    // target — Canvas's InstUI comboboxes and its rich-text editors both land here.
+    return !!(t.closest && t.closest(
+      '[contenteditable=""],[contenteditable="true"],[role="textbox"],' +
+      '[role="combobox"],[role="searchbox"],.ProseMirror,.tox-edit-area'
+    ));
   }
 
   function normalizeCombo(str) {
@@ -48,19 +53,23 @@
     const s = BC.storage && BC.storage.current;
     if (!s || !s.shortcuts || !s.shortcuts.enabled) return;
 
-    // Chord (two-step, e.g. "g d")
+    // Chord second key (e.g. "g d").
     if (chord) {
-      if (!keyOnly(ev)) { chord = null; clearTimeout(chordTimer); return; }
-      const combo = chord + " " + (ev.key || "").toLowerCase();
-      chord = null; clearTimeout(chordTimer);
-      for (const { combo: c, handler } of bindings.values()) {
-        if (c && c.toLowerCase() === combo) {
-          ev.preventDefault(); ev.stopPropagation();
-          try { handler(ev); } catch (_) {}
-          return;
+      const pending = chord;
+      chord = null;
+      clearTimeout(chordTimer);
+      if (keyOnly(ev)) {
+        const combo = pending + " " + (ev.key || "").toLowerCase();
+        for (const { combo: c, handler } of bindings.values()) {
+          if (c && c.toLowerCase() === combo) {
+            ev.preventDefault(); ev.stopPropagation();
+            BC.util.guard(() => handler(ev), "shortcut " + combo);
+            return;
+          }
         }
       }
-      return;
+      // Nothing matched — fall through so the key can still trigger a single-key
+      // binding instead of being silently eaten.
     }
 
     for (const { combo, handler } of bindings.values()) {
@@ -69,16 +78,17 @@
         const firstToken = combo.split(" ")[0];
         if (keyOnly(ev) && (ev.key || "").toLowerCase() === firstToken.toLowerCase()) {
           chord = firstToken.toLowerCase();
-          chordTimer = setTimeout(() => { chord = null; }, 1200);
-          ev.preventDefault();
+          clearTimeout(chordTimer);
+          chordTimer = setTimeout(() => { chord = null; }, 800);
+          // Deliberately NOT preventDefault. Starting a chord used to swallow the
+          // keystroke for 1.2s, so a bare "g" anywhere outside a recognised input —
+          // including widgets isTypingTarget missed — lost the letter entirely.
           return;
         }
-      } else {
-        if (eventMatchesToken(ev, combo)) {
-          ev.preventDefault(); ev.stopPropagation();
-          try { handler(ev); } catch (_) {}
-          return;
-        }
+      } else if (eventMatchesToken(ev, combo)) {
+        ev.preventDefault(); ev.stopPropagation();
+        BC.util.guard(() => handler(ev), "shortcut " + combo);
+        return;
       }
     }
   }

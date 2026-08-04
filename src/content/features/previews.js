@@ -5,17 +5,22 @@
   BC.features = BC.features || {};
 
   const CSS = `
+    /* role=tooltip, not dialog: it's hover-only and never takes focus. */
     .bc-preview {
-      position: fixed; z-index: 2147481000;
-      background: var(--bc-d-bg2, #fff); color: var(--bc-d-text, inherit);
-      border: 1px solid var(--bc-d-border, #e5e7eb); border-radius: 10px;
-      padding: 10px 12px; box-shadow: 0 10px 30px rgba(0,0,0,.18);
-      max-width: 340px; font-size: 13px; opacity: 0; transform: translateY(4px);
-      transition: opacity .15s ease, transform .15s ease;
+      position: fixed; z-index: var(--bc-z-popover, 2147481500);
+      background: var(--bc-surface-2, #fff); color: var(--bc-text, inherit);
+      border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-lg, 10px);
+      padding: var(--bc-space-4, 10px) var(--bc-space-5, 12px);
+      box-shadow: var(--bc-shadow-3, 0 10px 30px rgba(0,0,0,.18));
+      max-width: 340px;
+      font-family: var(--bc-font-sans); font-size: var(--bc-text-sm, 13px);
+      opacity: 0; transform: translateY(4px);
+      transition: opacity var(--bc-dur-2, 150ms) var(--bc-ease-out, ease),
+                  transform var(--bc-dur-2, 150ms) var(--bc-ease-out, ease);
     }
     .bc-preview.show { opacity: 1; transform: translateY(0); }
-    .bc-preview h5 { margin: 0 0 4px; font-size: 14px; }
-    .bc-preview p { margin: 0; color: var(--bc-d-muted, #6b7280); }
+    .bc-preview h5 { margin: 0 0 4px; font-size: var(--bc-text-md, 14px); }
+    .bc-preview p { margin: 0; color: var(--bc-muted, #6b7280); }
   `;
 
   let previewEl = null;
@@ -26,6 +31,7 @@
     previewEl = document.createElement("div");
     previewEl.className = "bc-preview";
     previewEl.setAttribute("data-bc-node", "bc-preview");
+    previewEl.setAttribute("role", "tooltip");
     document.body.appendChild(previewEl);
     return previewEl;
   }
@@ -52,7 +58,11 @@
         ${score}
         <p style="margin-top:6px;">${BC.util.escapeHtml((asn.description || "").replace(/<[^>]+>/g, " ").slice(0, 180) || "")}</p>
       `;
-    } catch (_) {}
+    } catch (e) {
+      // Was swallowed silently, leaving the card reading "Loading…" forever.
+      el.innerHTML = `<h5>Couldn't load</h5><p>Open the assignment to see details.</p>`;
+      BC.diag.push("previews", e);
+    }
   }
 
   function positionAt(target, el) {
@@ -82,14 +92,18 @@
     if (installed) return;
     installed = true;
     BC.injector.setStyle("bc-preview-css", CSS);
-    document.addEventListener("mouseover", onOver);
-    document.addEventListener("mouseout", onOut);
+    // Bagged, so teardown removes them even if unmount is never reached. As raw
+    // document listeners they survived a disable and kept fetching assignment data
+    // while the extension was supposedly off.
+    const bag = BC.lifecycle.bag("previews");
+    bag.listen(document, "mouseover", onOver);
+    bag.listen(document, "mouseout", onOut);
   }
   function uninstall() {
     if (!installed) return;
     installed = false;
-    document.removeEventListener("mouseover", onOver);
-    document.removeEventListener("mouseout", onOut);
+    BC.lifecycle.bag("previews").clear();
+    clearTimeout(hoverTimer);
     BC.injector.setStyle("bc-preview-css", "");
     BC.injector.removeNode("bc-preview");
     previewEl = null;
@@ -100,5 +114,11 @@
     else uninstall();
   }
 
-  BC.registry.register({ id: "previews", styles: ["bc-preview-css"], nodes: ["bc-preview"], apply });
+  BC.registry.register({
+    id: "previews", styles: ["bc-preview-css"], nodes: ["bc-preview"], apply,
+    // `installed` stayed true across a teardown, so after disable/enable install()
+    // early-returned and bc-preview-css — which teardown had removed — was never
+    // re-injected, leaving an unstyled, effectively invisible hover card.
+    unmount() { uninstall(); },
+  });
 })();

@@ -15,8 +15,9 @@
       border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit;
       border-radius: 6px; padding: 1px 7px; font-size: 11px; cursor: pointer;
     }
-    .bc-att button.on-p { background: #059669; color: #fff; border-color: #059669; }
-    .bc-att button.on-a { background: #dc2626; color: #fff; border-color: #dc2626; }
+    /* P/A stays letter-and-colour, not colour alone, so it survives a colour-blind mode. */
+    .bc-att button.on-p { background: var(--bc-success, #047857); color: var(--bc-success-fg, #fff); border-color: var(--bc-success, #047857); }
+    .bc-att button.on-a { background: var(--bc-danger, #b91c1c); color: var(--bc-danger-fg, #fff); border-color: var(--bc-danger, #b91c1c); }
     .bc-ungraded-pill {
       display: inline-block; margin: 8px 0; padding: 4px 12px; border-radius: 999px;
       background: var(--bc-surface-3, #fef3c7); color: inherit; font-size: 13px; font-weight: 600;
@@ -24,7 +25,7 @@
     }
     .bc-ungraded-badge {
       display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px;
-      background: #dc2626; color: #fff; font-size: 11px; font-weight: 700; vertical-align: middle;
+      background: var(--bc-danger, #b91c1c); color: var(--bc-danger-fg, #fff); font-size: var(--bc-text-2xs, 11px); font-weight: 700; vertical-align: middle;
     }
   `;
 
@@ -162,7 +163,10 @@
         if (link && !link.querySelector(".bc-ungraded-badge")) {
           const b = document.createElement("span");
           b.className = "bc-ungraded-badge";
-          b.title = n + " submission" + (n === 1 ? "" : "s") + " need grading";
+          b.setAttribute("data-bc-node", "bc-ungraded-badge");
+          const label = n + " submission" + (n === 1 ? "" : "s") + " need grading";
+          b.title = label;
+          b.setAttribute("aria-label", label);   // the bare number alone conveys nothing
           b.textContent = String(n);
           link.appendChild(b);
         }
@@ -174,7 +178,7 @@
         (document.querySelector("#content") || document.body).prepend(pill);
         return pill;
       }).textContent = `⚑ ${total} submission${total === 1 ? "" : "s"} waiting to be graded`;
-    }).catch(() => {});
+    }).catch((e) => BC.diag.push("instructor:ungraded", e));
   }
 
   function removeBadges() {
@@ -196,5 +200,10 @@
     else removeBadges();
   }
 
-  BC.registry.register({ id: "instructor", styles: ["bc-instr-css"], nodes: ["bc-roster-btn", "bc-ungraded"], apply });
+  // bc-ungraded-badge is injected per assignment link but was never declared, so
+  // teardown left the badges stuck on Canvas's assignments index.
+  BC.registry.register({
+    id: "instructor", styles: ["bc-instr-css"],
+    nodes: ["bc-roster-btn", "bc-ungraded", "bc-ungraded-badge"], apply,
+  });
 })();

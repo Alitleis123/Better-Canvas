@@ -24,8 +24,14 @@
         tags.set(key, tag);
       }
       if (tag.textContent !== css) tag.textContent = css;
-      // Keep appended last so cascade order favors our rules.
-      host().appendChild(tag);
+      // Keep appended last so cascade order favors our rules — but only re-append
+      // when we are actually no longer last. An unconditional appendChild is a
+      // remove+insert per DOM spec, which invalidates the CSSOM and forces a
+      // full-document style recalc; with ~20 keyed sheets per applyAll that was
+      // the single largest source of idle jank.
+      const h = host();
+      const next = tag.nextElementSibling;
+      if (tag.parentNode !== h || (next && !next.hasAttribute("data-better-canvas"))) h.appendChild(tag);
     },
 
     removeStyle(key) {

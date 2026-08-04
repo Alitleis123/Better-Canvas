@@ -16,6 +16,7 @@
   let localLoadPromise = null;
 
   function area() { return chrome.storage && chrome.storage.local; }
+  function emptyLocal() { return { notes: {}, drafts: {}, cache: {} }; }
 
   const storage = (BC.storage = {
     get current() { return current; },
@@ -24,14 +25,20 @@
     load() {
       if (loadPromise) return loadPromise;
       loadPromise = new Promise((resolve) => {
-        if (!area()) { current = BC.cloneDefaults(); return resolve(current); }
+        if (!area()) { current = BC.cloneDefaults(); local = local || emptyLocal(); return resolve(current); }
         area().get([KEY, LOCAL_KEY], (res) => {
           const stored = res && res[KEY];
           const carry = {};
           current = BC.mergeDefaults(stored, carry);
-          local = (res && res[LOCAL_KEY]) || { notes: {}, highlights: {}, drafts: {}, cache: {} };
+          local = (res && res[LOCAL_KEY]) || emptyLocal();
           if (carry.gradeHistory) {
             local.gradeHistory = Object.assign({}, carry.gradeHistory, local.gradeHistory || {});
+          }
+          // Generic carry-over so future migrations can move any subtree from
+          // bcSettings into bcLocal without bespoke code here. Never clobber a
+          // value that already exists locally.
+          if (carry.local) {
+            for (const k of Object.keys(carry.local)) if (local[k] === undefined) local[k] = carry.local[k];
           }
           if (stored && (stored.version || 1) < BC.SETTINGS_VERSION) {
             area().set({ [KEY]: current, [LOCAL_KEY]: local });
@@ -42,17 +49,22 @@
       return loadPromise;
     },
 
+    // Delegates to load(), which already reads bcLocal in the same round-trip and
+    // applies migration carry-over. This used to be an independent read that raced
+    // load() and unconditionally reassigned `local` — so whichever finished last
+    // won. When it was loadLocal(), the carried-over data was dropped from memory
+    // and the next updateLocal() persisted the stale object, silently destroying it
+    // (this already ate gradeHistory on the v3 upgrade). Delegating removes the
+    // race by construction and saves a storage round-trip.
     loadLocal() {
-      if (localLoadPromise) return localLoadPromise;
-      localLoadPromise = new Promise((resolve) => {
-        if (!area()) { local = { notes: {}, highlights: {}, drafts: {}, cache: {} }; return resolve(local); }
-        area().get(LOCAL_KEY, (res) => {
-          local = (res && res[LOCAL_KEY]) || { notes: {}, highlights: {}, drafts: {}, cache: {} };
-          resolve(local);
-        });
-      });
+      if (!localLoadPromise) localLoadPromise = storage.load().then(() => local);
       return localLoadPromise;
     },
+
+    // Adopt an in-memory settings object without waiting for a storage
+    // round-trip, so the settings drawer can preview a change in the same frame.
+    // `current` is a getter, so assigning BC.storage.current throws in strict mode.
+    adopt(settings) { if (settings) current = settings; },
 
     save(settings) {
       current = settings;
@@ -105,8 +117,11 @@
       return storage.updateLocal((d) => {
         capMap(d.notes, 100);
         capMap(d.drafts, 200);
-        capMap(d.highlights, 200);
         capMap(d.gradeHistory, 30);
+        if (Array.isArray(d.notifHistory) && d.notifHistory.length > 100) d.notifHistory = d.notifHistory.slice(0, 100);
+        // Legacy draft keys used a global textarea index and cannot be mapped to the
+        // structural scheme — restoring one would land in the wrong field.
+        for (const k of Object.keys(d.drafts || {})) if (/#\d+$/.test(k)) delete d.drafts[k];
         const gh = d.gradeHistory || {};
         for (const id of Object.keys(gh)) {
           if (Array.isArray(gh[id]) && gh[id].length > 90) gh[id] = gh[id].slice(-90);
@@ -131,7 +146,7 @@
         for (const cb of listeners) BC.util.guard(() => cb(current), "storage");
       }
       if (changes[LOCAL_KEY]) {
-        local = changes[LOCAL_KEY].newValue || { notes: {}, highlights: {}, drafts: {}, cache: {} };
+        local = changes[LOCAL_KEY].newValue || emptyLocal();
         for (const cb of localListeners) BC.util.guard(() => cb(local), "local storage");
       }
     });

@@ -32,15 +32,52 @@
       return "#" + to(r) + to(g) + to(b);
     },
 
-    // Perceived luminance 0-255. Use to pick black/white text on a colored bg.
+    // Perceived (BT.601) luminance 0-255. Rough brightness only — NOT valid for
+    // contrast ratios; use relLuminance/contrastRatio for anything accessibility
+    // related.
     luminance(hex) {
       const c = color.hexToRgb(hex);
       if (!c) return 255;
       return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
     },
 
+    // WCAG 2.1 relative luminance, 0..1.
+    relLuminance(hex) {
+      const c = color.hexToRgb(hex);
+      if (!c) return 1;
+      const f = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+      return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+    },
+
+    // WCAG contrast ratio, 1..21.
+    contrastRatio(a, b) {
+      const x = color.relLuminance(a), y = color.relLuminance(b);
+      return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+    },
+
+    // Best of near-black / near-white for text sitting ON hex.
     contrastText(hex) {
-      return color.luminance(hex) > 155 ? "#111" : "#fff";
+      return color.contrastRatio("#16181d", hex) >= color.contrastRatio("#ffffff", hex)
+        ? "#16181d" : "#ffffff";
+    },
+
+    // Push fg toward whichever endpoint the background is farther from until it
+    // clears `min` against bg. Returns the pure endpoint if even that can't reach
+    // it — callers check contrastRatio again to detect that case.
+    ensureContrast(fg, bg, min) {
+      const base = color.normalizeHex(fg) || "#000000";
+      if (color.contrastRatio(base, bg) >= min) return base;
+      // Head for whichever endpoint measurably has more room. A relative-luminance
+      // threshold gets this wrong for mid-greys: #8a8a8a is only ~0.26 relLum, so a
+      // ">0.45 means light" test sends it toward white (3.4:1) when black would
+      // reach 6.1:1.
+      const toward = color.contrastRatio("#000000", bg) >= color.contrastRatio("#ffffff", bg)
+        ? "#000000" : "#ffffff";
+      for (let i = 1; i <= 24; i++) {
+        const out = color.mix(base, toward, i / 24);
+        if (color.contrastRatio(out, bg) >= min) return out;
+      }
+      return toward;
     },
 
     // Mix two hex colors, weight 0..1.

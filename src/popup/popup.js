@@ -10,9 +10,27 @@
   function load() {
     chrome.storage.local.get(KEY, (r) => { settings = BC.mergeDefaults(r[KEY]); render(); });
   }
-  function save() { chrome.storage.local.set({ [KEY]: settings }); }
+  function save() { chrome.storage.local.set({ [KEY]: settings }); paintTokens(); }
+
+  // The popup is its own document, so nothing emits design tokens into it. Without
+  // this it ignored the user's theme completely and shipped a third hardcoded
+  // colour system of its own.
+  function paintTokens() {
+    if (!BC.tokens) return;
+    let tag = document.getElementById("bc-token-style");
+    if (!tag) {
+      tag = document.createElement("style");
+      tag.id = "bc-token-style";
+      document.head.appendChild(tag);
+    }
+    const css = BC.tokens.staticCss() + "\n" + BC.tokens.css(settings.theming);
+    if (tag.textContent !== css) tag.textContent = css;
+    const dark = BC.isDarkActive ? BC.isDarkActive(settings) : false;
+    document.documentElement.classList.toggle("bc-dark", dark);
+  }
 
   function render() {
+    paintTokens();
     $("enabled").checked = settings.enabled;
     $("dashEnabled").checked = settings.dashboard.enabled;
     $("darkMode").value = settings.theming.darkMode;

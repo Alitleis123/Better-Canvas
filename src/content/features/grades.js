@@ -56,8 +56,7 @@
     .bc-gt-donut { display: flex; align-items: center; gap: 8px; }
     .bc-gt-legend li { list-style: none; font-size: 12px; }
     .bc-gt-legend span { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
-    .bc-gt-missing { color: #b91c1c; font-size: 12px; margin-top: 6px; }
-    html.bc-dark .bc-gt-missing { color: #f87171; }
+    .bc-gt-missing { color: var(--bc-danger, #b91c1c); font-size: var(--bc-text-xs, 12px); margin-top: 6px; }
     .bc-gt-final { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
     .bc-gt-final input { padding: 4px; width: 68px; border: 1px solid var(--bc-border, #e5e7eb); border-radius: 4px; background: transparent; color: inherit; }
     .bc-gt-trend { margin-top: 12px; }
@@ -71,13 +70,12 @@
     .bc-rubric-impact { font-size: 12px; color: var(--bc-muted, #6b7280); margin-top: 2px; }
   `;
 
-  const state = { groupsByCourse: new Map() };
-
-  async function ensureGroups(courseId) {
-    if (state.groupsByCourse.has(courseId)) return state.groupsByCourse.get(courseId);
-    const g = await BC.api.assignmentGroups(courseId);
-    state.groupsByCourse.set(courseId, g);
-    return g;
+  // No module-level Map. BC.api.assignmentGroups already goes through
+  // BC.cache.wrap with a TTL and in-flight de-duplication, so the extra cache was
+  // redundant — and by never expiring it was the thing that made the grade panel
+  // show stale totals for the whole session after a new grade posted.
+  function ensureGroups(courseId) {
+    return BC.api.assignmentGroups(courseId);
   }
 
   function donutSVG(groups, hasWeights) {
@@ -87,7 +85,10 @@
     const total = groups.reduce((s, g) => s + (g.group_weight || 0), 0);
     if (total <= 0) return "";
     const R = 26, C = 2 * Math.PI * R;
-    const palette = ["#4f46e5","#059669","#dc2626","#ca8a04","#0284c7","#9333ea","#65a30d","#e11d48"];
+    // Categorical ramp from the token set, so the donut re-tints per mode instead of
+    // staying at fixed light-mode hues.
+    const palette = ["var(--bc-cat-1)","var(--bc-cat-2)","var(--bc-cat-3)","var(--bc-cat-4)",
+                     "var(--bc-cat-5)","var(--bc-cat-6)","var(--bc-cat-7)","var(--bc-cat-8)"];
     let arcs = "";
     let items = "";
     groups.forEach((g, i) => {
@@ -115,7 +116,7 @@
     }).join(" ");
     const delta = scores[scores.length - 1] - scores[0];
     const sign = delta >= 0 ? "+" : "";
-    const color = delta >= 0 ? "#059669" : "#dc2626";
+    const color = delta >= 0 ? "var(--bc-success)" : "var(--bc-danger)";
     const first = hist[0].date, lastPt = pts.split(" ").pop().split(",");
     return `<div class="bc-gt-trend">
       <div class="bc-gt-label">Grade trend since ${BC.util.escapeHtml(first)}</div>
@@ -201,7 +202,7 @@
         const g = parseFloat(goalInp.value);
         if (!isFinite(g) || total == null) { goalStatus.textContent = ""; return; }
         goalStatus.textContent = total >= g ? "  ✓ on track" : "  ✗ below goal";
-        goalStatus.style.color = total >= g ? "#059669" : "#b91c1c";
+        goalStatus.style.color = total >= g ? "var(--bc-success)" : "var(--bc-danger)";
       }
       refreshGoalStatus();
       goalInp.addEventListener("change", () => {
@@ -331,10 +332,18 @@
     });
   }
 
+  // Keyed by course AND day: a Set of course ids alone meant a tab left open across
+  // midnight never recorded the new day's score.
   const historyRecorded = new Set();
+  // Exported so the background notification scan can record history for EVERY
+  // course, not just ones whose grades page happens to get visited. That single
+  // caller is what makes the trend chart, dashboard sparklines and the Insights tab
+  // actually accumulate data.
+  BC.grades.recordScore = function (courseId, total) { recordHistory(String(courseId), total); };
   function recordHistory(courseId, total) {
-    if (total == null || historyRecorded.has(courseId)) return;
-    historyRecorded.add(courseId);
+    const key = courseId + ":" + new Date().toISOString().slice(0, 10);
+    if (total == null || historyRecorded.has(key)) return;
+    historyRecorded.add(key);
     BC.storage.updateLocal((d) => {
       const gh = (d.gradeHistory = d.gradeHistory || {});
       const arr = gh[courseId] || [];
@@ -348,7 +357,7 @@
     const m = ctx.page === "assignment" ? ctx.path.match(/\/assignments\/(\d+)/) : null;
     const onAssignment = !!(m && ctx.courseId && settings.grades.rubricPredictor);
     const onGrades = ctx.page === "grades" && !!ctx.courseId &&
-      (settings.grades.whatIfEnabled || settings.grades.showTrendChart || settings.grades.showImpactSim);
+      settings.grades.panelEnabled;
 
     if (!onAssignment) BC.injector.removeNode("bc-rubric");
     if (!onGrades) BC.injector.removeNode("bc-grade-tools");
@@ -356,6 +365,19 @@
 
     if (onGrades) render(ctx.courseId, settings);
     if (onAssignment) renderRubric(ctx.courseId, m[1], settings);
+
+    // Auto-refresh was a headline README claim wired to nothing. No page reload
+    // needed — invalidate the cached groups and re-render the existing panel.
+    // pageBag means the interval dies on SPA navigation for free, and render()
+    // already declines to rebuild while the user is typing in the panel.
+    if (onGrades && settings.grades.autoRefresh) {
+      const bag = BC.lifecycle.pageBag("grades");
+      const mins = Math.max(1, settings.grades.autoRefreshMin | 0);
+      bag.once("auto:" + mins, () => bag.interval(() => {
+        BC.cache.invalidate("LIST " + location.origin + "/api/v1/courses/" + ctx.courseId + "/assignment_groups");
+        render(ctx.courseId, BC.storage.current);
+      }, mins * 60000));
+    }
   }
 
   BC.registry.register({ id: "grades", styles: ["bc-grade-tools"], nodes: ["bc-grade-tools", "bc-rubric"], apply });

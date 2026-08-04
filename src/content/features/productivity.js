@@ -16,40 +16,55 @@
 
     .bc-ruler {
       position: fixed; left: 0; right: 0; height: 30px;
-      background: rgba(255,235,59,.15); pointer-events: none; z-index: 2147481500;
+      background: var(--bc-ruler-tint, rgba(255,235,59,.15));
+      pointer-events: none; z-index: var(--bc-z-hud, 2147481000);
       border-top: 1px solid rgba(255,235,59,.4); border-bottom: 1px solid rgba(255,235,59,.4);
       transition: top .05s linear;
     }
 
     .bc-progress-bar {
-      position: fixed; top: 0; left: 0; height: 3px; background: var(--bc-accent, #0374b5);
-      width: 0%; z-index: 2147481000; transition: width .15s ease;
+      position: fixed; top: 0; left: 0; height: 3px;
+      background: var(--bc-accent-stroke, var(--bc-accent, #0374b5));
+      width: 0%; z-index: var(--bc-z-hud, 2147481000);
+      transition: width var(--bc-dur-2, 150ms) var(--bc-ease-out, ease);
     }
 
     .bc-copyurl-btn, .bc-print-btn {
-      position: fixed; right: 16px; z-index: 2147480000;
-      background: var(--bc-accent, #0374b5); color: #fff; border: 0;
-      padding: 6px 10px; border-radius: 999px; cursor: pointer; font-size: 12px;
+      position: fixed; right: 16px; z-index: var(--bc-z-dock, 2147480000);
+      background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); border: 0;
+      padding: 6px 10px; border-radius: var(--bc-radius-pill, 999px); cursor: pointer;
+      font-family: var(--bc-font-sans); font-size: var(--bc-text-xs, 12px);
+    }
+    .bc-copyurl-btn:focus-visible, .bc-print-btn:focus-visible {
+      outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px;
     }
     .bc-copyurl-btn { bottom: 66px; }
     .bc-print-btn { bottom: 100px; }
 
+    /* Deliberately NOT theme surfaces — the paper metaphor is the point — but it
+       needs a dark variant, which it never had: it was a glaring white rectangle
+       in dark mode. */
     .bc-note {
-      position: absolute; z-index: 2147480500;
-      background: #fffbe6; color: #111; border: 1px solid #f6d67a;
-      padding: 6px 8px; border-radius: 6px; font-size: 13px; min-width: 140px;
-      box-shadow: 0 4px 12px rgba(0,0,0,.14);
+      position: absolute; z-index: var(--bc-z-underlay, 2147480500);
+      background: var(--bc-note-bg, #fffbe6);
+      color: var(--bc-note-text, #1f1a05);
+      border: 1px solid var(--bc-note-border, #f6d67a);
+      padding: 6px 8px; border-radius: var(--bc-radius-md, 6px);
+      font-family: var(--bc-font-sans); font-size: var(--bc-text-sm, 13px); min-width: 140px;
+      box-shadow: var(--bc-shadow-2, 0 4px 12px rgba(0,0,0,.14));
       resize: both; overflow: auto;
     }
-    .bc-note-head { display: flex; justify-content: space-between; align-items: center; font-size: 11px; opacity: .6; margin-bottom: 4px; cursor: move; }
+    .bc-note-head { display: flex; justify-content: space-between; align-items: center; font-size: var(--bc-text-2xs, 11px); margin-bottom: 4px; cursor: move; }
     .bc-note textarea { width: 100%; min-height: 60px; border: 0; background: transparent; resize: none; outline: none; font-family: inherit; }
     .bc-note-x { background: none; border: 0; cursor: pointer; }
 
     .bc-wc {
       position: absolute; right: 6px; bottom: 6px;
-      font-size: 11px; color: var(--bc-d-muted, #6b7280);
-      background: rgba(255,255,255,.85); padding: 2px 6px; border-radius: 4px;
-      pointer-events: none;
+      font-size: var(--bc-text-2xs, 11px); color: var(--bc-muted, #6b7280);
+      /* was rgba(255,255,255,.85) — a white pill floating in dark mode */
+      background: var(--bc-surface-2, #fff);
+      padding: 2px 6px; border-radius: var(--bc-radius-sm, 4px);
+      pointer-events: none; font-variant-numeric: tabular-nums;
     }
   `;
 
@@ -130,42 +145,88 @@
     return (BC.storage.local && BC.storage.local.notes && BC.storage.local.notes[pageKey()]) || [];
   }
   function saveNotes(arr) {
-    BC.storage.updateLocal((d) => { d.notes = d.notes || {}; d.notes[pageKey()] = arr; });
+    return BC.storage.updateLocal((d) => { d.notes = d.notes || {}; d.notes[pageKey()] = arr; });
   }
-  function renderNotes() {
-    // Remove existing
-    document.querySelectorAll('[data-bc-node="bc-note"]').forEach((n) => n.remove());
+
+  // ONE delegated drag, installed once — not a pair of document-level listeners
+  // per note per apply(). buildNote used to attach mousemove+mouseup to document
+  // and never remove them, while renderNotes rebuilt every note on every tick:
+  // ~10 new permanent mousemove handlers per second, which froze the tab within
+  // a minute of browsing.
+  let dragEl = null, dragOx = 0, dragOy = 0;
+  function installNoteDrag() {
+    const bag = BC.lifecycle.pageBag("productivity");
+    bag.once("note-drag", () => {
+      bag.listen(document, "mousedown", (e) => {
+        const head = e.target.closest && e.target.closest(".bc-note-head");
+        if (!head) return;
+        dragEl = head.closest(".bc-note");
+        if (!dragEl) return;
+        dragOx = e.clientX - dragEl.offsetLeft;
+        dragOy = e.clientY - dragEl.offsetTop;
+        e.preventDefault();
+      });
+      bag.listen(document, "mousemove", (e) => {
+        if (!dragEl) return;
+        dragEl.style.left = (e.clientX - dragOx) + "px";
+        dragEl.style.top = (e.clientY - dragOy) + "px";
+      });
+      bag.listen(document, "mouseup", () => {
+        if (!dragEl) return;
+        const el = dragEl, id = el.dataset.noteId;
+        dragEl = null;
+        saveNotes(loadNotes().map((n) => (n.id === id ? { ...n, x: el.offsetLeft, y: el.offsetTop } : n)));
+      });
+    });
+  }
+
+  // Reconcile by id rather than remove-and-rebuild, so a note being typed into
+  // or dragged is never destroyed underneath the user.
+  function syncNotes() {
+    installNoteDrag();
     const arr = loadNotes();
-    for (const note of arr) buildNote(note);
+    const want = new Set(arr.map((n) => n.id));
+    const existing = new Map();
+    for (const el of document.querySelectorAll('[data-bc-node="bc-note"]')) {
+      if (want.has(el.dataset.noteId)) existing.set(el.dataset.noteId, el);
+      else el.remove();
+    }
+    for (const note of arr) {
+      const el = existing.get(note.id);
+      if (!el) { buildNote(note); continue; }
+      const ta = el.querySelector("textarea");
+      if (ta && ta.getRootNode().activeElement !== ta && ta.value !== (note.text || "")) ta.value = note.text || "";
+      if (el !== dragEl) {
+        const x = (note.x || 100) + "px", y = (note.y || 100) + "px";
+        if (el.style.left !== x) el.style.left = x;
+        if (el.style.top !== y) el.style.top = y;
+      }
+    }
   }
+
   function buildNote(note) {
     const el = document.createElement("div");
     el.className = "bc-note";
     el.setAttribute("data-bc-node", "bc-note");
+    el.dataset.noteId = note.id;
     el.style.left = (note.x || 100) + "px";
     el.style.top = (note.y || 100) + "px";
     el.innerHTML = `
-      <div class="bc-note-head"><span>note</span><button class="bc-note-x" title="Delete">×</button></div>
-      <textarea>${BC.util.escapeHtml(note.text || "")}</textarea>
+      <div class="bc-note-head"><span>note</span><button class="bc-note-x" title="Delete note" aria-label="Delete note">×</button></div>
+      <textarea aria-label="Sticky note"></textarea>
     `;
-    document.body.appendChild(el);
-    const head = el.querySelector(".bc-note-head");
     const ta = el.querySelector("textarea");
+    ta.value = note.text || "";
+    document.body.appendChild(el);
     el.querySelector(".bc-note-x").addEventListener("click", () => {
-      const arr = loadNotes().filter((n) => n.id !== note.id);
-      saveNotes(arr);
       el.remove();
+      saveNotes(loadNotes().filter((n) => n.id !== note.id));
     });
-    ta.addEventListener("input", () => {
-      const arr = loadNotes().map((n) => n.id === note.id ? { ...n, text: ta.value } : n);
-      saveNotes(arr);
-    });
-    // drag
-    let ox = 0, oy = 0, drag = false;
-    head.addEventListener("mousedown", (e) => { drag = true; ox = e.clientX - el.offsetLeft; oy = e.clientY - el.offsetTop; });
-    document.addEventListener("mousemove", (e) => { if (!drag) return; el.style.left = (e.clientX - ox) + "px"; el.style.top = (e.clientY - oy) + "px"; });
-    document.addEventListener("mouseup", () => { if (drag) { drag = false; const arr = loadNotes().map((n) => n.id === note.id ? { ...n, x: el.offsetLeft, y: el.offsetTop } : n); saveNotes(arr); } });
+    ta.addEventListener("input", BC.util.debounce(() => {
+      saveNotes(loadNotes().map((n) => (n.id === note.id ? { ...n, text: ta.value } : n)));
+    }, 400));
   }
+
   BC.quickNote = function () {
     const id = BC.util.uuid();
     const note = { id, text: "", x: 120 + Math.random() * 80, y: 120 + Math.random() * 80 };
@@ -174,13 +235,30 @@
   };
 
   // ---- Auto-save drafts ----
+  // The old fallback keyed on a GLOBAL textarea index:
+  //   Array.from(document.querySelectorAll("textarea")).indexOf(el)
+  // Canvas mounts and unmounts textareas constantly (discussion reply boxes, inline
+  // editors), so index 2 today is a different box tomorrow — and the saved text was
+  // written straight into it. That silently cross-contaminated the user's prose.
+  // This keys on structure instead, and refuses to persist at all when there is no
+  // stable anchor: losing a draft is strictly better than restoring it into the
+  // wrong field.
   function draftKey(el) {
-    return location.origin + location.pathname + "#" + (el.id || el.name || Array.from(document.querySelectorAll("textarea")).indexOf(el));
+    const base = location.origin + location.pathname;
+    if (el.id) return base + "#id=" + el.id;
+    if (el.name) return base + "#name=" + el.name;
+    let anchor = el.parentElement;
+    const path = [];
+    while (anchor && !anchor.id && anchor !== document.body) { path.push(anchor.tagName); anchor = anchor.parentElement; }
+    if (!anchor || !anchor.id) return null;
+    const peers = Array.from(anchor.querySelectorAll('textarea,[contenteditable="true"]'));
+    return base + "#p=" + anchor.id + "/" + path.reverse().join(">") + "/" + peers.indexOf(el);
   }
   function installDrafts() {
     for (const ta of document.querySelectorAll("textarea, [contenteditable=true]")) {
       if (ta._bcDraft) continue; ta._bcDraft = true;
       const key = draftKey(ta);
+      if (!key) continue;
       const saved = BC.storage.local && BC.storage.local.drafts && BC.storage.local.drafts[key];
       if (saved && !ta.value && !ta.textContent) {
         if (ta.tagName === "TEXTAREA") ta.value = saved;
@@ -202,6 +280,7 @@
       wrap.style.position = wrap.style.position || "relative";
       const wc = document.createElement("div");
       wc.className = "bc-wc";
+      wc.setAttribute("data-bc-node", "bc-wc");   // so teardown can actually remove it
       wrap.appendChild(wc);
       const update = () => {
         const t = (ta.value || "").trim();
@@ -222,10 +301,27 @@
     p.printFriendly ? installPrintButton() : uninstallPrintButton();
     BC.injector.setStyle("bc-productivity-css", CSS);
 
-    if (p.stickyNotes && BC.storage.loadLocal) BC.storage.loadLocal().then(() => renderNotes());
+    if (p.stickyNotes && BC.storage.loadLocal) BC.storage.loadLocal().then(syncNotes);
     if (p.autoSaveDrafts && BC.storage.loadLocal) BC.storage.loadLocal().then(() => installDrafts());
     if (p.wordCount) installWordCount();
   }
 
-  BC.registry.register({ id: "productivity", styles: ["bc-productivity-css"], nodes: ["bc-ruler", "bc-progress-bar", "bc-copyurl-btn", "bc-print-btn", "bc-note"], apply });
+  BC.registry.register({
+    id: "productivity",
+    styles: ["bc-productivity-css"],
+    nodes: ["bc-ruler", "bc-progress-bar", "bc-copyurl-btn", "bc-print-btn", "bc-note", "bc-wc"],
+    apply,
+    // Without this, teardown removed the ruler and progress-bar NODES but left
+    // rulerEl/progressEl pointing at them, so install*() early-returned forever and
+    // neither ever came back after a disable/enable cycle.
+    unmount() {
+      uninstallRuler();
+      uninstallProgress();
+      dragEl = null;
+      for (const ta of document.querySelectorAll("textarea, [contenteditable=true]")) {
+        delete ta._bcDraft;
+        delete ta._bcWc;
+      }
+    },
+  });
 })();

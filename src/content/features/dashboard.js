@@ -11,6 +11,8 @@
 
   const originalTitles = new WeakMap();
   const originalColors = new WeakMap();
+  const appliedBg = new WeakMap();     // last background WE wrote, so we can skip no-op writes
+  const appliedImg = new WeakMap();
   let concludedIds = null;
   let concludedFetching = false;
 
@@ -19,7 +21,7 @@
     concludedFetching = true;
     BC.api.coursesWithScores().then((list) => {
       concludedIds = new Set(list.filter((c) => c.concluded || (c.enrollments || []).some((e) => e.enrollment_state === "completed")).map((c) => String(c.id)));
-    }).catch(() => {}).finally(() => { concludedFetching = false; });
+    }).catch((e) => BC.diag.push("dashboard:concluded", e)).finally(() => { concludedFetching = false; });
   }
 
   function widgetsCss(w) {
@@ -37,7 +39,7 @@
       .ic-DashboardCard { border-radius: ${rad} !important; overflow: hidden; }
       .ic-DashboardCard__link, .ic-DashboardCard__box { border-radius: ${rad} !important; }
       ${d.hoverLift ? `.ic-DashboardCard { transition: transform .18s ease, box-shadow .18s ease; }
-      .ic-DashboardCard:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,0,0,.12); }` : ""}
+      .ic-DashboardCard:hover { transform: translateY(-2px); box-shadow: var(--bc-shadow-3, 0 10px 30px rgba(0,0,0,.12)); }` : ""}
     `;
     if (d.layout === "grid") css += `.ic-DashboardCard__box { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 16px !important; }`;
     if (d.layout === "list") css += `.ic-DashboardCard__box { display: flex !important; flex-direction: column !important; gap: 8px !important; }
@@ -57,19 +59,34 @@
     const link = card.querySelector(".ic-DashboardCard__link");
     if (title) {
       if (!originalTitles.has(card)) originalTitles.set(card, title.textContent);
-      if (spec.nickname && spec.nickname.trim()) title.textContent = spec.nickname;
-      else if (originalTitles.has(card)) title.textContent = originalTitles.get(card);
+      // Read before write. Assigning textContent replaces the child text node even
+      // when the string is identical; the observer sees a childList mutation whose
+      // added node is a bare text node on a Canvas-owned element, treats it as
+      // foreign, and schedules another applyAll — forever, on every card. Note the
+      // else-branch fires for cards WITHOUT a nickname too, so this looped for
+      // everyone with the dashboard feature on.
+      const want = (spec.nickname && spec.nickname.trim()) ? spec.nickname : originalTitles.get(card);
+      if (want != null && title.textContent !== want) title.textContent = want;
     }
     if (link) {
       if (!originalColors.has(card)) originalColors.set(card, link.style.background || link.style.backgroundColor || "");
-      if (spec.color && BC.color.isHex(spec.color)) link.style.background = spec.color;
-      else if (originalColors.has(card) && originalColors.get(card)) link.style.background = originalColors.get(card);
+      const orig = originalColors.get(card);
+      const wantBg = (spec.color && BC.color.isHex(spec.color)) ? spec.color : (orig || null);
+      // Compare against what we last wrote — reading style.background back gives a
+      // normalized value that never equals the hex we assigned.
+      if (wantBg != null && appliedBg.get(link) !== wantBg) { link.style.background = wantBg; appliedBg.set(link, wantBg); }
     }
     if (spec.bgImage && BC.util.isSafeUrl(spec.bgImage)) {
       const header = card.querySelector(".ic-DashboardCard__header_image, .ic-DashboardCard__header");
-      if (header) { header.style.backgroundImage = `url("${BC.util.cssSafe(spec.bgImage)}")`; header.style.backgroundSize = "cover"; header.style.backgroundPosition = "center"; }
+      if (header && appliedImg.get(header) !== spec.bgImage) {
+        header.style.backgroundImage = `url("${BC.util.cssSafe(spec.bgImage)}")`;
+        header.style.backgroundSize = "cover";
+        header.style.backgroundPosition = "center";
+        appliedImg.set(header, spec.bgImage);
+      }
     }
-    card.style.display = spec.hidden ? "none" : "";
+    const wantDisplay = spec.hidden ? "none" : "";
+    if (card.style.display !== wantDisplay) card.style.display = wantDisplay;
   }
 
   function overlayInlineGrade(card, courseId, scoresMap) {
@@ -79,16 +96,25 @@
     if (!badge) {
       badge = document.createElement("div");
       badge.className = "bc-inline-grade";
+      badge.setAttribute("data-bc-node", "bc-inline-grade");
       const link = card.querySelector(".ic-DashboardCard__link");
       if (link) link.appendChild(badge);
       else card.appendChild(badge);
     }
-    badge.textContent = s.toFixed(1) + "%";
-    let band = "#059669";
-    if (s < 90) band = "#65a30d";
-    if (s < 80) band = "#ca8a04";
-    if (s < 70) band = "#dc2626";
-    badge.style.background = band;
+    const text = s.toFixed(1) + "%";
+    if (badge.textContent !== text) badge.textContent = text;
+    // Tokens, not literals: white on the old #ca8a04 was 2.6:1 and on #65a30d 2.9:1,
+    // both failing AA. Each band now carries a matching guaranteed-contrast fg.
+    let band = "a";
+    if (s < 90) band = "b";
+    if (s < 80) band = "c";
+    if (s < 70) band = "d";
+    if (s < 60) band = "f";
+    if (badge.dataset.bcBand !== band) {
+      badge.style.background = "var(--bc-grade-" + band + ")";
+      badge.style.color = "var(--bc-grade-" + band + "-fg)";
+      badge.dataset.bcBand = band;
+    }
   }
 
   function overlayProgress(card, plannerCountByCourse) {
@@ -101,61 +127,171 @@
     if (!bar) {
       bar = document.createElement("div");
       bar.className = "bc-progress";
+      bar.setAttribute("data-bc-node", "bc-progress");
       bar.innerHTML = `<div class="bc-progress-fill"></div>`;
       card.appendChild(bar);
     }
-    bar.querySelector(".bc-progress-fill").style.width = pct + "%";
+    const fill = bar.querySelector(".bc-progress-fill");
+    const w = pct + "%";
+    if (fill.style.width !== w) fill.style.width = w;
   }
 
-  function overlayBadges(card, badges) {
-    const cid = BC.util.courseIdFromHref(card.querySelector("a") && card.querySelector("a").getAttribute("href"));
-    if (!cid) return;
-    const b = badges.get(cid);
-    if (!b || (!b.unread && !b.due && !b.ungraded)) return;
+  // Previously this read a `badges` Map that nothing ever populated, so it always
+  // returned at the first guard — the advertised badges never appeared. Now it shows
+  // the one count that's free from data we already fetch: items due in 24 hours.
+  function overlayDueBadge(card, courseId) {
+    const n = dueSoonByCourse.get(String(courseId)) || 0;
     let strip = card.querySelector(".bc-badges");
+    if (!n) { if (strip) strip.remove(); return; }
     if (!strip) {
       strip = document.createElement("div");
       strip.className = "bc-badges";
+      strip.setAttribute("data-bc-node", "bc-badges");
       card.appendChild(strip);
     }
-    strip.innerHTML = "";
-    if (b.unread) strip.appendChild(Object.assign(document.createElement("span"), { className: "bc-badge unread", textContent: "🔔 " + b.unread }));
-    if (b.due) strip.appendChild(Object.assign(document.createElement("span"), { className: "bc-badge due", textContent: "⏰ " + b.due }));
-    if (b.ungraded) strip.appendChild(Object.assign(document.createElement("span"), { className: "bc-badge ungraded", textContent: "✎ " + b.ungraded }));
+    if (strip.dataset.bcN === String(n)) return;   // apply() runs ~5x/sec
+    strip.dataset.bcN = String(n);
+    const label = n + " item" + (n === 1 ? "" : "s") + " due in the next 24 hours";
+    const b = document.createElement("span");
+    b.className = "bc-badge due";
+    b.textContent = "⏰ " + n;
+    b.title = label;
+    b.setAttribute("aria-label", label);   // the bare number conveys nothing alone
+    strip.replaceChildren(b);
+  }
+
+  // Grade trend from locally recorded history. Stamped with the history length so
+  // the SVG is rebuilt only when a new point actually lands.
+  function overlaySparkline(card, courseId) {
+    const hist = ((BC.storage.local && BC.storage.local.gradeHistory) || {})[String(courseId)] || [];
+    if (hist.length < 2) return;
+    if (card.dataset.bcSpark === String(hist.length)) return;
+    card.dataset.bcSpark = String(hist.length);
+    const svg = BC.ui.sparkline(hist.map((h) => Number(h.score)).filter((n) => isFinite(n)),
+      { width: 96, height: 22, label: "Grade trend for this course" });
+    if (!svg) return;
+    const existing = card.querySelector(".bc-card-spark");
+    if (existing) existing.remove();
+    const wrap = document.createElement("div");
+    wrap.className = "bc-card-spark";
+    wrap.setAttribute("data-bc-node", "bc-card-spark");
+    wrap.appendChild(svg);
+    (card.querySelector(".ic-DashboardCard__link") || card).appendChild(wrap);
+  }
+
+  // Built ONCE by the factory and never rewritten by apply() — that's what keeps the
+  // caret and the typed value alive across Canvas's own re-renders.
+  let query = "";
+  function ensureCourseSearch() {
+    if (document.querySelector('[data-bc-node="bc-course-search"]')) return;
+    const container = document.getElementById("DashboardCard_Container") || document.querySelector(".ic-DashboardCard__box");
+    if (!container || !container.parentNode) return;
+    const wrap = document.createElement("div");
+    wrap.className = "bc-course-search";
+    wrap.setAttribute("data-bc-node", "bc-course-search");
+    const input = document.createElement("input");
+    input.type = "search";
+    input.className = "bc-course-search-input";
+    input.placeholder = "Filter courses…";
+    input.setAttribute("aria-label", "Filter courses");
+    input.addEventListener("input", () => {
+      query = input.value.trim().toLowerCase();
+      if (BC.requestApply) BC.requestApply();
+    });
+    wrap.appendChild(input);
+    container.parentNode.insertBefore(wrap, container);
+  }
+
+  // Every input already exists: coursesWithScores() is fetched for inline grades,
+  // BC.grades.gradePoints is exported, and creditsByCourse is user-editable.
+  function ensureGpaCard(settings) {
+    if (!scoresMap.size) return;
+    const host = document.querySelector("#right-side") || document.querySelector(".ic-app-main-content__secondary");
+    if (!host) return;
+    const credits = (settings.grades && settings.grades.creditsByCourse) || {};
+    const scale = settings.grades && settings.grades.gpaScale;
+    let weighted = 0, hours = 0, plain = 0, count = 0;
+    for (const [id, score] of scoresMap) {
+      const gp = BC.grades.gradePoints(Number(score), scale);
+      plain += gp.points; count++;
+      const cr = Number(credits[id]) || 0;
+      if (cr > 0) { weighted += gp.points * cr; hours += cr; }
+    }
+    if (!count) return;
+    // Credit-weighted when credits are set, otherwise an unweighted mean so the card
+    // is useful without any configuration.
+    const gpa = hours > 0 ? weighted / hours : plain / count;
+    const sub = hours > 0 ? hours + " credit hours" : count + " courses · unweighted";
+    const node = BC.injector.ensureNode("bc-gpa-card", host, () => {
+      const el = document.createElement("div");
+      el.className = "bc-panel bc-gpa-card";
+      host.prepend(el);
+      return el;
+    });
+    const sig = gpa.toFixed(3) + "|" + sub;
+    if (node.dataset.bcSig === sig) return;
+    node.dataset.bcSig = sig;
+    node.replaceChildren(BC.ui.stat({ label: "Estimated GPA", value: gpa.toFixed(2), sub }));
   }
 
   let scoresMap = new Map();
   let plannerCountByCourse = new Map();
-  let badges = new Map();
+  let dueSoonByCourse = new Map();
+
+  // idle | loading | done | failed. The guard has to be the STATE, not map
+  // emptiness: a legitimately empty result — API error, start of term, teacher
+  // enrollment, nothing inside the planner window — leaves the map empty
+  // forever, so `!map.size` re-fires the load on every apply and spins applyAll
+  // at the debounce floor indefinitely. Errors deliberately propagate here
+  // instead of being swallowed, so `failed` is reachable.
+  const loadState = { scores: "idle", planner: "idle" };
+
+  function ensureLoaded(key, loader) {
+    if (loadState[key] !== "idle") return;
+    loadState[key] = "loading";
+    loader().then(() => {
+      loadState[key] = "done";
+      if (BC.requestApply) BC.requestApply();
+    }).catch((e) => {
+      loadState[key] = "failed";
+      BC.diag.push("dashboard:" + key, e);
+    });
+  }
 
   async function loadInlineGrades() {
-    try {
-      const list = await BC.api.coursesWithScores();
-      scoresMap.clear();
-      for (const c of list) {
-        const enr = (c.enrollments || [])[0] || {};
-        const s = enr.computed_current_score != null ? enr.computed_current_score : enr.computed_final_score;
-        if (s != null) scoresMap.set(String(c.id), Number(s));
-      }
-    } catch (_) {}
+    const list = await BC.api.coursesWithScores();
+    scoresMap.clear();
+    for (const c of list) {
+      const enr = (c.enrollments || [])[0] || {};
+      const s = enr.computed_current_score != null ? enr.computed_current_score : enr.computed_final_score;
+      if (s != null) scoresMap.set(String(c.id), Number(s));
+    }
   }
 
   async function loadPlannerCounts() {
-    try {
-      const start = new Date(); start.setDate(start.getDate() - 30);
-      const end = new Date(); end.setDate(end.getDate() + 14);
-      const items = await BC.api.plannerItems(start.toISOString(), end.toISOString());
-      plannerCountByCourse.clear();
-      for (const it of items) {
-        const cid = it.course_id ? String(it.course_id) : (it.context_type === "Course" ? String(it.context_id) : null);
-        if (!cid) continue;
-        const entry = plannerCountByCourse.get(cid) || { total: 0, done: 0 };
-        entry.total++;
-        if (it.planner_override && it.planner_override.marked_complete) entry.done++;
-        else if (it.submissions && it.submissions.submitted) entry.done++;
-        plannerCountByCourse.set(cid, entry);
+    const start = new Date(); start.setDate(start.getDate() - 30);
+    const end = new Date(); end.setDate(end.getDate() + 14);
+    const items = await BC.api.plannerItems(start.toISOString(), end.toISOString());
+    plannerCountByCourse.clear();
+    dueSoonByCourse.clear();
+    const now = Date.now();
+    for (const it of items) {
+      const cid = it.course_id ? String(it.course_id) : (it.context_type === "Course" ? String(it.context_id) : null);
+      if (!cid) continue;
+      const entry = plannerCountByCourse.get(cid) || { total: 0, done: 0 };
+      entry.total++;
+      const done = !!((it.planner_override && it.planner_override.marked_complete) ||
+                      (it.submissions && it.submissions.submitted));
+      if (done) entry.done++;
+      plannerCountByCourse.set(cid, entry);
+
+      // Due-in-24h count for the card badge — free from the data we already have.
+      const dueISO = it.plannable_date || (it.plannable && it.plannable.due_at);
+      if (!done && dueISO) {
+        const diff = new Date(dueISO).getTime() - now;
+        if (diff > 0 && diff <= 24 * 60 * 60 * 1000) dueSoonByCourse.set(cid, (dueSoonByCourse.get(cid) || 0) + 1);
       }
-    } catch (_) {}
+    }
   }
 
   function apply(settings, ctx) {
@@ -167,6 +303,14 @@
     const d = settings.dashboard || {};
     if (!d.enabled) return;
 
+    // pageBag marks clear on SPA navigation, so this re-arms the loaders exactly
+    // once per page visit. The underlying BC.api calls are TTL-cached, so
+    // navigating back is a cache hit rather than a refetch.
+    BC.lifecycle.pageBag("dashboard").once("loaders", () => {
+      loadState.scores = "idle";
+      loadState.planner = "idle";
+    });
+
     // widget CSS
     const widgetCss = widgetsCss(d.widgets || {}) + (d.hideSidebar ? "\n#right-side, #right-side-wrapper { display: none !important; }\n#main { margin-right: 0 !important; }" : "");
     BC.injector.setStyle("bc-dashboard-widgets", widgetCss);
@@ -176,16 +320,42 @@
       .bc-inline-grade {
         position: absolute; top: 8px; right: 8px; z-index: 2;
         padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
-        color: #fff; background: #059669; box-shadow: 0 1px 4px rgba(0,0,0,.2);
+        /* background + color are set from --bc-grade-* per band in JS */
+        box-shadow: var(--bc-shadow-1, 0 1px 4px rgba(0,0,0,.2));
       }
-      .bc-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0,0,0,.1); }
-      .bc-progress-fill { height: 100%; background: var(--bc-accent, #0374b5); width: 0%; transition: width .4s ease; }
+      .bc-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--bc-surface-4, rgba(0,0,0,.1)); }
+      .bc-progress-fill {
+        height: 100%; background: var(--bc-accent-stroke, var(--bc-accent, #0374b5)); width: 0%;
+        transition: width var(--bc-dur-4, 400ms) var(--bc-ease-out, ease);
+      }
       .bc-badges { position: absolute; left: 6px; bottom: 6px; display: flex; gap: 4px; }
-      .bc-badge { font-size: 10px; background: rgba(0,0,0,.65); color: #fff; padding: 2px 6px; border-radius: 999px; }
-      .bc-badge.due { background: rgba(202,138,4,.9); }
-      .bc-badge.unread { background: rgba(37,99,235,.9); }
-      .bc-badge.ungraded { background: rgba(147,51,234,.9); }
+      .bc-badge {
+        font-size: var(--bc-text-3xs, 10px);
+        background: var(--bc-surface-inverse, rgba(0,0,0,.65));
+        color: var(--bc-text-inverse, #fff);
+        padding: 2px 6px; border-radius: var(--bc-radius-pill, 999px);
+        font-variant-numeric: tabular-nums;
+      }
+      .bc-badge.due { background: var(--bc-warn, #a16207); color: var(--bc-warn-fg, #fff); }
       .ic-DashboardCard { position: relative; }
+
+      .bc-course-search { margin: 0 0 var(--bc-space-5, 12px); }
+      .bc-course-search-input {
+        width: min(320px, 100%);
+        padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px);
+        border: 1px solid var(--bc-border, #e5e7eb);
+        border-radius: var(--bc-radius-md, 8px);
+        background: var(--bc-surface-2, #fff); color: var(--bc-text, #1b2430);
+        font-family: var(--bc-font-sans); font-size: var(--bc-text-sm, 13px);
+      }
+      .bc-course-search-input:focus-visible {
+        outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 1px;
+      }
+      .bc-card-spark {
+        position: absolute; left: 8px; bottom: 12px; z-index: 2;
+        line-height: 0; pointer-events: none;
+      }
+      .bc-gpa-card { margin-bottom: var(--bc-space-5, 12px); }
     `);
 
     // course cards
@@ -202,30 +372,61 @@
     }
 
     const order = d.courseOrder || [];
+    const ordered = new Set(order);
     let idx = 0;
+    const setOrder = (c) => { const o = String(idx++); if (c.style.order !== o) c.style.order = o; };
     for (const id of order) {
       const c = cardsById.get(id);
-      if (c) c.style.order = String(idx++);
+      if (c) setOrder(c);
     }
-    for (const [id, card] of cardsById) if (!order.includes(id)) card.style.order = String(idx++);
+    for (const [id, card] of cardsById) if (!ordered.has(id)) setOrder(card);
+
+    if (d.courseSearch) ensureCourseSearch();
+    else BC.injector.removeNode("bc-course-search");
+    if (d.widgets && d.widgets.gpa) ensureGpaCard(settings);
+    else BC.injector.removeNode("bc-gpa-card");
 
     // Apply per-card overrides
     for (const [id, card] of cardsById) {
       const spec = (d.courses && d.courses[id]) || {};
-      const effHidden = spec.hidden === true || (d.autoHideConcluded && concludedIds && concludedIds.has(id));
+      // The search filter folds into the existing hidden computation, so it's
+      // idempotent and survives re-apply with no extra DOM bookkeeping.
+      const titleEl = card.querySelector(".ic-DashboardCard__link, .ic-DashboardCard__header-title, .ic-DashboardCard__header_hero");
+      const name = ((originalTitles.get(card) || (titleEl && titleEl.textContent) || "") + " " + (spec.nickname || "")).toLowerCase();
+      const effHidden = spec.hidden === true
+        || (d.autoHideConcluded && concludedIds && concludedIds.has(id))
+        || (!!query && name.indexOf(query) === -1);
       overlayCard(card, { ...spec, hidden: effHidden });
       if (d.showInlineGrade)   overlayInlineGrade(card, id, scoresMap);
       if (d.showProgressBar)   overlayProgress(card, plannerCountByCourse);
-      if (d.showBadges)        overlayBadges(card, badges);
+      if (d.showBadges)        overlayDueBadge(card, id);
+      if (d.showSparkline)     overlaySparkline(card, id);
     }
 
     // Ensure grid uses order — apply flex/grid ordering
     const container = document.getElementById("DashboardCard_Container") || document.querySelector(".ic-DashboardCard__box");
     if (container) container.style.display = ""; // let CSS layoutCss govern
 
-    if (d.showInlineGrade && !scoresMap.size) loadInlineGrades().then(() => BC.requestApply && BC.requestApply());
-    if (d.showProgressBar && !plannerCountByCourse.size) loadPlannerCounts().then(() => BC.requestApply && BC.requestApply());
+    if (d.showInlineGrade) ensureLoaded("scores", loadInlineGrades);
+    if (d.showProgressBar) ensureLoaded("planner", loadPlannerCounts);
   }
 
-  BC.registry.register({ id: "dashboard", styles: ["bc-dashboard-widgets", "bc-dashboard-ui"], nodes: [], apply });
+  BC.registry.register({
+    id: "dashboard",
+    styles: ["bc-dashboard-widgets", "bc-dashboard-ui"],
+    // These were injected per card but declared nowhere, so teardown left every
+    // badge, grade pill and progress bar stuck on the Canvas cards.
+    nodes: ["bc-inline-grade", "bc-progress", "bc-badges", "bc-card-spark", "bc-course-search", "bc-gpa-card"],
+    apply,
+    unmount() {
+      scoresMap.clear();
+      plannerCountByCourse.clear();
+      dueSoonByCourse.clear();
+      concludedIds = null;
+      concludedFetching = false;
+      loadState.scores = "idle";
+      loadState.planner = "idle";
+      query = "";
+    },
+  });
 })();

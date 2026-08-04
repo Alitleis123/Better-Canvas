@@ -137,10 +137,13 @@
       );
     },
 
-    courseFiles(courseId) {
+    // maxPages is caller-controlled: the cross-course library fans out over ~20
+    // courses, where 20 pages each is 400 requests. A per-course view can ask for
+    // more.
+    courseFiles(courseId, maxPages = 20) {
       return api.getList(
         `/api/v1/courses/${courseId}/files?per_page=100`,
-        { maxPages: 20, ttl: TTL.files }
+        { maxPages, ttl: TTL.files }
       );
     },
 

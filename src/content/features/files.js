@@ -19,20 +19,28 @@
     .bc-files-list .bc-empty, .bc-files-list .bc-error, .bc-files-list .bc-sk { grid-column: 1 / -1; }
   `;
 
-  const cache = { files: [], loadedAt: 0 };
+  const cache = { files: [], loadedAt: 0, failed: 0 };
 
   async function loadAll() {
     if (Date.now() - cache.loadedAt < 60000 && cache.files.length) return cache.files;
     const courses = await BC.api.coursesWithScores();
     const active = courses.filter((c) => !c.concluded).slice(0, 20);
     const all = [];
-    await Promise.all(active.map(async (c) => {
+    let failed = 0;
+    // Concurrency-limited to 4, and 3 pages per course rather than 20. Previously
+    // this was Promise.all over every course at 20 pages each — up to ~400
+    // simultaneous requests fired from the dashboard, which trips Canvas's rate
+    // limiter and breaks every other feature for minutes.
+    await BC.util.mapLimit(active, 4, async (c) => {
       try {
-        const files = await BC.api.courseFiles(c.id);
+        const files = await BC.api.courseFiles(c.id, 3);
         for (const f of files) all.push({ ...f, courseName: c.name, courseId: c.id });
-      } catch (_) {}
-    }));
-    cache.files = all; cache.loadedAt = Date.now();
+      } catch (e) {
+        failed++;
+        BC.diag.push("files:" + c.id, e);   // was swallowed entirely
+      }
+    });
+    cache.files = all; cache.loadedAt = Date.now(); cache.failed = failed;
     return all;
   }
 

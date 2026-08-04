@@ -16,11 +16,18 @@
       root.innerHTML = "";
       const store = BC.SettingsState.create(adapter);
       const S = BC.SettingsComponents;
+      // Drop any bindings from a previous mount (the drawer can be re-mounted if
+      // its host is ever disconnected). Stale entries would prune themselves via
+      // isConnected anyway, but starting clean keeps the list bounded.
+      S.bindings.reset();
 
       // -- shell ------------------------------------------------------------
       const app = h("div.bc-app", null);
       root.appendChild(app);
       app.appendChild(el("style", null, CSS));
+
+      const undoBtn = S.button({ label: "Undo", onClick: () => store.undo() });
+      const redoBtn = S.button({ label: "Redo", onClick: () => store.redo() });
 
       const header = h("header.bc-header", null, [
         h("div.bc-brand", null, [
@@ -28,16 +35,20 @@
           h("div", null, [h("div.bc-brand-name", null, "Better Canvas"), h("div.bc-brand-sub", null, "v" + (BC.VERSION || ""))]),
         ]),
         h("div.bc-header-actions", null, [
-          searchInput(store, () => rerender()),
-          S.button({ label: "Undo",  onClick: () => store.undo() }),
-          S.button({ label: "Redo",  onClick: () => store.redo() }),
+          searchInput(store, (q) => applySearch(q)),
+          undoBtn,
+          redoBtn,
         ]),
       ]);
       app.appendChild(header);
 
+      const masterInput = el("input", {
+        type: "checkbox", checked: !!store.get().enabled,
+        onchange: (e) => store.set((d) => { d.enabled = e.target.checked; }),
+      });
       const bar = h("div.bc-topbar", null, [
         h("label.bc-master", null, [
-          el("input", { type: "checkbox", checked: !!store.get().enabled, onchange: (e) => store.set((d) => { d.enabled = e.target.checked; }) }),
+          masterInput,
           h("span", null, "Enable Better Canvas"),
         ]),
         h("div.bc-topbar-right", null, [
@@ -77,26 +88,64 @@
       let active = "dashboard";
       let searchQuery = "";
 
-      function rerender() {
-        nav.innerHTML = "";
-        body.innerHTML = "";
-        for (const t of TABS) {
-          const btn = h("button.bc-tab" + (t.id === active ? ".active" : ""),
-            { type: "button", onclick: () => { active = t.id; rerender(); } },
-            [h("span.bc-tab-ic", null, t.icon), t.label]);
-          nav.appendChild(btn);
-        }
-        const tab = TABS.find((t) => t.id === active) || TABS[0];
-        const content = tab.render(store, adapter, { searchQuery });
-        body.appendChild(content);
+      // The nav is built ONCE, outside showTab, so neither a tab switch nor a
+      // state change rebuilds it (which is what kept resetting the responsive
+      // horizontal nav's scroll position).
+      const tabBtns = new Map();
+      for (const t of TABS) {
+        const btn = h("button.bc-tab", { type: "button", onclick: () => showTab(t.id) },
+          [h("span.bc-tab-ic", null, t.icon), t.label]);
+        tabBtns.set(t.id, btn);
+        nav.appendChild(btn);
       }
 
-      store.subscribe(() => {
-        // Live re-render current tab so live-preview reflects changes.
-        rerender();
+      function showTab(id) {
+        active = id;
+        for (const [tid, b] of tabBtns) b.classList.toggle("active", tid === active);
+        const tab = TABS.find((t) => t.id === active) || TABS[0];
+        // Controls in the outgoing tab detach here; C.bindings.sync prunes them
+        // lazily on its next pass via isConnected, so there's nothing to unwire.
+        body.replaceChildren(tab.render(store, adapter, { searchQuery }));
+        applySearch(searchQuery);
+      }
+
+      // Filters rows in the CURRENT tab by visible text. Purely presentational, so
+      // it needs no cooperation from any tab renderer.
+      function applySearch(q) {
+        searchQuery = q || "";
+        const query = searchQuery.trim().toLowerCase();
+        for (const row of body.querySelectorAll(".bc-row")) {
+          row.classList.toggle("bc-hidden", !!query && !(row.textContent || "").toLowerCase().includes(query));
+        }
+        for (const sec of body.querySelectorAll(".bc-section")) {
+          const anyVisible = !!sec.querySelector(".bc-row:not(.bc-hidden)");
+          sec.classList.toggle("bc-hidden", !!query && !anyVisible);
+        }
+      }
+
+      store.subscribe((state, kind) => {
+        // Targeted: each mounted control re-reads the store and writes only what
+        // differs, so the control the user is touching is never destroyed. This is
+        // what lets the toggle animate, the caret survive, and a drag continue.
+        S.bindings.sync(state);
+        if (masterInput.checked !== !!state.enabled) masterInput.checked = !!state.enabled;
+        undoBtn.disabled = !store.canUndo();
+        redoBtn.disabled = !store.canRedo();
+        // Wholesale replacement (reset / import / undo / redo / external change)
+        // can alter anything including list lengths, so rebuild — but preserve
+        // scroll, which the old unconditional rebuild always dropped to the top.
+        if (kind === "structural") {
+          const scroller = root.scrollHeight > root.clientHeight
+            ? root : (document.scrollingElement || document.documentElement);
+          const top = scroller.scrollTop;
+          showTab(active);
+          scroller.scrollTop = top;
+        }
       });
 
-      rerender();
+      undoBtn.disabled = !store.canUndo();
+      redoBtn.disabled = !store.canRedo();
+      showTab(active);
       return store;
     },
   };
@@ -127,9 +176,10 @@
         S.row({ label: "Show inline grade on card", hint:"Requires Canvas grade endpoint access.",
           control: S.switch({ get: () => d.showInlineGrade, set: (v) => store.set((x) => { x.dashboard.showInlineGrade = v; }) }) }),
         S.row({ label: "Show progress bar",  control: S.switch({ get: () => d.showProgressBar, set: (v) => store.set((x) => { x.dashboard.showProgressBar = v; }) }) }),
-        S.row({ label: "Show unread badges", control: S.switch({ get: () => d.showBadges, set: (v) => store.set((x) => { x.dashboard.showBadges = v; }) }) }),
-        S.row({ label: "Show grade sparkline", control: S.switch({ get: () => d.showSparkline, set: (v) => store.set((x) => { x.dashboard.showSparkline = v; }) }) }),
-        S.row({ label: "Hover-preview cards", control: S.switch({ get: () => d.hoverPreview, set: (v) => store.set((x) => { x.dashboard.hoverPreview = v; }) }) }),
+        S.row({ label: "Show due-count badge", hint: "Items due in the next 24 hours.",
+          control: S.switch({ get: () => d.showBadges, set: (v) => store.set((x) => { x.dashboard.showBadges = v; }) }) }),
+        S.row({ label: "Show grade sparkline", hint: "Needs a few days of locally recorded grade history.",
+          control: S.switch({ get: () => d.showSparkline, set: (v) => store.set((x) => { x.dashboard.showSparkline = v; }) }) }),
         S.row({ label: "Show course search bar", control: S.switch({ get: () => d.courseSearch, set: (v) => store.set((x) => { x.dashboard.courseSearch = v; }) }) }),
         S.row({ label: "Semester progress bar", hint: "Week X of Y · days left, from your term dates.",
           control: S.switch({ get: () => d.semesterProgress, set: (v) => store.set((x) => { x.dashboard.semesterProgress = v; }) }) }),
@@ -143,10 +193,6 @@
         S.row({ label: "Coming Up",           control: S.switch({ get: () => d.widgets.comingUp,       set: (v) => store.set((x) => { x.dashboard.widgets.comingUp = v; }) }) }),
         S.row({ label: "Recent Feedback",     control: S.switch({ get: () => d.widgets.recentFeedback, set: (v) => store.set((x) => { x.dashboard.widgets.recentFeedback = v; }) }) }),
         S.row({ label: "GPA card",            control: S.switch({ get: () => d.widgets.gpa,            set: (v) => store.set((x) => { x.dashboard.widgets.gpa = v; }) }) }),
-        S.row({ label: "Streak card",         control: S.switch({ get: () => d.widgets.streak,         set: (v) => store.set((x) => { x.dashboard.widgets.streak = v; }) }) }),
-        S.row({ label: "Weekly progress ring",control: S.switch({ get: () => d.widgets.weekly,         set: (v) => store.set((x) => { x.dashboard.widgets.weekly = v; }) }) }),
-        S.row({ label: "Announcements",       control: S.switch({ get: () => d.widgets.announcements,  set: (v) => store.set((x) => { x.dashboard.widgets.announcements = v; }) }) }),
-        S.row({ label: "Mini calendar",       control: S.switch({ get: () => d.widgets.calendar,       set: (v) => store.set((x) => { x.dashboard.widgets.calendar = v; }) }) }),
         S.row({ label: "Hide entire right sidebar", control: S.switch({ get: () => d.hideSidebar, set: (v) => store.set((x) => { x.dashboard.hideSidebar = v; }) }) }),
       ],
     }));
@@ -162,7 +208,7 @@
     // Async course load
     adapter.getCourses && adapter.getCourses().then((courses) => {
       const mount = coursesSection.querySelector("#bc-courses-mount");
-      if (!mount) return;
+      if (!mount || !mount.isConnected) return;   // tab switched away mid-fetch
       renderCourseEditor(mount, store, courses);
     }).catch(() => {
       const mount = coursesSection.querySelector("#bc-courses-mount");
@@ -245,7 +291,9 @@
     c.appendChild(S.section({ title: "Planner widget", description: "Only applies when mode is Planner widget.", children: [
       S.row({ label: "View",
         control: S.select({ get: () => t.view, set: (v) => store.set((x) => { x.todo.view = v; }),
-          options: [{value:"list",label:"List"},{value:"day",label:"Day"},{value:"week",label:"Week"},{value:"kanban",label:"Kanban"},{value:"timeblock",label:"Time-block"}] }) }),
+          // "Day" and "Week" were selectable but todo.js only ever rendered
+          // list/kanban/timeblock, so picking them silently fell back to List.
+          options: [{value:"list",label:"List"},{value:"kanban",label:"Kanban"},{value:"timeblock",label:"Time-block"}] }) }),
       S.row({ label: "Look-ahead window",
         control: S.select({ get: () => String(t.rangeDays), set: (v) => store.set((x) => { x.todo.rangeDays = parseInt(v, 10); }),
           options: [{value:"3",label:"3 days"},{value:"7",label:"1 week"},{value:"14",label:"2 weeks"},{value:"30",label:"1 month"}] }) }),
@@ -598,7 +646,6 @@
           options: [{value:"default",label:"Default"},{value:"compact",label:"Compact"},{value:"hidden",label:"Hidden"}] }) }),
       S.row({ label: "Course quick-switch tab bar", control: S.switch({ get: () => s.navigation.courseTabs, set: (v) => store.set((x) => { x.navigation.courseTabs = v; }) }) }),
       S.row({ label: "Enable ⌘K quick search",     control: S.switch({ get: () => s.navigation.quickSearch, set: (v) => store.set((x) => { x.navigation.quickSearch = v; }) }) }),
-      S.row({ label: "Recent-pages dropdown",      control: S.switch({ get: () => s.navigation.recentPages, set: (v) => store.set((x) => { x.navigation.recentPages = v; }) }) }),
     ]}));
     return c;
   }
@@ -634,12 +681,13 @@
     const g = store.get().grades;
     const c = h("div.bc-tab-body", null);
     c.appendChild(S.section({ title: "Grade tools", children: [
-      S.row({ label: "What-if grades", control: S.switch({ get: () => g.whatIfEnabled, set: (v) => store.set((x) => { x.grades.whatIfEnabled = v; }) }) }),
+      S.row({ label: "Show Grade Tools panel", hint: "Adds the goal tracker, final-grade solver and what-if scores to the grades page.",
+        control: S.switch({ get: () => g.panelEnabled, set: (v) => store.set((x) => { x.grades.panelEnabled = v; }) }) }),
       S.row({ label: "Auto-refresh grades page", control: S.switch({ get: () => g.autoRefresh, set: (v) => store.set((x) => { x.grades.autoRefresh = v; }) }) }),
-      S.row({ label: "Auto-refresh interval (minutes)", control: S.number({ get: () => g.autoRefreshMin, set: (v) => store.set((x) => { x.grades.autoRefreshMin = Math.max(1, v|0); }), min:1, max:60 }) }),
+      S.row({ label: "Auto-refresh interval (minutes)", enabledWhen: (st) => st.grades.autoRefresh,
+        control: S.number({ get: () => g.autoRefreshMin, set: (v) => store.set((x) => { x.grades.autoRefreshMin = Math.max(1, v|0); }), min:1, max:60 }) }),
       S.row({ label: "Rubric-aware prediction", control: S.switch({ get: () => g.rubricPredictor, set: (v) => store.set((x) => { x.grades.rubricPredictor = v; }) }) }),
       S.row({ label: "Show grade trend chart", control: S.switch({ get: () => g.showTrendChart, set: (v) => store.set((x) => { x.grades.showTrendChart = v; }) }) }),
-      S.row({ label: "Show impact simulator",  control: S.switch({ get: () => g.showImpactSim, set: (v) => store.set((x) => { x.grades.showImpactSim = v; }) }) }),
       S.row({ label: "Show weight donut",      control: S.switch({ get: () => g.showWeightDonut, set: (v) => store.set((x) => { x.grades.showWeightDonut = v; }) }) }),
       S.row({ label: "Warn on missing assignments", control: S.switch({ get: () => g.showMissingWarning, set: (v) => store.set((x) => { x.grades.showMissingWarning = v; }) }) }),
     ]}));
@@ -654,7 +702,7 @@
     // Async GPA mount
     adapter.getGpaData && adapter.getGpaData().then((courses) => {
       const mount = c.querySelector("#bc-gpa-mount");
-      if (!mount) return;
+      if (!mount || !mount.isConnected) return;   // tab switched away mid-fetch
       renderGpaEditor(mount, store, courses);
     }).catch(() => {
       const mount = c.querySelector("#bc-gpa-mount");
@@ -730,7 +778,6 @@
     const c = h("div.bc-tab-body", null);
     c.appendChild(S.section({ title: "Files library", description: "Aggregates files across every course into one filterable panel.", children: [
       S.row({ label: "Enable Files library", control: S.switch({ get: () => f.enabled, set: (v) => store.set((x) => { x.files.enabled = v; }) }) }),
-      S.row({ label: "Show recent files section", control: S.switch({ get: () => f.library.enabled, set: (v) => store.set((x) => { x.files.library.enabled = v; }) }) }),
     ]}));
     return c;
   }
@@ -741,7 +788,6 @@
     const c = h("div.bc-tab-body", null);
     c.appendChild(S.section({ title: "Calendar", children: [
       S.row({ label: "Mini month view on dashboard", control: S.switch({ get: () => cal.miniOnDashboard, set: (v) => store.set((x) => { x.calendar.miniOnDashboard = v; }) }) }),
-      S.row({ label: "Time-block view (planner)", control: S.switch({ get: () => cal.timeBlock, set: (v) => store.set((x) => { x.calendar.timeBlock = v; }) }) }),
       S.row({ label: "Syllabus date extraction", hint: "Finds dates in course syllabi and offers to add them to your planner.",
         control: S.switch({ get: () => cal.syllabusExtract, set: (v) => store.set((x) => { x.calendar.syllabusExtract = v; }) }) }),
       S.row({ label: ".ics export",
@@ -762,10 +808,6 @@
     c.appendChild(S.section({ title: "Announcements", children: [
       S.row({ label: "Aggregator panel", hint:"Unified list across all courses.",
         control: S.switch({ get: () => a.aggregator, set: (v) => store.set((x) => { x.announcements.aggregator = v; }) }) }),
-      S.row({ label: "Unread badge across dashboard", control: S.switch({ get: () => a.unreadBadge, set: (v) => store.set((x) => { x.announcements.unreadBadge = v; }) }) }),
-      S.row({ label: "Weekly digest day",
-        control: S.select({ get: () => String(a.digestDay), set: (v) => store.set((x) => { x.announcements.digestDay = parseInt(v, 10); }),
-          options: BC.dt.WEEKDAYS.map((n, i) => ({ value: String(i), label: n })) }) }),
     ]}));
     return c;
   }
@@ -778,7 +820,6 @@
       S.row({ label: "Focus mode on assignment pages", control: S.switch({ get: () => p.focusMode, set: (v) => store.set((x) => { x.productivity.focusMode = v; }) }) }),
       S.row({ label: "Reading ruler",       control: S.switch({ get: () => p.readingRuler, set: (v) => store.set((x) => { x.productivity.readingRuler = v; }) }) }),
       S.row({ label: "Sticky notes on any page", control: S.switch({ get: () => p.stickyNotes, set: (v) => store.set((x) => { x.productivity.stickyNotes = v; }) }) }),
-      S.row({ label: "Persistent highlighting", control: S.switch({ get: () => p.highlights, set: (v) => store.set((x) => { x.productivity.highlights = v; }) }) }),
       S.row({ label: "Auto-save text-editor drafts", control: S.switch({ get: () => p.autoSaveDrafts, set: (v) => store.set((x) => { x.productivity.autoSaveDrafts = v; }) }) }),
       S.row({ label: "Quiz draft saver", hint: "Snapshots quiz answers locally while you take a quiz, so a crash or reload can't wipe them.",
         control: S.switch({ get: () => p.quizDraftSaver, set: (v) => store.set((x) => { x.productivity.quizDraftSaver = v; }) }) }),
@@ -822,7 +863,6 @@
     const c = h("div.bc-tab-body", null);
     c.appendChild(S.section({ title: "Shortcuts", description: "Click a binding to record a new one. Use Escape to cancel.", children: [
       S.row({ label: "Enable shortcuts", control: S.switch({ get: () => sh.enabled, set: (v) => store.set((x) => { x.shortcuts.enabled = v; }) }) }),
-      S.row({ label: "Vim-style j/k navigation", control: S.switch({ get: () => sh.vimMode, set: (v) => store.set((x) => { x.shortcuts.vimMode = v; }) }) }),
     ]}));
     const labels = {
       commandPalette: "Command palette",
@@ -863,6 +903,7 @@
       for (const cr of courses || []) names[cr.id] = cr.name;
       try {
         chrome.storage.local.get([BC.LOCAL_KEY], (res) => {
+          if (!mount.isConnected) return;   // tab switched away mid-fetch
           renderInsightsData(mount, (res && res[BC.LOCAL_KEY]) || {}, names);
         });
       } catch (_) {
@@ -986,24 +1027,82 @@
         ]),
       ],
     }));
+    c.appendChild(renderDiagnostics(store));
     return c;
+  }
+
+  // BC.diag was console-only, so a user hitting a problem had no way to report
+  // anything useful. Nothing here is uploaded — it's a local ring buffer.
+  function renderDiagnostics(store) {
+    const S = BC.SettingsComponents;
+    const entries = (BC.diag && BC.diag.entries) ? BC.diag.entries.slice().reverse().slice(0, 15) : null;
+    const children = [];
+
+    if (!entries) {
+      // The options page is a different JS realm, so it has its own empty BC.diag.
+      children.push(h("p.bc-hint", null, "Open the settings drawer on a Canvas page to see diagnostics."));
+    } else if (!entries.length) {
+      children.push(h("p.bc-hint", null, "No errors recorded. 🎉"));
+    } else {
+      for (const e of entries) {
+        children.push(h("div.bc-ins-row", null, [
+          h("span", null, e.source),
+          h("span.bc-ins-val", null, new Date(e.ts).toLocaleTimeString() + " · " + e.error),
+        ]));
+      }
+      children.push(h("div.bc-inline", null, [
+        S.button({
+          label: "Copy diagnostics",
+          onClick: () => {
+            const text = JSON.stringify(BC.diag.entries, null, 2);
+            if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => BC.toast && BC.toast.success("Diagnostics copied"));
+          },
+        }),
+        S.button({ label: "Clear", variant: "ghost", onClick: () => { BC.diag.clear(); BC.toast && BC.toast.info("Diagnostics cleared"); } }),
+      ]));
+    }
+
+    return S.section({
+      title: "Diagnostics",
+      description: "Recent internal errors, kept locally so you can report a problem. Nothing here is uploaded.",
+      children,
+    });
   }
 
   // ---- import/export/search ---------------------------------------------
 
   function searchInput(store, onChange) {
-    const inp = el("input", { type: "search", class: "bc-search", placeholder: "Search settings…", "aria-label": "Search settings" });
-    inp.addEventListener("input", () => { window.__bcSearchQuery = inp.value; onChange && onChange(); });
+    const inp = el("input", { type: "search", class: "bc-search", placeholder: "Search this tab…", "aria-label": "Search settings in this tab" });
+    inp.addEventListener("input", () => onChange && onChange(inp.value));
     return inp;
   }
 
-  function exportFlow(store) {
-    const blob = new Blob([store.exportJSON()], { type: "application/json" });
+  // Planner metadata (stars, snoozes, subtasks, kanban status) used to live inside
+  // settings and therefore inside exported JSON. It now lives in bcLocal, so export
+  // has to carry both halves or every backup silently loses it.
+  function download(text, name) {
+    const blob = new Blob([text], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = "better-canvas-settings.json"; a.click();
+    a.href = url; a.download = name; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
-    BC.toast && BC.toast.success("Settings exported");
+  }
+
+  function exportFlow(store) {
+    const adapter = store.adapter || {};
+    Promise.resolve(adapter.getLocal ? adapter.getLocal() : null)
+      .catch(() => null)
+      .then((local) => {
+        const payload = {
+          kind: "better-canvas-backup",
+          version: BC.SETTINGS_VERSION,
+          exportedAt: new Date().toISOString(),
+          settings: JSON.parse(store.exportJSON()),
+          local: local || null,
+        };
+        download(JSON.stringify(payload, null, 2), "better-canvas-settings.json");
+        BC.toast && BC.toast.success("Settings exported");
+      });
   }
 
   function importFlow(store) {
@@ -1011,8 +1110,28 @@
     inp.onchange = () => {
       const f = inp.files && inp.files[0]; if (!f) return;
       f.text().then((txt) => {
-        if (store.importJSON(txt)) BC.toast && BC.toast.success("Settings imported");
-        else BC.toast && BC.toast.error("Invalid settings file");
+        let parsed = null;
+        try { parsed = JSON.parse(txt); } catch (_) { parsed = null; }
+        if (!parsed || typeof parsed !== "object") { BC.toast && BC.toast.error("Invalid settings file"); return; }
+
+        // Accept both shapes: the new {settings, local} envelope and a bare pre-3.1
+        // settings object.
+        const isEnvelope = parsed.kind === "better-canvas-backup" || (parsed.settings && typeof parsed.settings === "object");
+        const settingsPart = isEnvelope ? parsed.settings : parsed;
+        const localPart = isEnvelope ? parsed.local : null;
+
+        if (!store.importJSON(JSON.stringify(settingsPart))) {
+          BC.toast && BC.toast.error("Invalid settings file");
+          return;
+        }
+        const adapter = store.adapter || {};
+        if (localPart && adapter.saveLocal) {
+          Promise.resolve(adapter.saveLocal(localPart))
+            .then(() => BC.toast && BC.toast.success("Settings and planner data imported"))
+            .catch(() => BC.toast && BC.toast.warn("Settings imported, but planner data could not be restored"));
+        } else {
+          BC.toast && BC.toast.success("Settings imported");
+        }
       });
     };
     inp.click();
@@ -1020,22 +1139,40 @@
 
   // ============ CSS ======================================================
   const CSS = `
+  /* Alias layer onto the real design tokens. This is what makes the settings UI
+     adopt your theme: previously it declared its own hardcoded --bg/--panel/--accent
+     and so never saw the accent, the palette, the custom font, or the radius slider.
+     ":host { all: initial }" does NOT block custom-property inheritance (the spec
+     exempts them from 'all'), so the drawer's shadow root already inherits every
+     --bc-* from :root and needs no plumbing at all. The fallbacks cover documents
+     that haven't emitted tokens yet.
+     Keeping the short alias names means the ~140 rules below didn't have to change
+     in the same edit; they get swept to canonical names separately. */
   .bc-app {
-    --bg: #f6f7fb; --panel: #ffffff; --fg: #1f2937; --muted: #6b7280;
-    --border: #e5e7eb; --accent: #4f46e5; --danger: #dc2626;
-    --radius: 10px;
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --bg:     var(--bc-surface-1, #f6f7fb);
+    --panel:  var(--bc-surface-2, #ffffff);
+    --fg:     var(--bc-text, #1f2937);
+    --muted:  var(--bc-muted, #6b7280);
+    --border: var(--bc-border, #e5e7eb);
+    --accent: var(--bc-accent, #4f46e5);
+    --danger: var(--bc-danger, #dc2626);
+    --radius: var(--bc-radius-lg, 10px);
+    font-family: var(--bc-font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+    font-size: var(--bc-text-md, 14px);
+    line-height: var(--bc-leading-body, 1.5);
+    letter-spacing: var(--bc-tracking, 0px);
     color: var(--fg); background: var(--bg);
     min-height: 100%; padding: 12px 12px 40px;
     box-sizing: border-box;
   }
-  @media (prefers-color-scheme: dark) {
-    .bc-app { --bg:#121319; --panel:#1a1d24; --fg:#e5e7eb; --muted:#9ca3af; --border:#2a2f3a; }
-  }
-  html.bc-dark .bc-app, .bc-app.bc-dark {
-    --bg:#121319; --panel:#1a1d24; --fg:#e5e7eb; --muted:#9ca3af; --border:#2a2f3a;
-  }
   .bc-app * { box-sizing: border-box; }
+  /* This file previously had ZERO focus-visible rules, and inside a shadow root
+     with 'all: initial' the UA ring often doesn't render at all. */
+  .bc-app :focus-visible {
+    outline: 2px solid var(--bc-focus-ring, var(--accent));
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px var(--bc-focus-halo, var(--panel));
+  }
   .bc-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 4px 12px; }
   .bc-brand { display: flex; align-items: center; gap: 10px; }
   .bc-logo {
@@ -1061,9 +1198,9 @@
     padding: 8px 10px; border: 0; background: transparent; color: inherit;
     text-align: left; cursor: pointer; border-radius: 8px; font: inherit;
   }
-  .bc-tab:hover { background: rgba(0,0,0,.05); }
-  html.bc-dark .bc-tab:hover, .bc-app.bc-dark .bc-tab:hover { background: rgba(255,255,255,.06); }
-  .bc-tab.active { background: var(--accent); color: #fff; }
+  /* One mode-aware wash replaces each light rule plus its html.bc-dark twin. */
+  .bc-tab:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
+  .bc-tab.active { background: var(--accent); color: var(--bc-accent-contrast, #fff); }
   .bc-tab.active:hover { background: var(--accent); }
   .bc-tab-ic { display: inline-block; width: 18px; text-align: center; opacity: .9; }
 
@@ -1076,16 +1213,22 @@
 
   .bc-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 6px 0; border-top: 1px solid var(--border); }
   .bc-section-body > .bc-row:first-child { border-top: 0; padding-top: 0; }
+  .bc-hidden { display: none !important; }
+  .bc-row-off { opacity: .5; }
+  .bc-row-off .bc-row-control { pointer-events: none; }
   .bc-row-title { font-weight: 500; }
   .bc-row-hint  { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .bc-row-warn  { color: var(--danger); font-size: 12px; margin-top: 2px; }
   .bc-row-control { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
 
-  .bc-switch { position: relative; width: 40px; height: 22px; display: inline-block; border-radius: 999px; background: #cbd5e1; transition: background .15s ease; }
+  .bc-switch { position: relative; width: 40px; height: 22px; display: inline-block; flex: none; border-radius: 999px; background: #cbd5e1; transition: background .15s ease; cursor: pointer; }
   .bc-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
-  .bc-switch-thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transition: transform .15s ease; box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+  /* pointer-events:none is load-bearing: the thumb is a later positioned sibling,
+     so without it the knob paints above the input and swallows the click. */
+  .bc-switch-thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transition: transform .15s ease; box-shadow: 0 1px 2px rgba(0,0,0,.15); pointer-events: none; }
   .bc-switch input:checked + .bc-switch-thumb { transform: translateX(18px); }
-  .bc-switch:has(input:checked) { background: var(--accent); }
+  .bc-switch.bc-on, .bc-switch:has(input:checked) { background: var(--accent); }
+  .bc-switch input:focus-visible + .bc-switch-thumb { box-shadow: 0 1px 2px rgba(0,0,0,.15), 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
 
   .bc-select, .bc-text, .bc-textarea, .bc-number, .bc-color-text, .bc-tags-inp {
     padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: inherit; font: inherit;
@@ -1101,9 +1244,8 @@
   .bc-text-warn { color: var(--danger); font-size: 12px; }
 
   .bc-btn { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: inherit; cursor: pointer; font: inherit; }
-  .bc-btn:hover { background: rgba(0,0,0,.04); }
-  html.bc-dark .bc-btn:hover, .bc-app.bc-dark .bc-btn:hover { background: rgba(255,255,255,.05); }
-  .bc-btn-danger { color: #b91c1c; border-color: rgba(185,28,28,.4); }
+  .bc-btn:hover { background: var(--bc-surface-4, rgba(0,0,0,.04)); }
+  .bc-btn-danger { color: var(--danger); border-color: var(--bc-danger-border, rgba(185,28,28,.4)); }
   .bc-btn-ghost  { background: transparent; }
 
   .bc-sortable { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -1137,9 +1279,8 @@
   .bc-navitem { display: flex; justify-content: space-between; align-items: center; width: 100%; }
   .bc-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .bc-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .bc-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; background: rgba(0,0,0,.05); border-radius: 999px; font-size: 12px; }
-  html.bc-dark .bc-chip, .bc-app.bc-dark .bc-chip { background: rgba(255,255,255,.08); }
-  .bc-chip-x { background: none; border: 0; cursor: pointer; color: inherit; opacity: .6; }
+  .bc-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; background: var(--bc-surface-4, rgba(0,0,0,.05)); border-radius: var(--bc-radius-pill, 999px); font-size: 12px; }
+  .bc-chip-x { background: none; border: 0; cursor: pointer; color: var(--bc-text-subtle, var(--muted)); }
   .bc-tags-inp { min-width: 120px; flex: 1; }
 
   .bc-links { display: flex; flex-direction: column; gap: 6px; }
@@ -1150,8 +1291,7 @@
   .bc-hint { color: var(--muted); font-size: 12px; }
   .bc-ins-total { font-weight: 700; margin-bottom: 8px; }
   .bc-ins-days { display: flex; gap: 4px; align-items: flex-end; height: 64px; margin: 8px 0 12px; }
-  .bc-ins-day { flex: 1; height: 100%; display: flex; align-items: flex-end; background: rgba(0,0,0,.04); border-radius: 4px; overflow: hidden; }
-  html.bc-dark .bc-ins-day, .bc-app.bc-dark .bc-ins-day { background: rgba(255,255,255,.06); }
+  .bc-ins-day { flex: 1; height: 100%; display: flex; align-items: flex-end; background: var(--bc-surface-4, rgba(0,0,0,.04)); border-radius: var(--bc-radius-sm, 4px); overflow: hidden; }
   .bc-ins-day-fill { width: 100%; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; }
   .bc-ins-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 5px 0; border-top: 1px solid var(--border); font-size: 13px; }
   .bc-ins-row:first-child { border-top: 0; }
@@ -1168,6 +1308,7 @@
   .bc-gpa th, .bc-gpa td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
   .bc-gpa-cred { width: 70px; }
   .bc-gpa-total { margin-top: 10px; font-weight: 700; }
-  .bc-concluded td { opacity: .55; }
+  /* A token, not opacity: fading text that already sits at AA drops it below AA. */
+  .bc-concluded td { color: var(--bc-text-subtle, var(--muted)); }
   `;
 })();

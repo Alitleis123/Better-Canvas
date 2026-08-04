@@ -23,23 +23,39 @@
     return target;
   }
 
+  let rotating = false;
+
   function apply(settings) {
     const r = settings.theming && settings.theming.rotation;
     if (!r || !r.enabled || !Array.isArray(r.themeIds) || !r.themeIds.length) return;
+    // Bail until bcLocal is actually loaded. The guard below reads lastRotation from
+    // it; when it was still null the guard read undefined, never tripped, and the
+    // settings write re-entered apply() — repeated theme merges and toast spam.
+    if (!BC.storage.local) return;
+    if (rotating) return;
+
     const idx = Math.floor(Date.now() / (r.mode === "weekly" ? 7 * DAY : DAY));
     const period = (r.mode || "daily") + ":" + idx;
-    const last = (BC.storage.local || {}).lastRotation;
+    const last = BC.storage.local.lastRotation;
     if (last && last.period === period) return;
 
     const pool = (settings.customThemes || []).concat(BC.PRESET_THEMES || []);
     const id = r.themeIds[idx % r.themeIds.length];
     const theme = pool.find((t) => t && t.id === id);
-    // Record the period first so the settings write below can't re-trigger us.
-    BC.storage.updateLocal((d) => { d.lastRotation = { period, themeId: id }; });
-    if (!theme || !theme.settings) return;
-    BC.storage.update((d) => { deepMerge(d, theme.settings); });
-    BC.toast.info("Theme rotated: " + (theme.name || id));
+
+    // Await the period record before writing settings: the settings write re-enters
+    // apply(), and this used to work only because saveLocal happens to assign
+    // `local` before its first await.
+    rotating = true;
+    BC.storage.updateLocal((d) => { d.lastRotation = { period, themeId: id }; })
+      .then(() => {
+        if (!theme || !theme.settings) return;
+        return BC.storage.update((d) => { deepMerge(d, theme.settings); })
+          .then(() => BC.toast.info("Theme rotated: " + (theme.name || id)));
+      })
+      .catch((e) => BC.diag.push("rotation", e))
+      .then(() => { rotating = false; });
   }
 
-  BC.registry.register({ id: "rotation", styles: [], nodes: [], apply });
+  BC.registry.register({ id: "rotation", styles: [], nodes: [], apply, unmount() { rotating = false; } });
 })();

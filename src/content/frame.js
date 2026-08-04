@@ -43,7 +43,7 @@
       html.bc-dark [style*="background: #fff" i] {
         background-color: var(--bc-surface-2) !important; color: var(--bc-text) !important;
       }
-      html.bc-dark ::selection { background: var(--bc-accent); color: #fff; }
+      html.bc-dark ::selection { background: var(--bc-accent); color: var(--bc-accent-contrast, #fff); }
     `;
   }
 

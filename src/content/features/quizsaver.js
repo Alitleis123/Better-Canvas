@@ -18,7 +18,7 @@
     }
     .bc-quiz-banner .bc-btn { padding: 4px 10px; }
     .bc-quiz-save-dot {
-      position: fixed; bottom: 14px; left: 14px; z-index: 9999;
+      position: fixed; bottom: 14px; left: 14px; z-index: var(--bc-z-dock, 2147480000);
       padding: 4px 10px; border-radius: 999px; font-size: 11px;
       background: var(--bc-surface-2, #f3f4f6); color: var(--bc-muted, #6b7280);
       border: 1px solid var(--bc-border, #e5e7eb); opacity: 0; transition: opacity .3s ease;

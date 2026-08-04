@@ -6,13 +6,13 @@
 
   const CSS = `
     .bc-ann-panel {
-      background: var(--bc-d-bg2, #fff); border: 1px solid var(--bc-d-border, #e5e7eb);
+      background: var(--bc-surface-2, #fff); border: 1px solid var(--bc-border, #e5e7eb);
       border-radius: 10px; padding: 12px; margin-bottom: 12px;
     }
-    .bc-ann-item { padding: 8px 10px; border-radius: 8px; background: var(--bc-d-bg3, #f7fafc); margin-bottom: 6px; }
+    .bc-ann-item { padding: 8px 10px; border-radius: 8px; background: var(--bc-surface-3, #f7fafc); margin-bottom: 6px; }
     .bc-ann-item .bc-ann-title { font-weight: 600; }
-    .bc-ann-item .bc-ann-meta  { font-size: 12px; color: var(--bc-d-muted, #6b7280); }
-    .bc-ann-empty { color: var(--bc-d-muted, #6b7280); padding: 6px 0; }
+    .bc-ann-item .bc-ann-meta  { font-size: 12px; color: var(--bc-muted, #6b7280); }
+    .bc-ann-empty { color: var(--bc-muted, #6b7280); padding: 6px 0; }
   `;
 
   async function loadAll() {
@@ -24,7 +24,7 @@
         try {
           const anns = await BC.api.courseAnnouncements(c.id, 3);
           for (const a of anns) all.push({ ...a, courseName: c.name, courseId: c.id });
-        } catch (_) {}
+        } catch (e) { BC.diag.push("announcements:course", e); }
       }));
       all.sort((a, b) => new Date(b.posted_at || 0) - new Date(a.posted_at || 0));
       return all;

@@ -1,27 +1,8 @@
-/* Better Canvas — first-run tour + "what's new". */
+/* Better Canvas — first-run tour. */
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
   BC.features = BC.features || {};
-
-  const CSS = `
-    .bc-tour-back {
-      position: fixed; inset: 0; z-index: 2147482800;
-      background: rgba(0,0,0,.4);
-      display: flex; align-items: center; justify-content: center;
-      font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-    .bc-tour {
-      background: #fff; color: #111; padding: 24px; border-radius: 12px;
-      max-width: 460px; box-shadow: 0 30px 80px rgba(0,0,0,.4);
-    }
-    html.bc-dark .bc-tour { background: #1a1d24; color: #e5e7eb; }
-    .bc-tour h2 { margin: 0 0 4px; font-size: 20px; }
-    .bc-tour p { margin: 0 0 12px; color: #6b7280; }
-    .bc-tour-nav { display: flex; justify-content: space-between; margin-top: 14px; }
-    .bc-tour-btn { padding: 6px 12px; border: 0; border-radius: 6px; background: #4f46e5; color: #fff; cursor: pointer; }
-    .bc-tour-btn.ghost { background: transparent; color: inherit; border: 1px solid #ddd; }
-  `;
 
   const STEPS = [
     { title: "Welcome to Better Canvas", body: "Everything you'll see is free and stays on your device. No accounts, no telemetry." },
@@ -32,44 +13,71 @@
   ];
 
   function show() {
+    if (document.querySelector('[data-bc-node="bc-tour"]')) return;
+
     let step = 0;
-    const back = document.createElement("div");
-    back.className = "bc-tour-back";
-    back.setAttribute("data-bc-node", "bc-tour");
-    const box = document.createElement("div"); box.className = "bc-tour";
-    back.appendChild(box);
-    document.body.appendChild(back);
-    BC.injector.setStyle("bc-tour-css", CSS);
+    let done = false;
+
+    // aria-live so advancing a step is announced rather than silently swapped.
+    const bodyText = BC.ui.el("p", { "aria-live": "polite" });
+    const counter = BC.ui.badge("", {});
+    const skipBtn = BC.ui.button("Skip", { variant: "ghost", onClick: () => finish() });
+    const nextBtn = BC.ui.button("Next", { variant: "primary", onClick: () => {
+      if (step >= STEPS.length - 1) finish();
+      else { step++; draw(); }
+    } });
+
+    const dlg = BC.ui.dialog({
+      title: STEPS[0].title,
+      body: bodyText,
+      actions: [skipBtn, BC.ui.el("div", { class: "bc-tour-nav" }, [counter, nextBtn])],
+      dismissible: true,
+      nodeId: "bc-tour",
+      // Escape and scrim-click are equivalent to Skip: don't nag on the next tick.
+      onClose: () => { if (!done) markSeen(); },
+    });
+
+    const titleEl = dlg.panel.querySelector(".bc-dialog-title");
+
     function draw() {
       const s = STEPS[step];
-      box.innerHTML = `
-        <h2>${BC.util.escapeHtml(s.title)}</h2>
-        <p>${BC.util.escapeHtml(s.body)}</p>
-        <div class="bc-tour-nav">
-          <button class="bc-tour-btn ghost" data-skip>Skip</button>
-          <div>
-            <span style="opacity:.5; margin-right:8px;">${step + 1}/${STEPS.length}</span>
-            <button class="bc-tour-btn" data-next>${step === STEPS.length - 1 ? "Done" : "Next"}</button>
-          </div>
-        </div>
-      `;
-      box.querySelector("[data-skip]").addEventListener("click", finish);
-      box.querySelector("[data-next]").addEventListener("click", () => { if (step === STEPS.length - 1) finish(); else { step++; draw(); } });
+      titleEl.textContent = s.title;
+      bodyText.textContent = s.body;
+      counter.textContent = (step + 1) + "/" + STEPS.length;
+      counter.setAttribute("aria-label", "Step " + (step + 1) + " of " + STEPS.length);
+      nextBtn.textContent = step === STEPS.length - 1 ? "Done" : "Next";
     }
-    function finish() {
-      BC.storage.update((d) => { d.onboarding.seen = true; d.firstRun = false; d.onboarding.lastWhatsNewVersion = BC.VERSION; });
-      back.remove();
-      BC.injector.setStyle("bc-tour-css", "");
+
+    function markSeen() {
+      done = true;
+      BC.storage.update((d) => {
+        d.onboarding.seen = true;
+        d.firstRun = false;
+        d.onboarding.lastWhatsNewVersion = BC.VERSION;
+      });
     }
+
+    function finish() { markSeen(); dlg.close(); }
+
     draw();
+    dlg.open();
   }
 
   function apply(settings, ctx) {
     if (!settings.onboarding || settings.onboarding.seen) return;
     if (ctx.page !== "dashboard") return;
-    // Delay so Canvas has time to render.
-    setTimeout(show, 800);
+    if (document.querySelector('[data-bc-node="bc-tour"]')) return;
+    // once() is the anti-stacking guard: applyAll runs ~5x/sec and onboarding.seen
+    // stays false until the tour is dismissed, so an unguarded apply queued a fresh
+    // dialog every tick and each new one covered the last — which is why "Next"
+    // appeared to do nothing. The bagged timeout is cancelled on navigation instead
+    // of firing into a page that moved on, and the mark clears on navigation so the
+    // tour re-arms if the user comes back to the dashboard.
+    const bag = BC.lifecycle.pageBag("onboarding");
+    bag.once("tour", () => bag.timeout(show, 800));
   }
 
-  BC.registry.register({ id: "onboarding", styles: ["bc-tour-css"], nodes: ["bc-tour"], apply });
+  // Styling now comes entirely from the shared kit's tokens — this used to hardcode
+  // #fff / #111 / #6b7280 / #4f46e5 / #ddd / #1a1d24 and ignore the theme.
+  BC.registry.register({ id: "onboarding", styles: [], nodes: ["bc-tour"], apply });
 })();

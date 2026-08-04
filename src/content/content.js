@@ -8,6 +8,8 @@
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
 
+  let shortcutSig = null;
+
   BC.applyAll = function (settings) {
     if (!settings) return;
     const ctx = BC.detect.context();
@@ -18,17 +20,26 @@
     const sp = BC.features.settingsPanel;
     if (sp) BC.util.guard(() => sp.apply(settings, ctx), "settingsPanel");
     if (!settings.enabled) return teardown();
+    if (tornDown) remount();
 
     for (const f of BC.registry.all()) {
       if (f === sp) continue;
       BC.util.guard(() => f.apply(settings, ctx), f.id);
     }
 
-    // Shortcuts + palette registration
-    if (BC.shortcuts && settings.shortcuts && settings.shortcuts.enabled) {
+    // Shortcuts + palette registration. Signature-guarded: this re-registered all
+    // ten handlers on every applyAll, i.e. several times a second forever.
+    const sBindings = (settings.shortcuts && settings.shortcuts.bindings) || {};
+    const quickSearch = !(settings.navigation && settings.navigation.quickSearch === false);
+    const sSig = Object.keys(sBindings).sort().map((k) => k + "=" + sBindings[k]).join("|") + "|qs=" + quickSearch;
+    if (BC.shortcuts && settings.shortcuts && settings.shortcuts.enabled && sSig !== shortcutSig) {
+      shortcutSig = sSig;
       BC.shortcuts.reloadFromSettings(settings);
-      const b = settings.shortcuts.bindings || {};
-      BC.shortcuts.register("bc-palette", b.commandPalette,     () => BC.palette && BC.palette.open());
+      const b = sBindings;
+      // navigation.quickSearch was a live switch that nothing read — the palette
+      // shortcut registered unconditionally.
+      if (quickSearch) BC.shortcuts.register("bc-palette", b.commandPalette, () => BC.palette && BC.palette.open());
+      else BC.shortcuts.unregister("bc-palette");
       BC.shortcuts.register("bc-settings", b.settings,          () => BC.features.settingsPanel && BC.features.settingsPanel.open());
       BC.shortcuts.register("bc-dark",     b.toggleDark,        () => BC.storage.update((d) => { d.theming.darkMode = BC.isDarkActive(d) ? "off" : "on"; }));
       BC.shortcuts.register("bc-task",     b.quickTask,         () => quickTaskFlow());
@@ -40,8 +51,12 @@
       BC.shortcuts.register("bc-focus",    b.focusMode,         () => BC.storage.update((d) => { d.productivity.focusMode = !d.productivity.focusMode; }));
     }
 
+    // Register once, not on every applyAll. This used to re-register ~10 static
+    // commands plus up to 40 course entries per tick, and re-issued
+    // BC.api.dashboardCards() every time.
     if (BC.palette) {
-      registerPaletteCommands(settings);
+      const pbag = BC.lifecycle.bag("palette");
+      pbag.once("commands", () => registerPaletteCommands(settings));
     }
   };
 
@@ -65,27 +80,90 @@
     }
   }
 
-  function quickTaskFlow() {
-    const title = prompt("New task title:");
+  function quickTaskFlow(defaultTitle, details) {
+    const title = prompt("New task title:", defaultTitle || "");
     if (!title) return;
-    BC.api.createPlannerNote({ title, todoDate: new Date().toISOString() })
+    const ctx = BC.detect.context();
+    BC.api.createPlannerNote({
+      title, details,
+      todoDate: new Date().toISOString(),
+      courseId: ctx.courseId || undefined,
+    })
       .then(() => BC.toast.success("Task added"))
       .catch((e) => BC.toast.error("Failed: " + e.message));
   }
 
+  let tornDown = false;
+
+  const ROOT_ATTRS = [
+    "data-bc-accent", "data-bc-density", "data-bc-radius", "data-bc-focus",
+    "data-bc-cursor", "data-bc-hc", "data-bc-motion", "data-bc-rounded",
+  ];
+
   function teardown() {
+    // applyAll keeps running ~5x/sec while disabled, so this has to be a no-op
+    // after the first pass rather than re-tearing-down forever.
+    if (tornDown) return;
+    tornDown = true;
+
     for (const k of BC.registry.styleKeys()) BC.injector.removeStyle(k);
     for (const n of BC.registry.nodeKeys()) BC.injector.removeNode(n);
     for (const f of BC.registry.all()) {
+      // The drawer deliberately survives teardown so the user can always reach the
+      // toggle to switch the extension back on.
+      if (f.id === "settingsPanel") continue;
       if (f.unmount) BC.util.guard(() => f.unmount(), f.id + ":unmount");
       BC.lifecycle.clear(f.id);
     }
-    document.documentElement.classList.remove("bc-dark");
-    document.documentElement.classList.remove("bc-focus");
+
+    // Alarms outlived teardown, so notification scans kept hitting the Canvas API
+    // while the extension was "off".
+    BC.alarms.clearAll();
+    if (BC.notifications) BC.util.guard(() => BC.notifications.sendBadge(0), "badge clear");
+
+    for (const n of ["bc-toast-host", "bc-toast-host-alert", "bc-live-polite", "bc-live-assertive"]) {
+      BC.injector.removeNode(n);
+    }
+
+    const doc = document.documentElement;
+    doc.classList.remove("bc-dark");
+    doc.classList.remove("bc-focus");
+    // Inline state no stylesheet removal can undo: leaving the colour-blind filter
+    // in place meant disabling the extension left the ENTIRE page tinted until a
+    // reload.
+    doc.style.filter = "";
+    doc.style.removeProperty("--bc-anim-speed");
+    doc.style.removeProperty("--bc-sidebar-w");
+    for (const a of ROOT_ATTRS) doc.removeAttribute(a);
+  }
+
+  function startAlarms() {
+    BC.alarms.every("bc-dark-eval", 60 * 1000, () => {
+      if (BC.storage.current && BC.storage.current.theming.darkMode === "scheduled") requestApply();
+    });
+  }
+
+  // Re-enabling used to require a page reload: module-level install flags were
+  // never reset and no feature implemented unmount(), so features that had latched
+  // simply never came back.
+  function remount() {
+    tornDown = false;
+    startAlarms();
   }
 
   const requestApply = BC.util.debounce(() => BC.applyAll(BC.storage.current), 120);
   BC.requestApply = requestApply;
+
+  // Zero-latency path for the settings drawer. Coalesced by requestAnimationFrame
+  // so it runs at most once per frame and lands before the next paint, instead of
+  // waiting out the 220ms save debounce plus a chrome.storage round-trip (~345ms
+  // from click to the page changing).
+  let rafPending = false;
+  BC.applyNow = function () {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(() => { rafPending = false; BC.applyAll(BC.storage.current); });
+  };
 
   // Messages from popup / options page
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -100,6 +178,14 @@
     }
     if (msg.type === "bc:openPalette") {
       BC.util.guard(() => BC.palette && BC.palette.open(), "openPalette");
+      sendResponse({ ok: true }); return;
+    }
+    // The service worker has always SENT this from its context menu, but there was
+    // no listener — so "Better Canvas: add this as a task" was a silent no-op.
+    if (msg.type === "bc:addTaskFromContext") {
+      const i = msg.info || {};
+      const title = String(i.selectionText || "").trim().slice(0, 120) || document.title;
+      BC.util.guard(() => quickTaskFlow(title, i.linkUrl || i.pageUrl || location.href), "ctxTask");
       sendResponse({ ok: true }); return;
     }
     if (msg.type === "bc:getCourses") {
@@ -124,9 +210,7 @@
     BC.observer.start(requestApply);
     BC.storage.subscribe(() => requestApply());
     BC.storage.prune();
-    BC.alarms.every("bc-dark-eval", 60 * 1000, () => {
-      if (BC.storage.current && BC.storage.current.theming.darkMode === "scheduled") requestApply();
-    });
+    startAlarms();
   }
 
   function boot() {

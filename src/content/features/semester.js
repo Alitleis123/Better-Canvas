@@ -69,7 +69,7 @@
         (term.name || "This term") + " · Week " + week + " of " + weeks;
       node.querySelector(".bc-semester-fill").style.width = pct + "%";
       node.querySelector(".bc-semester-days").textContent = daysLeft + " day" + (daysLeft === 1 ? "" : "s") + " left · " + pct + "%";
-    }).catch(() => {});
+    }).catch((e) => BC.diag.push("semester", e));
   }
 
   function apply(settings, ctx) {
