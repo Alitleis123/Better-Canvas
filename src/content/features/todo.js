@@ -178,7 +178,16 @@
   // widget instead.
   function tlocal() { return (BC.storage.local && BC.storage.local.todo) || {}; }
   function writeTodoLocal(mutator) {
-    return BC.storage.updateLocal((d) => { mutator((d.todo = d.todo || {})); });
+    // Every star, snooze, drag and subtask tick lands here. updateLocal rejects
+    // when the storage quota is exceeded, and each call site chains .then()
+    // without a catch, so a failed write was both invisible to the user and an
+    // unhandled rejection. Report once and let the chain continue, so the UI
+    // still re-renders rather than freezing mid-interaction.
+    return BC.storage.updateLocal((d) => { mutator((d.todo = d.todo || {})); })
+      .catch((e) => {
+        BC.diag.push("todo:write", e);
+        BC.toast.error("Couldn't save that change");
+      });
   }
 
   function keyForItem(it) {

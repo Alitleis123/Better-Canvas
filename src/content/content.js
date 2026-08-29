@@ -235,7 +235,13 @@
   }
 
   function boot() {
-    Promise.all([BC.storage.load(), BC.storage.loadLocal()]).then(([settings]) => {
+    Promise.all([BC.storage.load(), BC.storage.loadLocal()]).catch((e) => {
+      // Without this the whole extension just never starts, with nothing in the
+      // console to say why. Fall back to defaults so the settings drawer is
+      // still reachable.
+      BC.util.err("settings load failed, starting from defaults", e);
+      return [BC.cloneDefaults()];
+    }).then(([settings]) => {
       let tries = 0;
       const tryStart = () => {
         if (BC.detect.isCanvas()) return start(settings);

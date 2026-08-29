@@ -612,7 +612,8 @@
             const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json";
             inp.onchange = () => {
               const f = inp.files && inp.files[0]; if (!f) return;
-              f.text().then((txt) => {
+              f.text().catch(() => null).then((txt) => {
+                if (txt == null) { BC.toast && BC.toast.error("Couldn't read that file"); return; }
                 try {
                   const j = JSON.parse(txt);
                   if (!j || typeof j !== "object" || !j.settings) throw new Error("bad");
@@ -837,7 +838,7 @@
               }).then(() => {
                 draw({ notifHistory: [] });
                 BC.toast && BC.toast.info("Notification history cleared");
-              });
+              }).catch(() => BC.toast && BC.toast.error("Couldn't clear the history"));
             },
           }),
         ]));
@@ -1140,7 +1141,10 @@
           label: "Copy diagnostics",
           onClick: () => {
             const text = JSON.stringify(BC.diag.entries, null, 2);
-            if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => BC.toast && BC.toast.success("Diagnostics copied"));
+            if (!navigator.clipboard) { BC.toast && BC.toast.error("Clipboard unavailable here"); return; }
+            navigator.clipboard.writeText(text)
+              .then(() => BC.toast && BC.toast.success("Diagnostics copied"))
+              .catch(() => BC.toast && BC.toast.error("Couldn't copy diagnostics"));
           },
         }),
         S.button({ label: "Clear", variant: "ghost", onClick: () => { BC.diag.clear(); BC.toast && BC.toast.info("Diagnostics cleared"); } }),
@@ -1194,7 +1198,8 @@
     const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json";
     inp.onchange = () => {
       const f = inp.files && inp.files[0]; if (!f) return;
-      f.text().then((txt) => {
+      f.text().catch(() => null).then((txt) => {
+        if (txt == null) { BC.toast && BC.toast.error("Couldn't read that file"); return; }
         let parsed = null;
         try { parsed = JSON.parse(txt); } catch (_) { parsed = null; }
         if (!parsed || typeof parsed !== "object") { BC.toast && BC.toast.error("Invalid settings file"); return; }

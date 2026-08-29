@@ -130,7 +130,13 @@
     b.setAttribute("data-bc-node", "bc-copyurl-btn");
     b.textContent = "🔗 Copy URL";
     b.addEventListener("click", () => {
-      navigator.clipboard.writeText(location.href).then(() => BC.toast.success("URL copied"));
+      // Clipboard writes reject on a denied permission or an unfocused document,
+      // and the success toast used to fire from a chain with no catch, so a
+      // failure was both unreported and an unhandled rejection.
+      Promise.resolve()
+        .then(() => navigator.clipboard.writeText(location.href))
+        .then(() => BC.toast.success("URL copied"))
+        .catch((e) => { BC.diag.push("copyUrl", e); BC.toast.error("Couldn't copy the URL"); });
     });
     document.body.appendChild(b);
   }
