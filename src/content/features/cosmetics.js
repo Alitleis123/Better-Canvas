@@ -14,6 +14,11 @@
     topography: `background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><g fill='none' stroke='%23000' stroke-opacity='.05' stroke-width='1'><path d='M0 60 Q30 30 60 60 T120 60'/><path d='M0 40 Q30 10 60 40 T120 40'/><path d='M0 80 Q30 50 60 80 T120 80'/></g></svg>");`,
   };
 
+  // A decorative page background is deliberately NOT theme-derived, so these
+  // fall back to the shipped defaults rather than to tokens. Read from
+  // BC.defaults so there is exactly one definition of them.
+  const DEFAULT_BG = BC.defaults.cosmetics.background;
+
   function bgCSS(cfg) {
     if (!cfg || cfg.mode === "none") return "";
     const blur = Math.max(0, Math.min(40, cfg.blur | 0));
@@ -28,11 +33,12 @@
       // apply(), which BC.util.guard swallows, so the whole cosmetics feature
       // silently stopped applying with no visible cause.
       const g = cfg.gradient || {};
-      const from = BC.color.isHex(g.from) ? g.from : "#1e3a8a";
-      const to = BC.color.isHex(g.to) ? g.to : "#0b1220";
+      const from = BC.color.isHex(g.from) ? g.from : DEFAULT_BG.gradient.from;
+      const to = BC.color.isHex(g.to) ? g.to : DEFAULT_BG.gradient.to;
       layer = `background: linear-gradient(${g.angle | 0}deg, ${from} 0%, ${to} 100%);`;
     } else if (cfg.mode === "pattern") {
-      layer = `background: ${BC.util.cssSafe(cfg.color || "#f6f7fb")}; ${PATTERNS[cfg.pattern || "none"] || ""}`;
+      const base = BC.color.isHex(cfg.color) ? cfg.color : DEFAULT_BG.color;
+      layer = `background: ${base}; ${PATTERNS[cfg.pattern || "none"] || ""}`;
     }
     return `#bc-bg-layer {
       position: fixed; inset: 0; z-index: -1; pointer-events: none;

@@ -260,7 +260,11 @@
     const s = store.get();
     const cur = (s.dashboard.courses && s.dashboard.courses[c.id]) || {};
     const wrap = h("div.bc-course-row", null);
-    const swatch = h("span.bc-course-swatch", { style: { background: cur.color || c.color || "#c7d2fe" } });
+    // The "no colour set" swatch is theme-derived; it was a fixed pale indigo
+    // that read as a real colour choice and ignored dark mode entirely.
+    const swatch = h("span.bc-course-swatch", {
+      style: { background: cur.color || c.color || "var(--bc-accent-weak, rgba(79,70,229,.12))" },
+    });
     const name = el("input", { type: "text", class: "bc-text bc-course-name", placeholder: c.name, value: cur.nickname || "" });
     name.addEventListener("input", () => store.set((x) => { x.dashboard.courses[c.id] = { ...(x.dashboard.courses[c.id] || {}), nickname: name.value }; }));
     const color = el("input", { type: "color", value: cur.color || c.color || "#0374b5" });
@@ -1007,7 +1011,10 @@
           Math.round((i / (scores.length - 1)) * 140) + "," + Math.round(30 - ((v - min) / span) * 26 + 2)
         ).join(" ");
         const delta = scores[scores.length - 1] - scores[0];
-        const color = delta >= 0 ? "#059669" : "#dc2626";
+        // Tokens, not literals: these are the only two colours in the settings
+        // UI that were pinned to light-mode hues, so the trend arrows stayed
+        // bright green/red on a dark surface.
+        const color = delta >= 0 ? "var(--bc-success)" : "var(--bc-danger)";
         const spark = h("span.bc-ins-spark");
         spark.innerHTML = '<svg width="140" height="32" viewBox="0 0 140 32"><polyline fill="none" stroke="' +
           color + '" stroke-width="2" points="' + pts + '"/></svg>';
@@ -1208,7 +1215,10 @@
   .bc-brand { display: flex; align-items: center; gap: 10px; }
   .bc-logo {
     width: 34px; height: 34px; border-radius: 8px; background: var(--accent);
-    color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 800;
+    /* The accent is user-chosen, so the label has to be the derived contrast
+       colour; a hardcoded white vanished on light accents. */
+    color: var(--bc-accent-contrast, #fff);
+    display: inline-flex; align-items: center; justify-content: center; font-weight: 800;
   }
   .bc-brand-name { font-weight: 700; }
   .bc-brand-sub  { font-size: 11px; color: var(--muted); }
@@ -1252,11 +1262,11 @@
   .bc-row-warn  { color: var(--danger); font-size: 12px; margin-top: 2px; }
   .bc-row-control { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
 
-  .bc-switch { position: relative; width: 40px; height: 22px; display: inline-block; flex: none; border-radius: 999px; background: #cbd5e1; transition: background .15s ease; cursor: pointer; }
+  .bc-switch { position: relative; width: 40px; height: 22px; display: inline-block; flex: none; border-radius: 999px; background: var(--bc-border-strong, var(--border)); transition: background .15s ease; cursor: pointer; }
   .bc-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
   /* pointer-events:none is load-bearing: the thumb is a later positioned sibling,
      so without it the knob paints above the input and swallows the click. */
-  .bc-switch-thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transition: transform .15s ease; box-shadow: 0 1px 2px rgba(0,0,0,.15); pointer-events: none; }
+  .bc-switch-thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: var(--bc-surface-2, #fff); border-radius: 50%; transition: transform .15s ease; box-shadow: var(--bc-shadow-1, 0 1px 2px rgba(0,0,0,.15)); pointer-events: none; }
   .bc-switch input:checked + .bc-switch-thumb { transform: translateX(18px); }
   .bc-switch.bc-on, .bc-switch:has(input:checked) { background: var(--accent); }
   .bc-switch input:focus-visible + .bc-switch-thumb { box-shadow: 0 1px 2px rgba(0,0,0,.15), 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
