@@ -39,7 +39,7 @@ Three modes:
 - **Clean circles** — CSS restyle of the native list.
 - **Planner widget** — completion **ring**, week nav, course filter, groupings (day/course/priority/tag/none), views (list/**kanban**/time-block), custom accent, star / snooze, personal tasks.
 - **Kanban board** with drag-and-drop status columns; dropping on Done completes the Canvas item.
-- **Time-block view** — drag tasks onto a 7am–10pm day grid to schedule them.
+- **Time-block view** — drag tasks onto a 7am to 10pm day grid to schedule them.
 - **Recurring tasks** (daily / weekly with weekday mask / monthly), **subtasks**, **tags**, and **priorities** with an item-detail popover.
 - **Streaks** with configurable **grace days** + monthly **repairs** (fixes the #1 Tasks-for-Canvas complaint).
 - **Pomodoro** timer with a persistent dock widget, task binding, and a local session log — survives reloads.
@@ -214,7 +214,8 @@ src/
 
 ### How it fits together
 
-- **Features self-register** via `BC.registry.register({ id, styles, nodes, apply })`; `content.js` iterates the registry (theming first) and applies each feature's idempotent `apply(settings, ctx)` on every observer tick. Features swap keyed `<style>` text or toggle classes — re-applying is cheap and survives Canvas's React re-renders. Teardown derives its style/node keys from the registry.
+- **Features self-register** via `BC.registry.register({ id, styles, nodes, pages?, apply })`; `content.js` iterates the registry (theming first) and applies each feature's idempotent `apply(settings, ctx)` on every observer tick. Features swap keyed `<style>` text or toggle classes — re-applying is cheap and survives Canvas's React re-renders. Teardown derives its style/node keys from the registry.
+- **`pages`** is an optional allowlist of page names from `BC.detect`. A feature that declares it is skipped entirely while off its pages, and gets exactly one more call on the tick the page changes so its own cleanup branch still runs. Features with no `pages` are global. On a course page this takes the per-tick work from 22 feature entry points down to 12.
 - **`BC.lifecycle.bag(id)`** gives each feature scoped listeners/intervals that are cleared on disable; `pageBag(id)` also clears on SPA navigation. Errors land in the `BC.diag` ring buffer.
 - **Settings UI is shared** via `BC.SettingsUI.render(rootEl, adapter)`. The in-page drawer backs it with live `BC.storage` + `BC.api`; the options page backs it with `chrome.storage` + messaging the active Canvas tab.
 - **Dark mode / theming** is driven by CSS variables. `theming.js` emits one variable block and a static rule set consumes it — re-tinting is a single style swap.
@@ -224,9 +225,10 @@ src/
 
 1. Create `src/content/features/yourfeature.js` ending with `BC.registry.register({ id, styles: [...], nodes: [...], apply(settings, ctx) })` — declare every keyed style and node it injects so teardown can clean up.
 2. Add any new settings to `src/shared/defaults.js`.
-3. Register the script in both manifests and the `CONTENT_JS` list in `src/background/service-worker.js` (before `observer.js`).
-4. Add controls to `src/shared/settings/index.js`.
-5. Rebuild with `build.ps1`.
+3. Register the script in **both manifests**, before `observer.js`. The service worker derives its injection lists from `manifest.json` at runtime, so there is no second list to update.
+4. If it only applies to certain pages, declare `pages: [...]` so it is skipped elsewhere.
+5. Add controls to `src/shared/settings/index.js`.
+6. Run `npm test` (or `node test/run.js`) and rebuild with `build.ps1`.
 
 ---
 
@@ -234,4 +236,31 @@ src/
 
 - After editing source, run `build.ps1` and reload the unpacked extension, then refresh Canvas.
 - `build.ps1` runs `node --check` on every `.js` file before copying.
-- No test suite — UI/feature correctness is verified in-browser on a live Canvas instance.
+
+### Tests
+
+```sh
+node test/run.js            # everything
+node test/run.js tokens     # one suite, by filename fragment
+```
+
+No dependencies and no install step: `test/harness.js` loads the real source files
+into a sandbox with small DOM and `chrome.*` shims, including a selector engine
+good enough to exercise the injector and observer against an actual tree.
+
+| Suite | Covers |
+| --- | --- |
+| `tokens`, `color` | WCAG contrast of every shipped theme, on every surface, in both modes |
+| `designsystem` | no literal colours outside the palette sources, token existence, z-index order |
+| `settings`, `state` | schema, migrations, undo/redo, import/export, state identity |
+| `storage` | migration carry-over, subscriber delivery, every prune bound |
+| `api`, `cache` | pagination, retry policy, CSRF, TTL and request de-duplication |
+| `lifecycle`, `injector`, `observer` | registry, bags, sheet/node lifecycle, ownership rules |
+| `detect`, `pagescope`, `applyall` | route mapping and the page-scoping dispatch rule |
+| `grades` | weighted and points totals, GPA bands, donut geometry |
+| `shortcuts` | combos, chords, typing guards, rebinding |
+| `security` | escaping, URL scheme gating, no eval, no external endpoints |
+| `a11y` | focus management, roles and labels, reduced motion, contrast pairings |
+
+Feature behaviour against a live Canvas instance is still verified in-browser;
+the suite covers the logic, the design system and the integration rules.

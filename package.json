@@ -1,0 +1,9 @@
+{
+  "name": "better-canvas",
+  "version": "3.1.0",
+  "private": true,
+  "description": "Canvas LMS customizer browser extension. No runtime or build dependencies; package.json exists only to provide a conventional test entry point.",
+  "scripts": {
+    "test": "node test/run.js"
+  }
+}

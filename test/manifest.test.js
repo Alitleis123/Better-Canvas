@@ -29,9 +29,20 @@ function usedNamespaces() {
 }
 
 module.exports = {
-  "manifest version matches BC.VERSION"() {
+  "every declared version matches BC.VERSION"() {
     assert.equal(mv3.version, BC.VERSION, "manifest.json drifted from BC.VERSION");
     assert.equal(ff.version, BC.VERSION, "manifest.firefox.json drifted from BC.VERSION");
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+    assert.equal(pkg.version, BC.VERSION, "package.json drifted from BC.VERSION");
+  },
+
+  "the build refuses to package a failing tree"() {
+    const build = fs.readFileSync(path.join(ROOT, "build.ps1"), "utf8");
+    assert.match(build, /Run-Tests/, "build.ps1 must run the suite");
+    assert.match(build, /Test suite failed; not building/);
+    // And the gate must come before the copy steps.
+    assert.ok(build.indexOf("Run-Tests\nBuild-Target") > -1 || /Run-Tests\r?\nBuild-Target/.test(build),
+      "Run-Tests must run before Build-Target");
   },
 
   "both manifests declare the same content script lists"() {
