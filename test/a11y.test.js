@@ -194,4 +194,40 @@ module.exports = {
     assert.match(src, /bc-live-polite/);
     assert.match(src, /node\.textContent = "";/, "an identical string is not re-announced unless cleared first");
   },
+
+  "dark mode never leaves inherited light text on an undarkened surface"() {
+    // The global rule sets `color` with !important on html/body, and colour
+    // inherits while background does not. Every surface the background allowlist
+    // misses therefore renders our near-white text on its own light background
+    // and goes blank. The dashboard header was the visible case.
+    const src = read("src/content/features/theming.js");
+    assert.match(src, /html\.bc-dark, html\.bc-dark body \{ background: [^;]*; color:/,
+      "the global rule should still set both, so bare text on body stays legible");
+    // Page chrome must be covered, and by substring matching rather than exact
+    // class names, because Canvas renames these between releases.
+    assert.match(src, /\[class\*="Dashboard-header" i\]/,
+      "the dashboard header must be darkened or its title is white on white");
+    assert.match(src, /\[class\*="PageHeader" i\]/);
+    assert.match(src, /\[class\*="Toolbar" i\]/);
+  },
+
+  "headings inside darkened page chrome get an explicit colour"() {
+    // They inherit rather than setting their own, so they need to be named.
+    const src = read("src/content/features/theming.js");
+    assert.match(src, /\[class\*="Dashboard-header" i\] h1/);
+  },
+
+  "every rule that darkens a surface also sets the text colour on it"() {
+    // A rule that sets a dark background without a colour leaves whatever
+    // Canvas had there, which may be dark text.
+    const src = read("src/content/features/theming.js");
+    const i = src.indexOf("const staticCSS = `");
+    const css = src.slice(i, src.indexOf("`;", i));
+    // Each declaration block that assigns --bc-d-bg* as a background.
+    for (const m of css.matchAll(/\{([^}]*background:\s*var\(--bc-d-bg[^}]*)\}/g)) {
+      const block = m[1];
+      assert.match(block, /color:\s*var\(--bc-d-text/,
+        "a block sets a dark background without setting the text colour: " + block.trim().slice(0, 90));
+    }
+  },
 };

@@ -84,6 +84,14 @@ function makeElement(tag) {
     },
     nodeType: 1,
   };
+  Object.defineProperty(el, "childElementCount", {
+    get() { return el.children.filter((c) => c && c.nodeType === 1).length; },
+    enumerable: true, configurable: true,
+  });
+  Object.defineProperty(el, "firstElementChild", {
+    get() { return el.children.find((c) => c && c.nodeType === 1) || null; },
+    enumerable: true, configurable: true,
+  });
   Object.defineProperty(el, "id", {
     get() { return el.attributes.id || ""; },
     set(v) { el.attributes.id = String(v); },

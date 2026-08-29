@@ -47,7 +47,9 @@
     html.bc-dark .Sidebar__TodoListContainer h2, html.bc-dark .todo-list-header-container,
     html.bc-dark .events_list_header, html.bc-dark .recent_feedback,
     html.bc-dark .ic-DashboardCard__header_hero, html.bc-dark .header-secondary { color: var(--bc-d-text) !important; }
-    html.bc-dark .ic-app-header { background: var(--bc-d-bg2) !important; }
+    /* The global nav shell got a dark background but no text colour, so anything
+       inside it that Canvas gives an explicit dark colour stayed dark on dark. */
+    html.bc-dark .ic-app-header { background: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important; }
     html.bc-dark .ic-app-header__menu-list-item a { color: var(--bc-d-text) !important; }
     html.bc-dark img[src*="branded"] { filter: brightness(1.1); }
 
@@ -58,6 +60,35 @@
     html.bc-dark .ig-header, html.bc-dark .item-group-condensed {
       background: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important;
       border-color: var(--bc-d-border) !important;
+    }
+
+    /* Background is set from an allowlist, but the colour above is inherited by the
+       whole document. Any Canvas surface the allowlist misses therefore keeps its
+       own LIGHT background and inherits our near-white text, which is why such a
+       surface goes blank rather than merely unstyled. The dashboard header was
+       the most visible case: the "Dashboard" title was white on white.
+
+       These use class-substring matching rather than exact names because Canvas
+       renames these containers between releases, and an exact-match list silently
+       stops covering them. Kept to structural chrome (headers, toolbars, page
+       shells) so it cannot repaint course content. */
+    html.bc-dark [class*="Dashboard-header" i],
+    html.bc-dark [class*="dashboard_header" i],
+    html.bc-dark #dashboard_header_container,
+    html.bc-dark [class*="ic-Dashboard" i][class*="header" i],
+    html.bc-dark [class*="PageHeader" i],
+    html.bc-dark [class*="ic-Action-header" i],
+    html.bc-dark [class*="Toolbar" i],
+    html.bc-dark [class*="page-title" i],
+    html.bc-dark .header-bar-right, html.bc-dark .ic-Dashboard-header__layout,
+    html.bc-dark .ic-Dashboard-header__title, html.bc-dark .ic-Dashboard-header__actions {
+      background: var(--bc-d-bg) !important; color: var(--bc-d-text) !important;
+      border-color: var(--bc-d-border) !important;
+    }
+    /* Headings inside those shells inherit rather than set their own colour. */
+    html.bc-dark [class*="Dashboard-header" i] h1, html.bc-dark [class*="Dashboard-header" i] h2,
+    html.bc-dark #dashboard_header_container h1, html.bc-dark #dashboard_header_container h2 {
+      color: var(--bc-d-text) !important;
     }
     html.bc-dark [style*="background-color: rgb(255, 255, 255)"],
     html.bc-dark [style*="background: rgb(255, 255, 255)"],

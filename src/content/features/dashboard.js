@@ -32,6 +32,18 @@
     return rules.join("\n");
   }
 
+  // The element that actually contains the cards is found at runtime and marked
+  // with data-bc-cardgrid, so the layout rules never have to guess a Canvas class
+  // name. See markCardGrid.
+  //
+  // This previously targeted .ic-DashboardCard__box for the container rules while
+  // ALSO treating that same class as per-card chrome (border-radius, and the dark
+  // background in theming.js). It cannot be both. It is the per-card wrapper, so
+  // `display: grid` landed on every individual card -- each became a one-column
+  // grid containing itself -- and the real container never got a layout at all,
+  // which is why the cards stacked in a single column.
+  const GRID = "[data-bc-cardgrid]";
+
   function layoutCss(d) {
     const size = { s: 200, m: 250, l: 320 }[d.cardSize || "m"] || 250;
     const rad = (d.cardRadius|0) + "px";
@@ -41,16 +53,40 @@
       ${d.hoverLift ? `.ic-DashboardCard { transition: transform .18s ease, box-shadow .18s ease; }
       .ic-DashboardCard:hover { transform: translateY(-2px); box-shadow: var(--bc-shadow-3, 0 10px 30px rgba(0,0,0,.12)); }` : ""}
     `;
-    if (d.layout === "grid") css += `.ic-DashboardCard__box { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 16px !important; }`;
-    if (d.layout === "list") css += `.ic-DashboardCard__box { display: flex !important; flex-direction: column !important; gap: 8px !important; }
+    if (d.layout === "grid") css += `${GRID} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 16px !important; align-items: start !important; }`;
+    if (d.layout === "list") css += `${GRID} { display: flex !important; flex-direction: column !important; gap: 8px !important; }
+      ${GRID} > * { width: 100% !important; }
       .ic-DashboardCard { display: flex !important; flex-direction: row !important; height: 90px !important; }
       .ic-DashboardCard__header { flex: 0 0 120px !important; }
       .ic-DashboardCard__action-container { display: none !important; }`;
-    if (d.layout === "compact") css += `.ic-DashboardCard { max-height: 120px !important; }
+    if (d.layout === "compact") css += `${GRID} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 12px !important; align-items: start !important; }
+      .ic-DashboardCard { max-height: 120px !important; }
       .ic-DashboardCard__header_image { height: 40px !important; }`;
-    if (d.layout === "masonry") css += `.ic-DashboardCard__box { columns: ${Math.max(2, Math.floor(1200/size))} auto !important; column-gap: 14px !important; }
+    if (d.layout === "masonry") css += `${GRID} { columns: ${Math.max(2, Math.floor(1200/size))} auto !important; column-gap: 14px !important; display: block !important; }
       .ic-DashboardCard { break-inside: avoid !important; margin-bottom: 14px !important; }`;
     return css;
+  }
+
+  // Canvas has changed this container's markup more than once, so derive it from
+  // where the cards actually are rather than from a class name. Cards can be
+  // wrapped one level deep, so climb to the nearest ancestor that holds all of
+  // them. data-bc-cardgrid is not in the observer's attributeFilter, so writing
+  // it cannot retrigger applyAll.
+  function markCardGrid(cards) {
+    if (!cards.length) return null;
+    let host = cards[0].parentElement;
+    // If the parent holds only this one card it is a wrapper, not the container.
+    while (host && host !== document.body && host.childElementCount === 1) host = host.parentElement;
+    if (!host || host === document.body || host === document.documentElement) return null;
+    for (const el of document.querySelectorAll("[data-bc-cardgrid]")) {
+      if (el !== host) el.removeAttribute("data-bc-cardgrid");
+    }
+    if (!host.hasAttribute("data-bc-cardgrid")) host.setAttribute("data-bc-cardgrid", "");
+    return host;
+  }
+
+  function unmarkCardGrid() {
+    for (const el of document.querySelectorAll("[data-bc-cardgrid]")) el.removeAttribute("data-bc-cardgrid");
   }
 
   function overlayCard(card, spec) {
@@ -376,7 +412,8 @@
     // course cards
     if (d.autoHideConcluded) maybeFetchConcluded(true);
     const cards = document.querySelectorAll(".ic-DashboardCard");
-    if (!cards.length) return;
+    if (!cards.length) { unmarkCardGrid(); return; }
+    markCardGrid(Array.from(cards));
 
     // Build id order + reordering
     const cardsById = new Map();
@@ -430,6 +467,7 @@
     nodes: ["bc-inline-grade", "bc-progress", "bc-badges", "bc-card-spark", "bc-course-search", "bc-gpa-card"],
     apply,
     unmount() {
+      unmarkCardGrid();
       scoresMap.clear();
       plannerCountByCourse.clear();
       dueSoonByCourse.clear();
