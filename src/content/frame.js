@@ -62,11 +62,21 @@
     if (el) el.remove();
   }
 
+  // Only armed while the mode actually needs a clock. A SpeedGrader page can host
+  // several same-origin frames and each one ran this timer for the life of the
+  // tab regardless of the mode.
+  let scheduleTimer = null;
+  function syncScheduleTimer() {
+    if (lastMode === "scheduled" && !scheduleTimer) scheduleTimer = setInterval(load, 60000);
+    else if (lastMode !== "scheduled" && scheduleTimer) { clearInterval(scheduleTimer); scheduleTimer = null; }
+  }
+
   function apply(settings) {
     try {
       const doc = document.documentElement;
       if (!doc) return;
       lastMode = (settings && settings.theming && settings.theming.darkMode) || "";
+      syncScheduleTimer();
       const dark = !!settings && settings.enabled !== false && BC.isDarkActive(settings);
       doc.classList.toggle("bc-dark", dark);
       if (!dark) { removeStyle(); return; }
@@ -90,5 +100,4 @@
   try {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", load);
   } catch (_) {}
-  setInterval(() => { if (lastMode === "scheduled") load(); }, 60000);
 })();

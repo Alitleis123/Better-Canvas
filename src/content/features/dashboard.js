@@ -358,6 +358,21 @@
       .bc-gpa-card { margin-bottom: var(--bc-space-5, 12px); }
     `);
 
+    // Load whatever any ENABLED consumer needs, not just the one feature that
+    // happens to share a name with the loader. The GPA card reads scoresMap and
+    // the due badge reads dueSoonByCourse, so gating those loads on
+    // showInlineGrade / showProgressBar meant turning on only the GPA card or
+    // only the badge left its data source empty forever and the feature simply
+    // never appeared.
+    //
+    // These run BEFORE the card check: none of them need a card to exist. The
+    // GPA card mounts into the sidebar, so gating it on cards meant it never
+    // appeared on a dashboard rendering no cards at all.
+    if (d.showInlineGrade || (d.widgets && d.widgets.gpa)) ensureLoaded("scores", loadInlineGrades);
+    if (d.showProgressBar || d.showBadges) ensureLoaded("planner", loadPlannerCounts);
+    if (d.widgets && d.widgets.gpa) ensureGpaCard(settings);
+    else BC.injector.removeNode("bc-gpa-card");
+
     // course cards
     if (d.autoHideConcluded) maybeFetchConcluded(true);
     const cards = document.querySelectorAll(".ic-DashboardCard");
@@ -383,8 +398,6 @@
 
     if (d.courseSearch) ensureCourseSearch();
     else BC.injector.removeNode("bc-course-search");
-    if (d.widgets && d.widgets.gpa) ensureGpaCard(settings);
-    else BC.injector.removeNode("bc-gpa-card");
 
     // Apply per-card overrides
     for (const [id, card] of cardsById) {
@@ -407,14 +420,6 @@
     const container = document.getElementById("DashboardCard_Container") || document.querySelector(".ic-DashboardCard__box");
     if (container) container.style.display = ""; // let CSS layoutCss govern
 
-    // Load whatever any ENABLED consumer needs, not just the one feature that
-    // happens to share a name with the loader. The GPA card reads scoresMap and
-    // the due badge reads dueSoonByCourse, so gating those loads on
-    // showInlineGrade / showProgressBar meant turning on only the GPA card or
-    // only the badge left its data source empty forever and the feature simply
-    // never appeared.
-    if (d.showInlineGrade || (d.widgets && d.widgets.gpa)) ensureLoaded("scores", loadInlineGrades);
-    if (d.showProgressBar || d.showBadges) ensureLoaded("planner", loadPlannerCounts);
   }
 
   BC.registry.register({

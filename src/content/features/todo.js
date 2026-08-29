@@ -441,7 +441,7 @@
       </div>` : ""}
       <div class="bc-todo-tools">
         ${t.streaks && t.streaks.enabled ? `<button type="button" class="bc-todo-streak" title="Daily task streak">🔥 <span data-streak>0</span> day streak</button>` : ""}
-        ${t.pomodoro && t.pomodoro.enabled ? `<button class="bc-todo-pom" data-pom>▶ Pomodoro</button>` : ""}
+        ${t.pomodoro && t.pomodoro.enabled ? `<button type="button" class="bc-todo-pom" data-pom aria-pressed="false"></button>` : ""}
       </div>
     `;
 
@@ -517,8 +517,25 @@
     }
 
     // Pomodoro launcher
+    // startPomodoro toggles, so the label has to say which way it will go. It
+    // read "Pomodoro" in both states, so pressing it during a session looked
+    // like a no-op that had actually just stopped the timer.
     const pom = container.querySelector("[data-pom]");
-    if (pom) pom.addEventListener("click", () => startPomodoro(settings));
+    if (pom) {
+      const paintPom = () => {
+        const p = (BC.storage.local || {}).pomodoro;
+        const running = !!(p && p.phase);
+        const label = running ? "\u25a0 Stop pomodoro" : "\u25b6 Pomodoro";
+        if (pom.textContent !== label) pom.textContent = label;
+        pom.setAttribute("aria-pressed", running ? "true" : "false");
+      };
+      paintPom();
+      pom.addEventListener("click", () => {
+        startPomodoro(settings);
+        // The store write is async; repaint once it has landed.
+        setTimeout(paintPom, 0);
+      });
+    }
 
     // New task
     const newInp = container.querySelector(".bc-todo-new input");
