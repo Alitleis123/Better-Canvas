@@ -23,7 +23,14 @@
     else if (cfg.mode === "image" && BC.util.isSafeUrl(cfg.image)) {
       layer = `background: url("${BC.util.cssSafe(cfg.image)}") center/cover no-repeat;`;
     } else if (cfg.mode === "gradient") {
-      layer = `background: linear-gradient(${cfg.gradient.angle|0}deg, ${BC.util.cssSafe(cfg.gradient.from)} 0%, ${BC.util.cssSafe(cfg.gradient.to)} 100%);`;
+      // An imported theme or hand-edited settings blob can set mode:"gradient"
+      // with no gradient object; reading .angle off undefined threw inside
+      // apply(), which BC.util.guard swallows, so the whole cosmetics feature
+      // silently stopped applying with no visible cause.
+      const g = cfg.gradient || {};
+      const from = BC.color.isHex(g.from) ? g.from : "#1e3a8a";
+      const to = BC.color.isHex(g.to) ? g.to : "#0b1220";
+      layer = `background: linear-gradient(${g.angle | 0}deg, ${from} 0%, ${to} 100%);`;
     } else if (cfg.mode === "pattern") {
       layer = `background: ${BC.util.cssSafe(cfg.color || "#f6f7fb")}; ${PATTERNS[cfg.pattern || "none"] || ""}`;
     }

@@ -194,7 +194,8 @@
       }, true);
     });
 
-    pruneOld();
+    // Once per page visit, not once per apply tick (which is several a second).
+    bag.once("prune", pruneOld);
     const draft = BC.storage.local && BC.storage.local.quizDrafts && BC.storage.local.quizDrafts[draftKey()];
     if (draft && draft.answers && diffCount(draft) > 0) ensureBanner(draft);
   }

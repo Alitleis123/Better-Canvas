@@ -29,17 +29,25 @@
       transition: width var(--bc-dur-2, 150ms) var(--bc-ease-out, ease);
     }
 
+    /* Anchored bottom-LEFT, stacked above the quiz-draft dot. These used to sit
+       bottom-right, where the toast stack and the Pomodoro dock also live, so a
+       toast landed on top of them. Nothing else competes for this corner. */
     .bc-copyurl-btn, .bc-print-btn {
-      position: fixed; right: 16px; z-index: var(--bc-z-dock, 2147480000);
+      position: fixed; left: 16px; z-index: var(--bc-z-dock, 2147480000);
       background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); border: 0;
       padding: 6px 10px; border-radius: var(--bc-radius-pill, 999px); cursor: pointer;
       font-family: var(--bc-font-sans); font-size: var(--bc-text-xs, 12px);
+      box-shadow: var(--bc-shadow-2, 0 2px 8px rgba(0,0,0,.15));
     }
     .bc-copyurl-btn:focus-visible, .bc-print-btn:focus-visible {
       outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px;
     }
-    .bc-copyurl-btn { bottom: 66px; }
-    .bc-print-btn { bottom: 100px; }
+    .bc-copyurl-btn { bottom: 52px; }
+    .bc-print-btn { bottom: 88px; }
+    /* Printing the page should not print our own floating chrome. */
+    @media print {
+      .bc-copyurl-btn, .bc-print-btn, .bc-ruler, .bc-progress-bar { display: none !important; }
+    }
 
     /* Deliberately NOT theme surfaces — the paper metaphor is the point — but it
        needs a dark variant, which it never had: it was a glaring white rectangle
@@ -292,6 +300,32 @@
     }
   }
 
+  // apply() runs several times a second. Each of the passes below walks the DOM
+  // (querySelectorAll over every textarea, reconciling every note), so running
+  // them unconditionally was a continuous background scan on every Canvas page
+  // for work that only matters when something actually changed.
+  //
+  // The notes pass is keyed on the stored notes; the textarea passes are keyed on
+  // how many candidates exist, which is what changes when Canvas mounts a new
+  // editor. Both re-run for free after an SPA navigation because the keys reset.
+  let notesSig = null;
+  let textareaCount = -1;
+
+  function syncNotesIfChanged() {
+    const sig = JSON.stringify(loadNotes());
+    if (sig === notesSig && document.querySelector('[data-bc-node="bc-note"]')) return;
+    notesSig = sig;
+    syncNotes();
+  }
+
+  function scanTextareas(p) {
+    const n = document.querySelectorAll("textarea, [contenteditable=true]").length;
+    if (n === textareaCount) return;
+    textareaCount = n;
+    if (p.autoSaveDrafts) installDrafts();
+    if (p.wordCount) installWordCount();
+  }
+
   function apply(settings) {
     const p = settings.productivity || {};
     applyFocus(p.focusMode);
@@ -301,9 +335,11 @@
     p.printFriendly ? installPrintButton() : uninstallPrintButton();
     BC.injector.setStyle("bc-productivity-css", CSS);
 
-    if (p.stickyNotes && BC.storage.loadLocal) BC.storage.loadLocal().then(syncNotes);
-    if (p.autoSaveDrafts && BC.storage.loadLocal) BC.storage.loadLocal().then(() => installDrafts());
-    if (p.wordCount) installWordCount();
+    if (p.stickyNotes && BC.storage.loadLocal) BC.storage.loadLocal().then(syncNotesIfChanged);
+    if (p.autoSaveDrafts || p.wordCount) {
+      if (BC.storage.loadLocal) BC.storage.loadLocal().then(() => scanTextareas(p));
+      else scanTextareas(p);
+    }
   }
 
   BC.registry.register({
@@ -318,6 +354,8 @@
       uninstallRuler();
       uninstallProgress();
       dragEl = null;
+      notesSig = null;
+      textareaCount = -1;
       for (const ta of document.querySelectorAll("textarea, [contenteditable=true]")) {
         delete ta._bcDraft;
         delete ta._bcWc;

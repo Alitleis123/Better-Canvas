@@ -356,6 +356,12 @@
   --bc-z-modal: 2147482500;
   --bc-z-palette: 2147483000;
   --bc-z-toast: 2147483200;
+
+  /* Bottom-right corner budget. The toast stack, the Pomodoro dock and the
+     page-utility buttons all anchor here and used to overlap each other.
+     Whichever persistent dock is mounted raises this, and the toast stack
+     starts above it. */
+  --bc-dock-bottom: 0px;
 }
 
 /* A gentler curve than the legacy --bc-density multiplier: at 0.6 a 4px gap

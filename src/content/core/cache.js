@@ -8,12 +8,15 @@
 
   BC.cache = {
     async wrap(key, ttlMs, fetcher) {
-      const now = Date.now();
       const hit = store.get(key);
-      if (hit && hit.expires > now) return hit.value;
+      if (hit && hit.expires > Date.now()) return hit.value;
       if (inflight.has(key)) return inflight.get(key);
       const p = Promise.resolve().then(fetcher).then((val) => {
-        store.set(key, { value: val, expires: now + ttlMs });
+        // Expiry runs from when the value LANDED, not from when it was requested.
+        // Anchoring on a pre-fetch timestamp charged the request's own latency
+        // against the entry's lifetime, so on a slow Canvas a 60s cache could
+        // expire almost immediately and every consumer refetched on the next tick.
+        store.set(key, { value: val, expires: Date.now() + ttlMs });
         inflight.delete(key);
         return val;
       }).catch((e) => {

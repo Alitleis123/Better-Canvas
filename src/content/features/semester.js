@@ -65,10 +65,18 @@
         else host.appendChild(div);
         return div;
       });
-      node.querySelector(".bc-semester-label").textContent =
-        (term.name || "This term") + " · Week " + week + " of " + weeks;
-      node.querySelector(".bc-semester-fill").style.width = pct + "%";
-      node.querySelector(".bc-semester-days").textContent = daysLeft + " day" + (daysLeft === 1 ? "" : "s") + " left · " + pct + "%";
+      // render() runs on every apply tick; rewriting identical text still swaps
+      // the child text node, which the observer reads as a change and schedules
+      // yet another applyAll.
+      const set = (sel, text) => {
+        const el = node.querySelector(sel);
+        if (el && el.textContent !== text) el.textContent = text;
+      };
+      set(".bc-semester-label", (term.name || "This term") + " · Week " + week + " of " + weeks);
+      set(".bc-semester-days", daysLeft + " day" + (daysLeft === 1 ? "" : "s") + " left · " + pct + "%");
+      const fill = node.querySelector(".bc-semester-fill");
+      const w = pct + "%";
+      if (fill && fill.style.width !== w) fill.style.width = w;
     }).catch((e) => BC.diag.push("semester", e));
   }
 

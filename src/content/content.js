@@ -126,9 +126,13 @@
     BC.alarms.clearAll();
     if (BC.notifications) BC.util.guard(() => BC.notifications.sendBadge(0), "badge clear");
 
-    for (const n of ["bc-toast-host", "bc-toast-host-alert", "bc-live-polite", "bc-live-assertive"]) {
+    // Core surfaces are not registry features, so styleKeys()/nodeKeys() above
+    // don't reach them and their stylesheets outlived a disable.
+    if (BC.palette) BC.util.guard(() => BC.palette.close(), "palette close");
+    for (const n of ["bc-toast-host", "bc-toast-host-alert", "bc-live-polite", "bc-live-assertive", "bc-cp"]) {
       BC.injector.removeNode(n);
     }
+    for (const k of ["bc-toast-css", "bc-cp-css"]) BC.injector.removeStyle(k);
 
     const doc = document.documentElement;
     doc.classList.remove("bc-dark");

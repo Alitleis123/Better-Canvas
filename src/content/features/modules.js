@@ -22,13 +22,18 @@
     .bc-mod-summary .bc-mod-track { max-width: 260px; }
   `;
 
+  // Read before write throughout: render() runs on every apply tick, and
+  // reassigning an identical style or textContent still invalidates style and
+  // still registers as a DOM mutation the observer turns into another applyAll.
   function setBar(bar, done, total) {
     const pct = total ? Math.round((done / total) * 100) : 0;
     const fill = bar.querySelector(".bc-mod-fill");
-    fill.style.width = pct + "%";
-    fill.classList.toggle("done", pct >= 100);
+    const w = pct + "%";
+    if (fill.style.width !== w) fill.style.width = w;
+    if (fill.classList.contains("done") !== (pct >= 100)) fill.classList.toggle("done", pct >= 100);
     const label = bar.querySelector(".bc-mod-label");
-    if (label) label.textContent = done + "/" + total + " · " + pct + "%";
+    const text = done + "/" + total + " · " + pct + "%";
+    if (label && label.textContent !== text) label.textContent = text;
     return pct;
   }
 
@@ -65,10 +70,13 @@
         return div;
       });
       const pct = total ? Math.round((done / total) * 100) : 0;
-      summary.querySelector(".bc-mod-sum").textContent = "Course progress: " + done + "/" + total + " requirements (" + pct + "%)";
+      const sumEl = summary.querySelector(".bc-mod-sum");
+      const sumText = "Course progress: " + done + "/" + total + " requirements (" + pct + "%)";
+      if (sumEl.textContent !== sumText) sumEl.textContent = sumText;
       const fill = summary.querySelector(".bc-mod-fill");
-      fill.style.width = pct + "%";
-      fill.classList.toggle("done", pct >= 100);
+      const w = pct + "%";
+      if (fill.style.width !== w) fill.style.width = w;
+      if (fill.classList.contains("done") !== (pct >= 100)) fill.classList.toggle("done", pct >= 100);
     }).catch((e) => BC.diag.push("modules", e));
   }
 

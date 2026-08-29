@@ -78,7 +78,9 @@
   async function renderMini(mount) {
     const today = new Date();
     const first = new Date(today.getFullYear(), today.getMonth(), 1);
-    const last  = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    // End of the last day, not its midnight. Passing 00:00 excluded everything
+    // due on the final day of the month, so that cell never got its due dot.
+    const last  = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
     let items = [];
     try {
       items = await BC.api.plannerItems(first.toISOString(), last.toISOString());

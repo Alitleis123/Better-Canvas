@@ -212,17 +212,6 @@
     return out;
   }
 
-  function courseColorMap() {
-    const map = new Map();
-    document.querySelectorAll(".ic-DashboardCard").forEach((card) => {
-      const link = card.querySelector("a.ic-DashboardCard__link");
-      const cid = link && BC.util.courseIdFromHref(link.getAttribute("href"));
-      const bg = link ? (getComputedStyle(link).background || "").match(/rgb\([^)]+\)/) : null;
-      if (cid && bg) map.set(cid, bg[0]);
-    });
-    return map;
-  }
-
   function ringSVG(pct, accent) {
     const R = 20, C = 2 * Math.PI * R;
     const off = C - Math.round((pct / 100) * C);
@@ -718,7 +707,9 @@
     });
   }
 
-  const TB_START = 7, TB_END = 22, TB_ROW = 34; // 7am–10pm grid, px per hour
+  // TB_END is INCLUSIVE: the loop below is `h <= TB_END`, so the 10pm row the
+  // grid advertises actually renders. It was exclusive, silently dropping it.
+  const TB_START = 7, TB_END = 22, TB_ROW = 34; // 7am to 10pm grid, px per hour
 
   function renderTimeBlock(list, items, settings, container) {
     const winStart = new Date(state.windowStart || Date.now());
@@ -730,7 +721,7 @@
 
     const unscheduled = items.filter((it) => !isComplete(it) && !(sched[keyForItem(it)] && sched[keyForItem(it)].ymd === ymd));
     let hours = "";
-    for (let h = TB_START; h < TB_END; h++) {
+    for (let h = TB_START; h <= TB_END; h++) {
       const label = (h % 12 === 0 ? 12 : h % 12) + (h < 12 ? "a" : "p");
       hours += `<div class="bc-tb-hour" data-h="${h}"><em>${label}</em></div>`;
     }
@@ -913,13 +904,27 @@
   // session survives reloads and navigation. Phases: work → short/long break.
   const PHASE_LABEL = { work: "Work", short: "Short break", long: "Long break" };
 
+  // One shared AudioContext, reused. Constructing a new one per beep leaked them:
+  // browsers cap a document at roughly six, so after six phase transitions the
+  // constructor threw and the timer went permanently silent for the rest of the
+  // session with no error surfaced anywhere.
+  let audioCtx = null;
   function pomBeep() {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.connect(g); g.connect(ctx.destination);
-      o.frequency.value = 880; g.gain.value = 0.08;
-      o.start(); o.stop(ctx.currentTime + 0.3);
+      const Ctor = window.AudioContext || window.webkitAudioContext;
+      if (!Ctor) return;
+      if (!audioCtx) audioCtx = new Ctor();
+      // A context created before any user gesture starts suspended.
+      if (audioCtx.state === "suspended" && audioCtx.resume) audioCtx.resume();
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      o.frequency.value = 880;
+      // Ramp out instead of cutting the oscillator dead, which clicks.
+      g.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.3);
+      o.start();
+      o.stop(audioCtx.currentTime + 0.3);
+      o.onended = () => { try { o.disconnect(); g.disconnect(); } catch (_) {} };
     } catch (_) {}
   }
 
@@ -990,13 +995,29 @@
     if (pomTimer) { clearInterval(pomTimer); pomTimer = null; }
   }
 
+  // The dock and the toast stack both anchor bottom-right. Publishing the dock's
+  // footprint lets the toast host start above it instead of landing on top of it.
+  const POM_DOCK_CLEARANCE = "52px";
+  function setDockClearance(on) {
+    const root = document.documentElement;
+    if (on) {
+      if (root.style.getPropertyValue("--bc-dock-bottom") !== POM_DOCK_CLEARANCE) {
+        root.style.setProperty("--bc-dock-bottom", POM_DOCK_CLEARANCE);
+      }
+    } else if (root.style.getPropertyValue("--bc-dock-bottom")) {
+      root.style.removeProperty("--bc-dock-bottom");
+    }
+  }
+
   function ensurePomodoroDock(settings) {
     const p = (BC.storage.local || {}).pomodoro;
     if (!p || !p.phase || !settings || !settings.todo.pomodoro || settings.todo.pomodoro.enabled === false) {
       BC.injector.removeNode("bc-pom-dock");
+      setDockClearance(false);
       stopPomTick();
       return;
     }
+    setDockClearance(true);
     BC.injector.setStyle("bc-pom-css", POM_CSS);
     const dock = BC.injector.ensureNode("bc-pom-dock", document.body, () => {
       const d = document.createElement("div");
@@ -1082,6 +1103,7 @@
       // The bag clear already killed the interval; null the handle so a re-enable
       // starts a fresh one instead of assuming one is still live.
       pomTimer = null;
+      setDockClearance(false);
       state.lastFetchKey = "";
       state.fetchedAt = 0;
       state.items = [];

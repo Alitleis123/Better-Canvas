@@ -4,6 +4,34 @@
   const BC = (globalThis.BC = globalThis.BC || {});
   BC.features = BC.features || {};
 
+  // Rebuilding a list of DOM nodes several times a second is pure waste, and it
+  // fights the user: any focus or text selection inside a custom link was
+  // destroyed on the next tick. Keyed on the links' content so the rebuild only
+  // happens when the links actually change.
+  function syncCustomLinks(nodeId, anchorList, links, style) {
+    const sig = JSON.stringify(links || []);
+    let list = document.getElementById(nodeId);
+    if (list && list.dataset.bcSig === sig) return;
+    if (list) list.remove();
+    if (!(links || []).length) return;
+    list = document.createElement("ul");
+    list.id = nodeId;
+    list.setAttribute("data-bc-node", nodeId);
+    list.dataset.bcSig = sig;
+    list.style.listStyle = "none"; list.style.padding = "0"; list.style.margin = "8px 0 0";
+    for (const l of links) {
+      if (!BC.util.isSafeHttpUrl(l.url)) continue;
+      const li = document.createElement("li");
+      const a = document.createElement("a");
+      a.href = l.url; a.textContent = l.label || l.url;
+      if (l.newTab) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
+      a.style.cssText = style;
+      li.appendChild(a);
+      list.appendChild(li);
+    }
+    anchorList.parentNode.insertBefore(list, anchorList.nextSibling);
+  }
+
   function applyGlobalNav(nav) {
     const list = document.querySelector("#menu");
     if (!list) return;
@@ -23,26 +51,8 @@
     }
     list.style.display = "flex"; list.style.flexDirection = "column";
 
-    // Custom links
-    let customList = document.getElementById("bc-nav-custom");
-    if (customList) customList.remove();
-    if ((nav.customLinks || []).length) {
-      customList = document.createElement("ul");
-      customList.id = "bc-nav-custom";
-      customList.setAttribute("data-bc-node", "bc-nav-custom");
-      customList.style.listStyle = "none"; customList.style.padding = "0"; customList.style.margin = "8px 0 0";
-      for (const l of nav.customLinks) {
-        if (!BC.util.isSafeHttpUrl(l.url)) continue;
-        const li = document.createElement("li");
-        const a = document.createElement("a");
-        a.href = l.url; a.textContent = l.label || l.url;
-        if (l.newTab) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
-        a.style.cssText = "display:flex; align-items:center; gap:8px; padding:8px 10px; color:inherit; text-decoration:none;";
-        li.appendChild(a);
-        customList.appendChild(li);
-      }
-      list.parentNode.insertBefore(customList, list.nextSibling);
-    }
+    syncCustomLinks("bc-nav-custom", list, nav.customLinks,
+      "display:flex; align-items:center; gap:8px; padding:8px 10px; color:inherit; text-decoration:none;");
   }
 
   function applyCourseNav(nav) {
@@ -58,26 +68,8 @@
     }
     list.style.display = "flex"; list.style.flexDirection = "column";
 
-    // Course custom links
-    let existing = document.getElementById("bc-course-custom");
-    if (existing) existing.remove();
-    if ((nav.customLinks || []).length) {
-      existing = document.createElement("ul");
-      existing.id = "bc-course-custom";
-      existing.setAttribute("data-bc-node", "bc-course-custom");
-      existing.style.listStyle = "none"; existing.style.padding = "0"; existing.style.margin = "8px 0 0";
-      for (const l of nav.customLinks) {
-        if (!BC.util.isSafeHttpUrl(l.url)) continue;
-        const li = document.createElement("li");
-        const a = document.createElement("a");
-        a.href = l.url; a.textContent = l.label || l.url;
-        if (l.newTab) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
-        a.style.cssText = "display:block; padding:6px 10px; color:inherit; text-decoration:none; border-radius:6px;";
-        li.appendChild(a);
-        existing.appendChild(li);
-      }
-      list.parentNode.insertBefore(existing, list.nextSibling);
-    }
+    syncCustomLinks("bc-course-custom", list, nav.customLinks,
+      "display:block; padding:6px 10px; color:inherit; text-decoration:none; border-radius:6px;");
   }
 
   function applyBreadcrumbs(mode) {
@@ -87,42 +79,9 @@
     BC.injector.setStyle("bc-breadcrumbs", css);
   }
 
-  function applyCourseTabs(settings) {
-    const enabled = settings.navigation && settings.navigation.courseTabs;
-    if (!enabled) {
-      BC.injector.setStyle("bc-course-tabs", "");
-      BC.injector.removeNode("bc-course-tabs");
-      return;
-    }
-    // Render pinned quick-switch bar at the top of the content area on course pages.
-    const cards = (BC.cache && BC.cache.peek("GET " + location.origin + "/api/v1/dashboard/dashboard_cards")) || null;
-    if (!cards) return; // will populate after dashboard cards load
-    const target = document.querySelector("#main");
-    if (!target) return;
-    const bar = BC.injector.ensureNode("bc-course-tabs", target, () => {
-      const el = document.createElement("div");
-      el.className = "bc-course-tabs";
-      target.prepend(el);
-      return el;
-    });
-    bar.innerHTML = "";
-    const pinned = new Set((settings.dashboard.pinned || []).map(String));
-    const items = cards.filter((c) => pinned.has(String(c.id)) || pinned.size === 0).slice(0, 12);
-    const cur = BC.util.courseIdFromHref(location.pathname);
-    for (const c of items) {
-      const a = document.createElement("a");
-      a.className = "bc-ct-tab" + (String(c.id) === cur ? " active" : "");
-      a.href = "/courses/" + c.id;
-      a.title = c.shortName || c.originalName;
-      a.textContent = c.shortName || c.originalName || ("Course " + c.id);
-      const tint = c.color || "#0374b5";
-      a.style.setProperty("--tint", tint);
-      // Course colours are arbitrary and user-chosen, so the label colour has to be
-      // computed per course. Forcing white made light course colours unreadable.
-      a.style.setProperty("--tint-fg", BC.color.contrastText(tint));
-      bar.appendChild(a);
-    }
-    BC.injector.setStyle("bc-course-tabs", `
+  // Hoisted: this multi-line template was rebuilt on every apply() only for
+  // setStyle to compare it against an identical string and discard it.
+  const COURSE_TABS_CSS = `
       .bc-course-tabs {
         display: flex; gap: var(--bc-space-2, 6px); overflow-x: auto;
         padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px); background: transparent;
@@ -137,7 +96,49 @@
       }
       .bc-ct-tab.active { background: var(--tint); color: var(--tint-fg, var(--bc-accent-contrast, #fff)); }
       .bc-ct-tab:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px; }
-    `);
+    `;
+
+  function applyCourseTabs(settings) {
+    const enabled = settings.navigation && settings.navigation.courseTabs;
+    if (!enabled) {
+      BC.injector.setStyle("bc-course-tabs", "");
+      BC.injector.removeNode("bc-course-tabs");
+      return;
+    }
+    // Render pinned quick-switch bar at the top of the content area on course pages.
+    const cards = (BC.cache && BC.cache.peek("GET " + location.origin + "/api/v1/dashboard/dashboard_cards")) || null;
+    if (!cards) return; // will populate after dashboard cards load
+    const target = document.querySelector("#main");
+    if (!target) return;
+    BC.injector.setStyle("bc-course-tabs", COURSE_TABS_CSS);
+    const bar = BC.injector.ensureNode("bc-course-tabs", target, () => {
+      const el = document.createElement("div");
+      el.className = "bc-course-tabs";
+      target.prepend(el);
+      return el;
+    });
+    const pinned = new Set((settings.dashboard.pinned || []).map(String));
+    const items = cards.filter((c) => pinned.has(String(c.id)) || pinned.size === 0).slice(0, 12);
+    const cur = BC.util.courseIdFromHref(location.pathname);
+    // Guarded: this tore down and rebuilt every tab several times a second, which
+    // also cancelled any in-flight hover or focus on a tab.
+    const sig = cur + "|" + items.map((c) => c.id + ":" + (c.color || "") + ":" + (c.shortName || c.originalName || "")).join(",");
+    if (bar.dataset.bcSig === sig) return;
+    bar.dataset.bcSig = sig;
+    bar.innerHTML = "";
+    for (const c of items) {
+      const a = document.createElement("a");
+      a.className = "bc-ct-tab" + (String(c.id) === cur ? " active" : "");
+      a.href = "/courses/" + c.id;
+      a.title = c.shortName || c.originalName;
+      a.textContent = c.shortName || c.originalName || ("Course " + c.id);
+      const tint = c.color || "#0374b5";
+      a.style.setProperty("--tint", tint);
+      // Course colours are arbitrary and user-chosen, so the label colour has to be
+      // computed per course. Forcing white made light course colours unreadable.
+      a.style.setProperty("--tint-fg", BC.color.contrastText(tint));
+      bar.appendChild(a);
+    }
   }
 
   function apply(settings) {
