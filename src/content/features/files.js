@@ -14,8 +14,12 @@
     }
     .bc-file a { color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bc-file-ic { text-align: center; opacity: .7; }
-    .bc-file-star { cursor: pointer; opacity: .6; }
+    .bc-file-star {
+      cursor: pointer; opacity: .6; background: none; border: 0; padding: 0;
+      color: inherit; font: inherit; line-height: 1;
+    }
     .bc-file-star.on { opacity: 1; }
+    .bc-file-star:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px; }
     .bc-files-list .bc-empty, .bc-files-list .bc-error, .bc-files-list .bc-sk { grid-column: 1 / -1; }
   `;
 
@@ -116,18 +120,22 @@
         <div class="bc-file">
           <span class="bc-file-ic">${iconFor(f)}</span>
           <a href="${BC.util.escapeHtml(f.url || f.html_url || "#")}" target="_blank" rel="noopener" title="${BC.util.escapeHtml(f.courseName || "")}">${BC.util.escapeHtml(f.display_name || "")}</a>
-          <span class="bc-file-star ${stars.has(String(f.id)) ? "on" : ""}" data-id="${BC.util.escapeHtml(f.id)}" title="Star" role="button" tabindex="0">★</span>
+          <button type="button" class="bc-file-star ${stars.has(String(f.id)) ? "on" : ""}" data-id="${BC.util.escapeHtml(f.id)}" aria-pressed="${stars.has(String(f.id)) ? "true" : "false"}" aria-label="Star ${BC.util.escapeHtml(f.display_name || "file")}">★</button>
         </div>
       `).join("");
     }
 
     // Optimistic star toggle, delegated once (list element survives redraws).
+    // A real <button> rather than a span with role="button": the span was
+    // focusable but Enter and Space did nothing, so the control was unreachable
+    // by keyboard.
     list.addEventListener("click", (e) => {
       const star = e.target.closest(".bc-file-star");
       if (!star) return;
-      star.classList.toggle("on");
+      const on = star.classList.toggle("on");
+      star.setAttribute("aria-pressed", on ? "true" : "false");
       const id = star.getAttribute("data-id");
-      if (star.classList.contains("on")) stars.add(String(id)); else stars.delete(String(id));
+      if (on) stars.add(String(id)); else stars.delete(String(id));
       BC.storage.update((d) => {
         const arr = new Set(d.files.starred || []);
         if (arr.has(id)) arr.delete(id); else arr.add(id);

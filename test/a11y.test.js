@@ -1,0 +1,197 @@
+"use strict";
+const fs = require("fs");
+const path = require("path");
+const { createSandbox, loadCore, load, ROOT } = require("./harness");
+
+const BC = loadCore(createSandbox());
+const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
+
+function jsFiles(dir, out = []) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) jsFiles(p, out);
+    else if (e.name.endsWith(".js")) out.push(p);
+  }
+  return out;
+}
+
+module.exports = {
+  "nothing fakes a button with a div or span"() {
+    // role="button" on a non-button is focusable but does not activate on Enter
+    // or Space unless the handler is written by hand, which none of ours were.
+    for (const abs of jsFiles(path.join(ROOT, "src"))) {
+      const rel = path.relative(ROOT, abs).split(path.sep).join("/");
+      const src = fs.readFileSync(abs, "utf8");
+      for (const [i, line] of src.split("\n").entries()) {
+        if (!/role\s*=\s*["']button["']|"role",\s*"button"/.test(line)) continue;
+        // A real <button> is fine, and so is an <a> that has been given full
+        // button semantics (the drawer trigger adds a Space handler explicitly).
+        if (/<button|createElement\("button"|el\("button"/.test(line)) continue;
+        if (/<a\b/.test(line)) continue;
+        if (rel.endsWith("settings-panel.js") && /^\s*a\.setAttribute/.test(line)
+            && src.includes('e.key === " " || e.key === "Spacebar"')) continue;
+        assert.ok(false, `${rel}:${i + 1} gives role="button" to a non-button: ${line.trim().slice(0, 110)}`);
+      }
+    }
+  },
+
+  "the file star is a real button with a pressed state"() {
+    const src = read("src/content/features/files.js");
+    assert.match(src, /<button type="button" class="bc-file-star/);
+    assert.match(src, /aria-pressed=/);
+    assert.match(src, /aria-label="Star /);
+  },
+
+  "the planner detail popover has dialog semantics"() {
+    const src = read("src/content/features/todo.js");
+    assert.match(src, /pop\.setAttribute\("role", "dialog"\)/);
+    assert.match(src, /pop\.setAttribute\("aria-label", "Task details"\)/);
+  },
+
+  "the planner popover can be dismissed and restores focus"() {
+    const src = read("src/content/features/todo.js");
+    assert.match(src, /document\.addEventListener\("mousedown", onDocDown/,
+      "a popover with no outside-click dismiss traps the user in it");
+    assert.match(src, /anchor\.focus\(\)/, "focus must return to the opener, not <body>");
+  },
+
+  "every modal surface traps focus and restores it on close"() {
+    for (const [file, what] of [
+      ["src/content/core/commandPalette.js", "command palette"],
+      ["src/content/features/settings-panel.js", "settings drawer"],
+    ]) {
+      const src = read(file);
+      assert.match(src, /focusTrap\(/, `${what} does not trap focus`);
+    }
+    // The trap itself restores focus on release.
+    assert.match(read("src/content/core/ui.js"), /previous\.focus\(\)/);
+  },
+
+  "the focus trap reads activeElement through the shadow root"() {
+    // From outside a shadow root document.activeElement reports the HOST, so a
+    // naive trap never matches and lets focus escape the drawer immediately.
+    assert.match(read("src/content/core/ui.js"), /container\.activeElement \|\| document\.activeElement/);
+  },
+
+  "modal surfaces are labelled and marked modal"() {
+    assert.match(read("src/content/core/commandPalette.js"), /aria-modal/);
+    assert.match(read("src/content/core/commandPalette.js"), /aria-label", "Command palette/);
+    assert.match(read("src/content/features/settings-panel.js"), /aria-modal/);
+    assert.match(read("src/content/features/settings-panel.js"), /aria-label", "Better Canvas settings/);
+  },
+
+  "the command palette exposes listbox semantics"() {
+    const src = read("src/content/core/commandPalette.js");
+    for (const attr of ["combobox", "listbox", "option", "aria-activedescendant", "aria-selected"]) {
+      assert.match(src, new RegExp(attr), `palette is missing ${attr}`);
+    }
+  },
+
+  "toasts are announced, with urgency matching the level"() {
+    const src = read("src/content/core/toast.js");
+    assert.match(src, /aria-live/);
+    assert.match(src, /level === "warn" \|\| level === "error"/,
+      "warnings and errors must use an assertive region, info and success a polite one");
+    assert.match(src, /"assertive" : "polite"/);
+  },
+
+  "the toast dismiss control has an accessible name"() {
+    assert.match(read("src/content/core/toast.js"), /close\.setAttribute\("aria-label", "Dismiss"\)/);
+  },
+
+  "icon-only buttons are required to carry a label"() {
+    const src = read("src/content/core/ui.js");
+    assert.match(src, /if \(!label\) BC\.util\.warn\("ui\.iconButton called without a label"/);
+    assert.match(src, /"aria-label": label/);
+  },
+
+  "progress and skeleton surfaces expose their state"() {
+    const src = read("src/content/core/ui.js");
+    assert.match(src, /role: "progressbar"/);
+    assert.match(src, /aria-valuenow/);
+    assert.match(src, /role: "status", "aria-label": "Loading"/);
+  },
+
+  "error states are announced as alerts"() {
+    assert.match(read("src/content/core/ui.js"), /class: "bc-error", role: "alert"/);
+  },
+
+  "the settings drawer trigger reports its expanded state"() {
+    const src = read("src/content/features/settings-panel.js");
+    assert.match(src, /aria-expanded/);
+    assert.match(src, /setExpanded\(true\)/);
+    assert.match(src, /setExpanded\(false\)/);
+  },
+
+  "the drawer trigger handles Space as well as Enter"() {
+    // <a role="button"> activates on Enter but not Space.
+    assert.match(read("src/content/features/settings-panel.js"),
+      /e\.key === " " \|\| e\.key === "Spacebar"/);
+  },
+
+  "decorative glyphs are hidden from assistive tech"() {
+    assert.match(read("src/content/core/ui.js"), /"aria-hidden": "true", text: glyph/);
+    assert.match(read("src/content/features/accessibility.js"), /aria-hidden/);
+  },
+
+  "numeric badges carry a text alternative"() {
+    // A bare count conveys nothing on its own.
+    assert.match(read("src/content/features/dashboard.js"), /b\.setAttribute\("aria-label", label\)/);
+    assert.match(read("src/content/features/instructor.js"), /b\.setAttribute\("aria-label", label\)/);
+  },
+
+  "charts carry a role and a label"() {
+    assert.match(read("src/content/core/ui.js"), /role="img" aria-label=/);
+    assert.match(read("src/content/features/grades.js"), /role="img" aria-label="Grade trend chart"/);
+    assert.match(read("src/content/features/grades.js"), /role="img" aria-label="Assignment group weights"/);
+  },
+
+  "motion is gated on both the app switch and the OS preference"() {
+    const src = read("src/content/core/ui.js");
+    assert.match(src, /data-bc-motion/);
+    assert.match(src, /prefers-reduced-motion: reduce/);
+  },
+
+  "the reduced-motion helper is consulted before JS-driven animation"() {
+    // CSS cannot reach scrollIntoView or rAF sequences.
+    assert.match(read("src/content/core/toast.js"), /BC\.ui\.motion\.reduced\(\)/);
+  },
+
+  "dimmed text uses a token rather than opacity"() {
+    // Fading text that already sits at AA drops it below AA.
+    for (const f of ["src/content/features/todo.js", "src/content/features/syllabus.js",
+                     "src/shared/settings/index.js"]) {
+      const src = read(f);
+      assert.noMatch(src, /\.(done|added|bc-concluded)[^{]*\{[^}]*opacity:\s*\.[0-9]/,
+        `${f} dims text with opacity instead of --bc-text-subtle`);
+    }
+  },
+
+  "focus-visible styling exists inside the shadow root"() {
+    // With `all: initial` the UA ring often does not render at all.
+    assert.match(read("src/shared/settings/index.js"), /\.bc-app :focus-visible \{/);
+  },
+
+  "colour is never the only signal for attendance state"() {
+    const src = read("src/content/features/instructor.js");
+    assert.match(src, /pBtn\.textContent = "P"/);
+    assert.match(src, /aBtn\.textContent = "A"/);
+  },
+
+  "every grade band pairs its fill with a guaranteed-contrast foreground"() {
+    const r = BC.tokens.resolve({});
+    for (const mode of ["light", "dark"]) {
+      for (const band of ["a", "b", "c", "d", "f"]) {
+        const ratio = BC.color.contrastRatio(r[mode]["grade-" + band + "-fg"], r[mode]["grade-" + band]);
+        assert.ok(ratio >= 4.5, `grade ${band} in ${mode} is ${ratio.toFixed(2)}:1`);
+      }
+    }
+  },
+
+  "the live region helper serves both politeness levels"() {
+    const src = read("src/content/core/ui.js");
+    assert.match(src, /bc-live-assertive/);
+    assert.match(src, /bc-live-polite/);
+    assert.match(src, /node\.textContent = "";/, "an identical string is not re-announced unless cleared first");
+  },
+};

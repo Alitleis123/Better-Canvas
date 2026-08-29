@@ -808,6 +808,12 @@
       <textarea data-note rows="2">${BC.util.escapeHtml((local.notes || {})[key] || "")}</textarea>
       <button class="bc-todo-btn" data-pom-task-start style="margin-top:8px">🍅 Start pomodoro on this task</button>
     `;
+    // Dialog semantics: it was an unlabelled div that took no focus, so a screen
+    // reader user got no announcement and a keyboard user had to tab through the
+    // whole page to reach it.
+    pop.setAttribute("role", "dialog");
+    pop.setAttribute("aria-modal", "false");
+    pop.setAttribute("aria-label", "Task details");
     container.style.position = "relative";
     container.appendChild(pop);
     const r = anchor.getBoundingClientRect(), cr = container.getBoundingClientRect();
@@ -866,9 +872,26 @@
       startPomodoro(settings, title);
       close();
     });
-    const close = () => { pop.remove(); render(settings, container, true); };
+    // Clicking anywhere outside dismisses, which is what every other popover in
+    // the extension does; without it the only way out was the small close glyph,
+    // and a stale popover also blocked the widget from re-rendering.
+    const onDocDown = (e) => {
+      if (pop.contains(e.target) || e.target === anchor) return;
+      close();
+    };
+    const close = () => {
+      document.removeEventListener("mousedown", onDocDown, true);
+      pop.remove();
+      // Return focus to the control that opened it rather than dropping it to
+      // <body> and losing the user's place in the list.
+      BC.util.guard(() => anchor.focus(), "todo popover focus restore");
+      render(settings, container, true);
+    };
+    document.addEventListener("mousedown", onDocDown, true);
     pop.querySelector(".bc-pop-close").addEventListener("click", close);
-    pop.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+    pop.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } });
+    if (BC.ui && BC.ui.focusTrap) BC.ui.focusTrap(pop, { returnTo: anchor });
+    else BC.util.guard(() => pop.querySelector("[data-pri]").focus(), "todo popover focus");
   }
 
   function itemHtml(it, settings, compact) {
