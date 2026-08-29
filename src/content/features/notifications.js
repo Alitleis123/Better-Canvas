@@ -50,7 +50,12 @@
   // nothing ever sent it, so the advertised toolbar counter never appeared.
   // Fire-and-forget: the handler responds synchronously, so never await it.
   function sendBadge(count) {
-    try { chrome.runtime.sendMessage({ type: "bc:setBadge", count: count | 0 }); } catch (_) {}
+    // The callback is required even though we ignore the reply: without one, a
+    // message sent while the service worker is restarting surfaces as an
+    // unchecked runtime.lastError in the page console.
+    try {
+      chrome.runtime.sendMessage({ type: "bc:setBadge", count: count | 0 }, () => void chrome.runtime.lastError);
+    } catch (_) {}
   }
   BC.notifications = { sendBadge };
 

@@ -804,7 +804,54 @@
         ]) }),
       S.row({ label: "Toolbar badge for unread items", control: S.switch({ get: () => n.badgeCount, set: (v) => store.set((x) => { x.notifications.badgeCount = v; }) }) }),
     ]}));
+
+    // Every notification already gets recorded to bcLocal.notifHistory and pruned
+    // to the last 100, but nothing ever displayed it, so the writes bought
+    // nothing. A dismissed toast is otherwise gone for good.
+    const histMount = h("div", null);
+    c.appendChild(histMount);
+    renderNotifHistory(histMount, store);
     return c;
+  }
+
+  function renderNotifHistory(mount, store) {
+    const S = BC.SettingsComponents;
+    const draw = (local) => {
+      const items = (local && local.notifHistory) || [];
+      const children = items.slice(0, 20).map((e) => h("div.bc-ins-row", null, [
+        h("span", null, e.title || e.type || "Notification"),
+        h("span.bc-ins-val", null, e.iso ? BC.dt.relative(e.iso) : ""),
+      ]));
+      if (!children.length) {
+        children.push(h("p.bc-hint", null, "Nothing yet. Reminders you receive will be listed here."));
+      } else {
+        children.push(h("div.bc-inline", null, [
+          S.button({
+            label: "Clear history", variant: "ghost",
+            onClick: () => {
+              const adapter = store.adapter || {};
+              if (!adapter.getLocal || !adapter.saveLocal) return;
+              Promise.resolve(adapter.getLocal()).then((l) => {
+                const next = Object.assign({}, l || {}, { notifHistory: [] });
+                return adapter.saveLocal(next);
+              }).then(() => {
+                draw({ notifHistory: [] });
+                BC.toast && BC.toast.info("Notification history cleared");
+              });
+            },
+          }),
+        ]));
+      }
+      mount.replaceChildren(S.section({
+        title: "Recent notifications",
+        description: "The last 100 reminders, kept on this device only.",
+        children,
+      }));
+    };
+
+    const adapter = store.adapter || {};
+    if (adapter.getLocal) Promise.resolve(adapter.getLocal()).then(draw).catch(() => draw(null));
+    else draw(null);
   }
 
   function renderFiles(store) {

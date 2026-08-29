@@ -75,7 +75,6 @@
   BC.defaults = {
     version: 5,
     enabled: true,
-    firstRun: true,
 
     dashboard: {
       enabled: true,
@@ -285,7 +284,6 @@
 
     onboarding: {
       seen: false,
-      lastWhatsNewVersion: "",
     },
 
     privacy: { telemetry: false },  // hard-wired
@@ -386,6 +384,10 @@
       // The .ics export button is unconditional and always has been, so a toggle
       // gating nothing was just a dead switch in the Calendar tab.
       if (s.calendar) delete s.calendar.icsExport;
+      // Write-only flags: both were set when the tour was dismissed and then
+      // never read by anything. onboarding.seen is the real gate.
+      delete s.firstRun;
+      if (s.onboarding) delete s.onboarding.lastWhatsNewVersion;
     },
   };
 

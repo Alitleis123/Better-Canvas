@@ -50,11 +50,7 @@
 
     function markSeen() {
       done = true;
-      BC.storage.update((d) => {
-        d.onboarding.seen = true;
-        d.firstRun = false;
-        d.onboarding.lastWhatsNewVersion = BC.VERSION;
-      });
+      BC.storage.update((d) => { d.onboarding.seen = true; });
     }
 
     function finish() { markSeen(); dlg.close(); }

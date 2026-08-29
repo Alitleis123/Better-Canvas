@@ -192,9 +192,21 @@ module.exports = {
     assert.equal(out.calendar.miniOnDashboard, false, "sibling settings must survive");
   },
 
+  "migration 5 removes the write-only onboarding flags"() {
+    const BC = fresh();
+    const out = BC.mergeDefaults({
+      version: 4, firstRun: false, onboarding: { seen: true, lastWhatsNewVersion: "3.0.0" },
+    }, {});
+    assert.equal(out.firstRun, undefined);
+    assert.equal(out.onboarding.lastWhatsNewVersion, undefined);
+    assert.equal(out.onboarding.seen, true, "the flag that actually gates the tour must survive");
+  },
+
   "every setting in the schema is read by some module"() {
-    // A setting nothing reads is a switch that silently does nothing, which is
-    // the single most common defect class this schema has had.
+    // A setting nothing reads is a switch that silently does nothing, and one
+    // that is only ever written is the same defect wearing a disguise: it costs
+    // a write on every save and a slot in every exported backup while changing
+    // nothing. Both are the most common defect class this schema has had.
     const fs = require("fs");
     const path = require("path");
     const { ROOT } = require("./harness");
@@ -218,16 +230,36 @@ module.exports = {
       }
     };
     walk(path.join(ROOT, "src"));
+    const lines = src.split("\n");
 
     // privacy.telemetry is a deliberate hard-wired declaration, not a switch.
     const EXEMPT = new Set(["privacy.telemetry", "version"]);
-    const unread = [];
-    for (const p of leaves(BC.defaults, "", [])) {
-      if (EXEMPT.has(p)) continue;
-      const leaf = p.split(".").pop();
-      const re = new RegExp("[.\\[\"']" + leaf.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b");
-      if (!re.test(src)) unread.push(p);
+    const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, (ch) => "\\" + ch);
+
+    const missing = [];
+    const writeOnly = [];
+
+    for (const settingPath of leaves(BC.defaults, "", [])) {
+      if (EXEMPT.has(settingPath)) continue;
+      const leaf = escapeRe(settingPath.split(".").pop());
+      const mention = new RegExp("[.\\[\"']" + leaf + "\\b");
+      // A read is any mention that survives deleting the assignment targets on
+      // that line.
+      const writeTarget = new RegExp("[.\\[\"']" + leaf + "[\"']?\\]?\\s*=[^=>]", "g");
+
+      let mentioned = false;
+      let read = false;
+      for (const line of lines) {
+        if (!mention.test(line)) continue;
+        mentioned = true;
+        if (mention.test(line.replace(writeTarget, ""))) { read = true; break; }
+      }
+      if (!mentioned) missing.push(settingPath);
+      else if (!read) writeOnly.push(settingPath);
     }
-    assert.deepEqual(unread, [], "settings with no reader: " + unread.join(", "));
+
+    assert.deepEqual(missing, [], "settings nothing references: " + missing.join(", "));
+    assert.deepEqual(writeOnly, [],
+      "settings written but never read, so they do nothing: " + writeOnly.join(", "));
   },
 };
