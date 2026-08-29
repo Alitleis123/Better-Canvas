@@ -6,11 +6,12 @@
 
   const CSS = `
     .bc-files-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
-    .bc-files-head input, .bc-files-head select { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
+    .bc-files-head input, .bc-files-head select { padding: 4px 8px; border-radius: var(--bc-radius-md, 6px); border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
     .bc-files-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
     .bc-file {
-      display: grid; grid-template-columns: 24px 1fr auto; gap: 6px;
-      padding: 6px 8px; border-radius: 6px; background: var(--bc-surface-3, #f7fafc);
+      display: grid; grid-template-columns: 24px 1fr auto; gap: var(--bc-space-2, 6px);
+      padding: var(--bc-space-2, 6px) var(--bc-space-3, 8px);
+      border-radius: var(--bc-radius-md, 6px); background: var(--bc-surface-3, #f7fafc);
     }
     .bc-file a { color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bc-file-ic { text-align: center; opacity: .7; }

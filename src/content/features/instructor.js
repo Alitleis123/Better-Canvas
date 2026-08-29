@@ -13,7 +13,7 @@
     .bc-att { display: inline-flex; gap: 2px; margin-left: 8px; vertical-align: middle; }
     .bc-att button {
       border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit;
-      border-radius: 6px; padding: 1px 7px; font-size: 11px; cursor: pointer;
+      border-radius: var(--bc-radius-md, 6px); padding: 1px 7px; font-size: 11px; cursor: pointer;
     }
     /* P/A stays letter-and-colour, not colour alone, so it survives a colour-blind mode. */
     .bc-att button.on-p { background: var(--bc-success, #047857); color: var(--bc-success-fg, #fff); border-color: var(--bc-success, #047857); }

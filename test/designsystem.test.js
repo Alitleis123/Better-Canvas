@@ -169,4 +169,49 @@ module.exports = {
     assert.match(css, /--bc-radius-md: var\(--bc-radius\)/);
     assert.match(css, /--bc-text-md:\s*calc\(14px \* var\(--bc-font-scale\)\)/);
   },
+
+  "corner radius always derives from the user's slider"() {
+    // A literal radius ignores the global corner-radius setting, so turning it
+    // to 0 left some surfaces rounded and the panels stopped matching.
+    // 999px (pill) and 50% (circle) are shapes, not radii, and are exempt.
+    const SHAPES = new Set(["999px", "50%", "0", "inherit"]);
+    const offenders = [];
+    for (const abs of jsFiles(path.join(ROOT, "src"))) {
+      const rel = path.relative(ROOT, abs).split(path.sep).join("/");
+      const src = fs.readFileSync(abs, "utf8");
+      for (const [i, line] of src.split("\n").entries()) {
+        for (const m of line.matchAll(/border-radius:\s*([^;\n]+)/g)) {
+          const v = m[1].replace("!important", "").trim();
+          if (v.includes("var(") || SHAPES.has(v) || v.startsWith("${")) continue;
+          offenders.push(`${rel}:${i + 1} (${v})`);
+        }
+      }
+    }
+    assert.deepEqual(offenders, [],
+      "literal border-radius values ignore the radius slider: " + offenders.join(", "));
+  },
+
+  "top-level feature panels share one surface treatment"() {
+    // These are the panels a user sees side by side on the dashboard; they used
+    // to disagree on radius (10 vs 12) and padding (10 vs 12 vs 14).
+    const panels = [
+      ["src/content/features/announcements.js", ".bc-ann-panel"],
+      ["src/content/features/calendar.js", ".bc-mini-cal"],
+      ["src/content/features/semester.js", ".bc-semester"],
+      ["src/content/features/modules.js", ".bc-mod-summary"],
+      ["src/content/features/syllabus.js", ".bc-syl"],
+      ["src/content/features/quizsaver.js", ".bc-quiz-banner"],
+      ["src/content/features/todo.js", ".bc-todo"],
+    ];
+    for (const [file, sel] of panels) {
+      const src = read(file);
+      const i = src.indexOf(sel + " {");
+      assert.ok(i > -1, `${sel} not found in ${file}`);
+      const block = src.slice(i, src.indexOf("}", i));
+      assert.match(block, /border-radius:\s*var\(--bc-radius/,
+        `${sel} must take its radius from the token scale`);
+      assert.match(block, /padding:\s*[^;]*var\(--bc-space/,
+        `${sel} must take its padding from the spacing scale so density applies`);
+    }
+  },
 };

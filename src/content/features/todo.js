@@ -19,12 +19,12 @@
   const CLEAN_CSS = `
     .Sidebar__TodoListContainer, .ToDoSidebar {
       background: var(--bc-surface-2, #fff) !important;
-      border-radius: 12px; padding: 12px;
+      border-radius: var(--bc-radius-xl, 12px); padding: 12px;
       border: 1px solid var(--bc-border, #e5e7eb) !important;
     }
     .todo-list-header-container h2 { font-size: 14px !important; margin-bottom: 8px !important; }
     .to-do-list li { background: var(--bc-surface-3, #f7fafc) !important;
-      border-radius: 10px !important; padding: 8px 10px !important; margin-bottom: 6px !important; border: 0 !important; }
+      border-radius: var(--bc-radius-lg, 10px) !important; padding: 8px 10px !important; margin-bottom: 6px !important; border: 0 !important; }
     .to-do-list li a[title="Ignore"] {
       width: 22px !important; height: 22px !important; border: 2px solid var(--bc-accent, #0374b5) !important;
       border-radius: 50% !important; background: transparent !important; text-indent: -9999px; overflow: hidden;
@@ -35,7 +35,7 @@
     .bc-todo {
       background: var(--bc-surface-2, #fff);
       border: 1px solid var(--bc-border, #e5e7eb);
-      border-radius: 12px; padding: 14px;
+      border-radius: var(--bc-radius-lg, 10px); padding: var(--bc-space-6, 14px);
       color: var(--bc-text, inherit);
       font: var(--bc-text-md, 14px)/var(--bc-leading-body, 1.4) var(--bc-font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
     }
@@ -46,11 +46,11 @@
     .bc-todo-week button { background: transparent; border: 1px solid var(--bc-border, #e5e7eb); border-radius: 999px; padding: 2px 8px; cursor: pointer; color: inherit; }
     .bc-todo-week button:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
     .bc-todo-controls { display: flex; gap: 6px; margin-bottom: 10px; }
-    .bc-todo-controls select { padding: 4px 6px; border-radius: 6px; border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
+    .bc-todo-controls select { padding: 4px 6px; border-radius: var(--bc-radius-md, 6px); border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
     .bc-todo-day-header { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--bc-muted, #6b7280); margin: 10px 0 6px; }
     .bc-todo-item {
       display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center;
-      padding: 8px 10px; border-radius: 10px; background: var(--bc-surface-3, #f7fafc); margin-bottom: 6px;
+      padding: 8px 10px; border-radius: var(--bc-radius-lg, 10px); background: var(--bc-surface-3, #f7fafc); margin-bottom: 6px;
     }
     /* Tokens rather than opacity: fading already-AA text pushes it below AA. */
     .bc-todo-item.done .bc-todo-name { color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); text-decoration: line-through; }
@@ -66,10 +66,10 @@
     .bc-todo-course { font-size: 11px; color: var(--bc-muted, #6b7280); }
     .bc-todo-due { font-size: 11px; color: var(--bc-muted, #6b7280); }
     .bc-todo-actions { display: flex; gap: 4px; }
-    .bc-todo-btn { background: transparent; border: 1px solid var(--bc-border, #e5e7eb); border-radius: 6px; padding: 2px 6px; font-size: 11px; cursor: pointer; color: inherit; }
+    .bc-todo-btn { background: transparent; border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-md, 6px); padding: 2px 6px; font-size: 11px; cursor: pointer; color: inherit; }
     .bc-todo-btn:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
     .bc-todo-new { display: flex; gap: 6px; margin-top: 8px; }
-    .bc-todo-new input { flex: 1; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
+    .bc-todo-new input { flex: 1; padding: 6px 8px; border-radius: var(--bc-radius-md, 6px); border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
     .bc-todo-new button { padding: 6px 10px; border-radius: var(--bc-radius-md, 6px); background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); border: 0; cursor: pointer; font: inherit; }
     .bc-todo-empty { color: var(--bc-muted, #6b7280); font-size: 13px; padding: 6px 0; }
     .bc-todo-snoozed { margin-top: var(--bc-space-4, 10px); border-top: 1px solid var(--bc-border, #e5e7eb); padding-top: var(--bc-space-2, 6px); }
@@ -96,7 +96,10 @@
     .bc-todo-streak:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 1px; }
     .bc-todo-pom { margin-left: auto; }
     .bc-todo-kanban { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-    .bc-kan-col { background: var(--bc-surface-3, #f7fafc); border-radius: 8px; padding: 8px; min-height: 120px; }
+    .bc-kan-col {
+      background: var(--bc-surface-3, #f7fafc); border-radius: var(--bc-radius-md, 8px);
+      padding: var(--bc-space-3, 8px); min-height: 120px;
+    }
     .bc-kan-col h4 { margin: 0 0 6px; font-size: 12px; }
     .bc-kan-col.bc-drop { outline: 2px dashed var(--bc-accent, #0374b5); outline-offset: -2px; }
     .bc-todo-kanban .bc-todo-item { cursor: grab; grid-template-columns: 1fr; }
@@ -109,7 +112,7 @@
     .bc-todo-pop h5 { margin: 0 0 8px; font-size: 12px; }
     .bc-todo-pop label { display: block; margin: 6px 0 2px; color: var(--bc-muted, #6b7280); }
     .bc-todo-pop input, .bc-todo-pop select, .bc-todo-pop textarea {
-      width: 100%; box-sizing: border-box; padding: 4px 6px; border-radius: 6px;
+      width: 100%; box-sizing: border-box; padding: 4px 6px; border-radius: var(--bc-radius-md, 6px);
       border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; font-size: 12px;
     }
     .bc-todo-pop .bc-sub { display: flex; gap: 6px; align-items: center; margin: 3px 0; }
@@ -117,14 +120,14 @@
     .bc-todo-pop .bc-sub span.done { text-decoration: line-through; color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); }
     .bc-todo-pop .bc-pop-close { position: absolute; top: 6px; right: 8px; border: 0; background: transparent; cursor: pointer; color: inherit; }
     .bc-todo-tags { font-size: 10px; color: var(--bc-muted, #6b7280); }
-    .bc-todo-tags b { font-weight: 600; background: var(--bc-surface-3, #eef2f7); border-radius: 4px; padding: 0 4px; margin-right: 3px; }
-    .bc-tb-grid { position: relative; border: 1px solid var(--bc-border, #e5e7eb); border-radius: 8px; overflow: hidden; }
+    .bc-todo-tags b { font-weight: 600; background: var(--bc-surface-3, #eef2f7); border-radius: var(--bc-radius-sm, 4px); padding: 0 4px; margin-right: 3px; }
+    .bc-tb-grid { position: relative; border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-md, 8px); overflow: hidden; }
     .bc-tb-hour { display: flex; height: 34px; border-top: 1px solid var(--bc-border, #e5e7eb); }
     .bc-tb-hour:first-child { border-top: 0; }
     .bc-tb-hour em { flex: 0 0 46px; font-style: normal; font-size: 10px; color: var(--bc-muted, #6b7280); padding: 2px 4px; border-right: 1px solid var(--bc-border, #e5e7eb); }
     .bc-tb-hour.bc-drop { background: rgba(3,116,181,.12); }
     .bc-tb-block {
-      position: absolute; left: 50px; right: 4px; border-radius: 6px; padding: 2px 6px;
+      position: absolute; left: 50px; right: 4px; border-radius: var(--bc-radius-md, 6px); padding: 2px 6px;
       background: var(--bc-todo-accent, var(--bc-accent, #0374b5)); color: var(--bc-accent-contrast, #fff); font-size: var(--bc-text-2xs, 11px);
       overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: grab;
     }
@@ -152,7 +155,7 @@
     .bc-pom-stats {
       position: fixed; right: 18px; bottom: 64px; z-index: var(--bc-z-popover, 2147481500); width: 200px; padding: 10px;
       background: var(--bc-surface-2, #fff); color: var(--bc-text, #111);
-      border: 1px solid var(--bc-border, #e5e7eb); border-radius: 10px;
+      border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-lg, 10px);
       box-shadow: var(--bc-shadow-3, 0 8px 24px rgba(0,0,0,.22)); font-size: 12px;
     }
   `;

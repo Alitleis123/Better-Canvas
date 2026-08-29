@@ -10,8 +10,12 @@
   BC.features = BC.features || {};
 
   const CSS = `
-    .bc-syl { margin: 10px 0; padding: 12px 14px; border-radius: 10px;
-      background: var(--bc-surface-2, #f3f4f6); border: 1px solid var(--bc-border, #e5e7eb); }
+    .bc-syl {
+      margin: var(--bc-space-4, 10px) 0;
+      padding: var(--bc-space-5, 12px) var(--bc-space-6, 14px);
+      border-radius: var(--bc-radius-lg, 10px);
+      background: var(--bc-surface-2, #f3f4f6); border: 1px solid var(--bc-border, #e5e7eb);
+    }
     .bc-syl-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-weight: 600; font-size: 14px; }
     .bc-syl-list { margin: 10px 0 0; max-height: 260px; overflow: auto; display: none; }
     .bc-syl.open .bc-syl-list { display: block; }

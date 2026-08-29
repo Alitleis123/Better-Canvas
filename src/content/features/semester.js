@@ -12,9 +12,11 @@
 
   const CSS = `
     .bc-semester {
-      display: flex; align-items: center; gap: 12px; margin: 6px 0 12px; padding: 10px 14px;
-      border-radius: 10px; background: var(--bc-surface-2, #f3f4f6);
-      border: 1px solid var(--bc-border, #e5e7eb); font-size: 13px;
+      display: flex; align-items: center; gap: var(--bc-space-5, 12px);
+      margin: var(--bc-space-2, 6px) 0 var(--bc-space-5, 12px);
+      padding: var(--bc-space-4, 10px) var(--bc-space-6, 14px);
+      border-radius: var(--bc-radius-lg, 10px); background: var(--bc-surface-2, #f3f4f6);
+      border: 1px solid var(--bc-border, #e5e7eb); font-size: var(--bc-text-sm, 13px);
     }
     .bc-semester-label { font-weight: 600; white-space: nowrap; }
     .bc-semester-track { flex: 1; height: 6px; border-radius: 999px; background: var(--bc-surface-3, #e5e7eb); overflow: hidden; }

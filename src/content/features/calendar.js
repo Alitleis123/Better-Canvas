@@ -61,13 +61,14 @@
   const CSS = `
     .bc-mini-cal {
       background: var(--bc-surface-2, #fff); border: 1px solid var(--bc-border, #e5e7eb);
-      border-radius: 10px; padding: 12px; margin-bottom: 12px;
+      border-radius: var(--bc-radius-lg, 10px);
+      padding: var(--bc-space-5, 12px); margin-bottom: var(--bc-space-5, 12px);
     }
     .bc-mini-cal h4 { margin: 0 0 8px; font-size: 14px; }
     .bc-mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
     .bc-mini-cell {
       aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center;
-      font-size: 12px; border-radius: 4px; background: var(--bc-surface-3, #f7fafc); color: var(--bc-text, inherit);
+      font-size: 12px; border-radius: var(--bc-radius-sm, 4px); background: var(--bc-surface-3, #f7fafc); color: var(--bc-text, inherit);
       position: relative;
     }
     .bc-mini-cell.today { background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); }

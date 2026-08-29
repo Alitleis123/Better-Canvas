@@ -69,7 +69,7 @@
     list.style.display = "flex"; list.style.flexDirection = "column";
 
     syncCustomLinks("bc-course-custom", list, nav.customLinks,
-      "display:block; padding:6px 10px; color:inherit; text-decoration:none; border-radius:6px;");
+      "display:block; padding:6px 10px; color:inherit; text-decoration:none; border-radius:var(--bc-radius-md, 6px);");
   }
 
   function applyBreadcrumbs(mode) {

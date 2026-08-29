@@ -15,9 +15,12 @@
     .bc-mod-fill.done { background: var(--bc-success, #047857); }
     .bc-mod-label { font-size: 12px; color: var(--bc-muted, #6b7280); white-space: nowrap; }
     .bc-mod-summary {
-      display: flex; align-items: center; gap: 12px; margin: 8px 0; padding: 10px 14px;
-      border-radius: 10px; background: var(--bc-surface-2, #f3f4f6);
-      border: 1px solid var(--bc-border, #e5e7eb); font-size: 13px; font-weight: 600;
+      display: flex; align-items: center; gap: var(--bc-space-5, 12px);
+      margin: var(--bc-space-3, 8px) 0;
+      padding: var(--bc-space-4, 10px) var(--bc-space-6, 14px);
+      border-radius: var(--bc-radius-lg, 10px); background: var(--bc-surface-2, #f3f4f6);
+      border: 1px solid var(--bc-border, #e5e7eb);
+      font-size: var(--bc-text-sm, 13px); font-weight: var(--bc-weight-semibold, 600);
     }
     .bc-mod-summary .bc-mod-track { max-width: 260px; }
   `;

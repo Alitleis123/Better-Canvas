@@ -7,9 +7,14 @@
   const CSS = `
     .bc-ann-panel {
       background: var(--bc-surface-2, #fff); border: 1px solid var(--bc-border, #e5e7eb);
-      border-radius: 10px; padding: 12px; margin-bottom: 12px;
+      border-radius: var(--bc-radius-lg, 10px);
+      padding: var(--bc-space-5, 12px); margin-bottom: var(--bc-space-5, 12px);
     }
-    .bc-ann-item { padding: 8px 10px; border-radius: 8px; background: var(--bc-surface-3, #f7fafc); margin-bottom: 6px; }
+    .bc-ann-item {
+      padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px);
+      border-radius: var(--bc-radius-md, 8px);
+      background: var(--bc-surface-3, #f7fafc); margin-bottom: var(--bc-space-2, 6px);
+    }
     .bc-ann-item .bc-ann-title { font-weight: 600; }
     .bc-ann-item .bc-ann-meta  { font-size: 12px; color: var(--bc-muted, #6b7280); }
     .bc-ann-empty { color: var(--bc-muted, #6b7280); padding: 6px 0; }

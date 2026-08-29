@@ -53,17 +53,17 @@
     .bc-grade-tools { margin: 16px 0; }
     .bc-grade-tools h3 { margin: 0 0 10px; font-size: 15px; }
     .bc-gt-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .bc-gt-card { padding: 10px; border-radius: 8px; background: var(--bc-surface-3, #f7fafc); }
+    .bc-gt-card { padding: var(--bc-space-4, 10px); border-radius: var(--bc-radius-md, 8px); background: var(--bc-surface-3, #f7fafc); }
     .bc-gt-total { font-size: 24px; font-weight: 800; }
     .bc-gt-label { color: var(--bc-muted, #6b7280); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
     .bc-gt-goal { display: flex; align-items: center; gap: 6px; }
-    .bc-gt-goal input { padding: 4px; width: 68px; border: 1px solid var(--bc-border, #e5e7eb); border-radius: 4px; background: transparent; color: inherit; }
+    .bc-gt-goal input { padding: 4px; width: 68px; border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-sm, 4px); background: transparent; color: inherit; }
     .bc-gt-donut { display: flex; align-items: center; gap: 8px; }
     .bc-gt-legend li { list-style: none; font-size: 12px; }
-    .bc-gt-legend span { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+    .bc-gt-legend span { display: inline-block; width: 8px; height: 8px; border-radius: var(--bc-radius-sm, 2px); margin-right: 4px; }
     .bc-gt-missing { color: var(--bc-danger, #b91c1c); font-size: var(--bc-text-xs, 12px); margin-top: 6px; }
     .bc-gt-final { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
-    .bc-gt-final input { padding: 4px; width: 68px; border: 1px solid var(--bc-border, #e5e7eb); border-radius: 4px; background: transparent; color: inherit; }
+    .bc-gt-final input { padding: 4px; width: 68px; border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-sm, 4px); background: transparent; color: inherit; }
     .bc-gt-trend { margin-top: 12px; }
     .bc-gt-trend-meta { display: flex; gap: 14px; font-size: 11px; color: var(--bc-muted, #6b7280); margin-top: 2px; }
     .bc-rubric { margin: 0 0 16px; }
