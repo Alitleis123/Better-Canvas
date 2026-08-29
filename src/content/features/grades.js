@@ -11,6 +11,11 @@
 
   BC.grades = BC.grades || {};
 
+  // Values reaching an HTML attribute below come from settings and bcLocal, and
+  // the settings Import button accepts an arbitrary JSON file, so they are not
+  // trusted input even though they originate "locally".
+  const esc = (v) => BC.util.escapeHtml(v);
+
   BC.grades.gradePoints = function (score, scaleKey) {
     const scale = BC.GPA_SCALES[scaleKey] || BC.GPA_SCALES["standard-4"];
     for (const band of scale.bands) if (score >= band.min) return { points: band.points, letter: band.letter };
@@ -209,7 +214,7 @@
             <div class="bc-gt-label">Current course grade</div>
             <div class="bc-gt-total">${total != null ? total.toFixed(2) + "%" : "—"}</div>
             <div class="bc-gt-goal">Goal:
-              <input type="number" min="0" max="150" step="0.5" value="${goal}" data-goal>
+              <input type="number" min="0" max="150" step="0.5" value="${esc(goal)}" data-goal>
               <span data-goal-status></span>
             </div>
             <div class="bc-gt-final">
@@ -288,10 +293,10 @@
       const assessed = assessment[c.id] && assessment[c.id].points;
       const start = draft[c.id] != null ? draft[c.id] : (assessed != null ? assessed : c.points || 0);
       rows += `
-        <div class="bc-rubric-crit" data-crit="${BC.util.escapeHtml(String(c.id))}" data-max="${c.points || 0}">
+        <div class="bc-rubric-crit" data-crit="${BC.util.escapeHtml(String(c.id))}" data-max="${esc(c.points || 0)}">
           <label><span>${BC.util.escapeHtml(c.description || "Criterion")}</span>
-            <span><b data-val>${start}</b> / ${c.points || 0}</span></label>
-          <input type="range" min="0" max="${c.points || 0}" step="0.5" value="${start}">
+            <span><b data-val>${esc(start)}</b> / ${esc(c.points || 0)}</span></label>
+          <input type="range" min="0" max="${esc(c.points || 0)}" step="0.5" value="${esc(start)}">
         </div>`;
     }
 

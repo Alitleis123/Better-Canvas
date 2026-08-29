@@ -11,6 +11,11 @@
   const BC = (globalThis.BC = globalThis.BC || {});
   BC.features = BC.features || {};
 
+  // Item keys, estimates and schedule times reach HTML attributes below. They
+  // come from Canvas payloads and from bcLocal, which the settings Import button
+  // lets an arbitrary JSON file populate, so none of it is trusted.
+  const esc = (v) => BC.util.escapeHtml(v);
+
   const CLEAN_CSS = `
     .Sidebar__TodoListContainer, .ToDoSidebar {
       background: var(--bc-surface-2, #fff) !important;
@@ -449,7 +454,7 @@
       if (cid && !courses.has(cid)) courses.set(cid, name);
     }
     filter.innerHTML = `<option value="all">All courses</option>` +
-      Array.from(courses.entries()).map(([id, n]) => `<option value="${id}">${BC.util.escapeHtml(n)}</option>`).join("");
+      Array.from(courses.entries()).map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join("");
     filter.value = state.filterCourse;
     filter.addEventListener("change", () => { state.filterCourse = filter.value; renderList(settings, container); });
 
@@ -734,9 +739,9 @@
       const top = ((hm.h * 60 + hm.m) - TB_START * 60) / 60 * TB_ROW;
       const height = Math.max(((s.dur || 60) / 60) * TB_ROW - 2, 16);
       const title = (it.plannable && it.plannable.title) || it.plannable_title || "Task";
-      blocks += `<div class="bc-tb-block" draggable="true" data-key="${key}" data-i="${state.items.indexOf(it)}"
-        style="top:${top}px;height:${height}px" title="${BC.util.escapeHtml(title)} · ${s.start}">
-        <button data-unsched="${key}" title="Unschedule">×</button>${BC.util.escapeHtml(title)}</div>`;
+      blocks += `<div class="bc-tb-block" draggable="true" data-key="${esc(key)}" data-i="${state.items.indexOf(it)}"
+        style="top:${top}px;height:${height}px" title="${esc(title)} · ${esc(s.start)}">
+        <button data-unsched="${esc(key)}" title="Unschedule">×</button>${esc(title)}</div>`;
     }
 
     list.innerHTML = `
@@ -795,7 +800,7 @@
       <label>Tags (comma-separated)</label>
       <input data-tags value="${BC.util.escapeHtml(tags.join(", "))}" placeholder="reading, exam…">
       <label>Time estimate (minutes)</label>
-      <input data-est type="number" min="5" step="5" value="${(local.estimates || {})[key] || ""}" placeholder="60">
+      <input data-est type="number" min="5" step="5" value="${esc((local.estimates || {})[key] || "")}" placeholder="60">
       <label>Subtasks</label>
       <div data-subs></div>
       <input data-newsub placeholder="Add subtask, press Enter">
@@ -883,7 +888,7 @@
     if (tags.length) meta.push(tags.map((tg) => "<b>" + BC.util.escapeHtml(tg) + "</b>").join(""));
     if (subs.length) meta.push(`☑ ${subDone}/${subs.length}`);
     return `
-      <div class="bc-todo-item ${complete ? "done" : ""}" data-key="${key}" data-i="${idx}">
+      <div class="bc-todo-item ${complete ? "done" : ""}" data-key="${esc(key)}" data-i="${idx}">
         <button class="bc-todo-check ${complete ? "done" : ""}" data-i="${idx}" aria-label="Toggle complete"></button>
         <div>
           <a class="bc-todo-name" href="${BC.util.escapeHtml(url)}">${BC.util.escapeHtml(p)}</a>
@@ -891,9 +896,9 @@
           ${meta.length ? `<div class="bc-todo-tags">${meta.join(" · ")}</div>` : ""}
         </div>
         ${compact ? "" : `<div class="bc-todo-actions">
-          <button class="bc-todo-btn bc-todo-star" data-key="${key}" title="Star">${starred ? "★" : "☆"}</button>
-          <button class="bc-todo-btn bc-todo-snooze" data-key="${key}" title="Snooze until tomorrow">💤</button>
-          <button class="bc-todo-btn bc-todo-more" data-key="${key}" title="Details">⋯</button>
+          <button class="bc-todo-btn bc-todo-star" data-key="${esc(key)}" title="Star">${starred ? "★" : "☆"}</button>
+          <button class="bc-todo-btn bc-todo-snooze" data-key="${esc(key)}" title="Snooze until tomorrow">💤</button>
+          <button class="bc-todo-btn bc-todo-more" data-key="${esc(key)}" title="Details">⋯</button>
         </div>`}
       </div>
     `;

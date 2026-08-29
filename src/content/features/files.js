@@ -116,7 +116,7 @@
         <div class="bc-file">
           <span class="bc-file-ic">${iconFor(f)}</span>
           <a href="${BC.util.escapeHtml(f.url || f.html_url || "#")}" target="_blank" rel="noopener" title="${BC.util.escapeHtml(f.courseName || "")}">${BC.util.escapeHtml(f.display_name || "")}</a>
-          <span class="bc-file-star ${stars.has(String(f.id)) ? "on" : ""}" data-id="${f.id}" title="Star" role="button" tabindex="0">★</span>
+          <span class="bc-file-star ${stars.has(String(f.id)) ? "on" : ""}" data-id="${BC.util.escapeHtml(f.id)}" title="Star" role="button" tabindex="0">★</span>
         </div>
       `).join("");
     }
