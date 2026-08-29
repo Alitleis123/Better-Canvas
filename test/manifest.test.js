@@ -163,6 +163,25 @@ module.exports = {
     }
   },
 
+  "every surface that resolves dark mode can evaluate a schedule"() {
+    // isDarkActive() falls back to false without BC.dt, so a surface missing
+    // datetime.js renders light during a scheduled dark window with no error.
+    for (const [page, dir] of [["src/popup/popup.html", "src/popup"],
+                               ["src/options/options.html", "src/options"]]) {
+      const html = fs.readFileSync(path.join(ROOT, page), "utf8");
+      const srcs = [...html.matchAll(/<script src="([^"]+)"/g)].map((m) => m[1]);
+      assert.ok(srcs.some((s) => s.endsWith("core/datetime.js")),
+        `${page} resolves dark mode but never loads datetime.js`);
+      assert.ok(srcs.some((s) => s.endsWith("shared/themes.js")), `${page} must load themes.js`);
+    }
+    // And the content bundle, which is where scheduled mode is re-evaluated.
+    const js = scriptsOf(mv3, false);
+    assert.ok(js.includes("src/content/core/datetime.js"));
+    assert.ok(js.indexOf("src/content/core/datetime.js") < js.indexOf("src/shared/themes.js")
+              || js.includes("src/shared/themes.js"),
+      "themes.js and datetime.js must both be present in the bundle");
+  },
+
   "host permissions are scoped, with wide access left optional"() {
     assert.deepEqual(mv3.host_permissions, ["*://*.instructure.com/*"]);
     assert.deepEqual(mv3.optional_host_permissions, ["*://*/*"],

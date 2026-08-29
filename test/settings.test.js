@@ -137,14 +137,35 @@ module.exports = {
     assert.equal(BC.isDarkActive({}), false);
   },
 
-  "isDarkActive follows the schedule window"() {
+  "isDarkActive resolves a scheduled window that covers right now"() {
     const BC = fresh();
-    const s = { theming: { darkMode: "scheduled", darkSchedule: { start: "20:00", end: "07:00" } } };
-    // withinSchedule reads the real clock, so just assert it returns a boolean
-    // and that a degenerate window is false.
-    assert.equal(typeof BC.isDarkActive(s), "boolean");
+    // Build a window guaranteed to contain the current moment, and one that
+    // cannot, so this asserts real behaviour rather than just a return type.
+    const pad = (n) => String(n).padStart(2, "0");
+    const now = new Date();
+    const shift = (h) => { const d = new Date(now); d.setHours(d.getHours() + h); return pad(d.getHours()) + ":" + pad(d.getMinutes()); };
+    const covering = { theming: { darkMode: "scheduled", darkSchedule: { start: shift(-2), end: shift(2) } } };
+    const excluding = { theming: { darkMode: "scheduled", darkSchedule: { start: shift(3), end: shift(5) } } };
+    assert.equal(BC.isDarkActive(covering), true, "a window containing now must resolve dark");
+    assert.equal(BC.isDarkActive(excluding), false);
     const degenerate = { theming: { darkMode: "scheduled", darkSchedule: { start: "08:00", end: "08:00" } } };
     assert.equal(BC.isDarkActive(degenerate), false);
+  },
+
+  "scheduled dark mode silently fails without BC.dt"() {
+    // This is why every surface that calls isDarkActive must load datetime.js:
+    // the fallback is a quiet `false`, not an error, so a popup missing it just
+    // renders light next to a dark page.
+    const { createSandbox, load } = require("./harness");
+    const sb = createSandbox();
+    load(sb, "src/shared/defaults.js");
+    load(sb, "src/shared/themes.js");   // deliberately no datetime.js
+    const pad = (n) => String(n).padStart(2, "0");
+    const now = new Date();
+    const shift = (h) => { const d = new Date(now); d.setHours(d.getHours() + h); return pad(d.getHours()) + ":" + pad(d.getMinutes()); };
+    const covering = { theming: { darkMode: "scheduled", darkSchedule: { start: shift(-2), end: shift(2) } } };
+    assert.equal(sb.BC.isDarkActive(covering), false,
+      "without BC.dt this returns false even inside the window, which is the bug the loader test guards");
   },
 
   "every GPA scale ends with a zero floor so no score is unclassified"() {
