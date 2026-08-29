@@ -407,8 +407,14 @@
     const container = document.getElementById("DashboardCard_Container") || document.querySelector(".ic-DashboardCard__box");
     if (container) container.style.display = ""; // let CSS layoutCss govern
 
-    if (d.showInlineGrade) ensureLoaded("scores", loadInlineGrades);
-    if (d.showProgressBar) ensureLoaded("planner", loadPlannerCounts);
+    // Load whatever any ENABLED consumer needs, not just the one feature that
+    // happens to share a name with the loader. The GPA card reads scoresMap and
+    // the due badge reads dueSoonByCourse, so gating those loads on
+    // showInlineGrade / showProgressBar meant turning on only the GPA card or
+    // only the badge left its data source empty forever and the feature simply
+    // never appeared.
+    if (d.showInlineGrade || (d.widgets && d.widgets.gpa)) ensureLoaded("scores", loadInlineGrades);
+    if (d.showProgressBar || d.showBadges) ensureLoaded("planner", loadPlannerCounts);
   }
 
   BC.registry.register({

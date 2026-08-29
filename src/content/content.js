@@ -29,26 +29,31 @@
 
     // Shortcuts + palette registration. Signature-guarded: this re-registered all
     // ten handlers on every applyAll, i.e. several times a second forever.
+    //
+    // Handler ids ARE the settings.shortcuts.bindings keys, so a rebinding lines
+    // up with the entry it should update and BC.shortcuts.reloadFromSettings
+    // actually finds it.
     const sBindings = (settings.shortcuts && settings.shortcuts.bindings) || {};
     const quickSearch = !(settings.navigation && settings.navigation.quickSearch === false);
     const sSig = Object.keys(sBindings).sort().map((k) => k + "=" + sBindings[k]).join("|") + "|qs=" + quickSearch;
     if (BC.shortcuts && settings.shortcuts && settings.shortcuts.enabled && sSig !== shortcutSig) {
       shortcutSig = sSig;
-      BC.shortcuts.reloadFromSettings(settings);
       const b = sBindings;
+      const bind = (key, fn) => BC.shortcuts.register(key, b[key], fn);
       // navigation.quickSearch was a live switch that nothing read — the palette
       // shortcut registered unconditionally.
-      if (quickSearch) BC.shortcuts.register("bc-palette", b.commandPalette, () => BC.palette && BC.palette.open());
-      else BC.shortcuts.unregister("bc-palette");
-      BC.shortcuts.register("bc-settings", b.settings,          () => BC.features.settingsPanel && BC.features.settingsPanel.open());
-      BC.shortcuts.register("bc-dark",     b.toggleDark,        () => BC.storage.update((d) => { d.theming.darkMode = BC.isDarkActive(d) ? "off" : "on"; }));
-      BC.shortcuts.register("bc-task",     b.quickTask,         () => quickTaskFlow());
-      BC.shortcuts.register("bc-note",     b.quickNote,         () => BC.quickNote && BC.quickNote());
-      BC.shortcuts.register("bc-dash",     b.gotoDashboard,     () => location.assign("/"));
-      BC.shortcuts.register("bc-grades",   b.gotoGrades,        () => { const cid = BC.util.courseIdFromHref(location.pathname); if (cid) location.assign("/courses/" + cid + "/grades"); else BC.toast.info("Open a course first"); });
-      BC.shortcuts.register("bc-inbox",    b.gotoInbox,         () => location.assign("/conversations"));
-      BC.shortcuts.register("bc-cal",      b.gotoCalendar,      () => location.assign("/calendar"));
-      BC.shortcuts.register("bc-focus",    b.focusMode,         () => BC.storage.update((d) => { d.productivity.focusMode = !d.productivity.focusMode; }));
+      if (quickSearch) bind("commandPalette", () => BC.palette && BC.palette.open());
+      else BC.shortcuts.unregister("commandPalette");
+      bind("settings",      () => BC.features.settingsPanel && BC.features.settingsPanel.open());
+      bind("toggleDark",    () => BC.storage.update((d) => { d.theming.darkMode = BC.isDarkActive(d) ? "off" : "on"; }));
+      bind("quickTask",     () => quickTaskFlow());
+      bind("quickNote",     () => BC.quickNote && BC.quickNote());
+      bind("gotoDashboard", () => location.assign("/"));
+      bind("gotoGrades",    () => { const cid = BC.util.courseIdFromHref(location.pathname); if (cid) location.assign("/courses/" + cid + "/grades"); else BC.toast.info("Open a course first"); });
+      bind("gotoInbox",     () => location.assign("/conversations"));
+      bind("gotoCalendar",  () => location.assign("/calendar"));
+      bind("focusMode",     () => BC.storage.update((d) => { d.productivity.focusMode = !d.productivity.focusMode; }));
+      BC.shortcuts.reloadFromSettings(settings);
     }
 
     // Register once, not on every applyAll. This used to re-register ~10 static

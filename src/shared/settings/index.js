@@ -397,10 +397,41 @@
     });
   }
 
+  // tokens.js falls the SETTINGS surfaces back to a safe neutral when the chosen
+  // background can't carry legible text, and deliberately leaves Canvas pages
+  // alone. That trade is only defensible if we say so; until now nothing did, so
+  // the drawer silently stopped matching the theme with no explanation.
+  function contrastNotice(store) {
+    const box = h("div.bc-notice", null);
+    const sync = () => {
+      const g = BC.tokens.resolve(store.get().theming).guard;
+      const msgs = [];
+      if (g.surfaceFallback) {
+        msgs.push("This background is too light for dark mode, so these settings panels " +
+                  "use a neutral palette to stay readable. Canvas pages still use your colour.");
+      }
+      if (g.hierarchyCollapsed) {
+        msgs.push("At this background lightness, body text and secondary text can't be told " +
+                  "apart while staying readable. Pick a darker or lighter background to get " +
+                  "the type hierarchy back.");
+      }
+      const text = msgs.join(" ");
+      if (box.textContent !== text) box.textContent = text;
+      box.classList.toggle("bc-hidden", !text);
+    };
+    sync();
+    S_bind(box, sync);
+    return box;
+  }
+  // Components owns the bind registry; this is the one place outside it that needs
+  // to register a plain reactive node.
+  function S_bind(node, fn) { return BC.SettingsComponents.bindings.add(node, fn); }
+
   function renderTheming(store) {
     const S = BC.SettingsComponents;
     const t = store.get().theming;
     const c = h("div.bc-tab-body", null);
+    c.appendChild(contrastNotice(store));
     c.appendChild(S.section({ title: "Dark mode", children: [
       S.row({ label: "Dark mode",
         control: S.select({ get: () => t.darkMode, set: (v) => store.set((x) => { x.theming.darkMode = v; }),
@@ -1289,6 +1320,11 @@
   .bc-key { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; font-size: 13px; }
 
   .bc-hint { color: var(--muted); font-size: 12px; }
+  .bc-notice {
+    padding: 10px 12px; border-radius: var(--radius); font-size: 13px;
+    background: var(--bc-warn-bg, #fffbeb); color: var(--bc-text, inherit);
+    border: 1px solid var(--bc-warn, #a16207);
+  }
   .bc-ins-total { font-weight: 700; margin-bottom: 8px; }
   .bc-ins-days { display: flex; gap: 4px; align-items: flex-end; height: 64px; margin: 8px 0 12px; }
   .bc-ins-day { flex: 1; height: 100%; display: flex; align-items: flex-end; background: var(--bc-surface-4, rgba(0,0,0,.04)); border-radius: var(--bc-radius-sm, 4px); overflow: hidden; }

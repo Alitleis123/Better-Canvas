@@ -78,28 +78,59 @@
     return BC.api.assignmentGroups(courseId);
   }
 
+  const DONUT_R = 26;
+
+  // Pure arc geometry, exported so it can be tested without a DOM.
+  //
+  // stroke-dashoffset shifts the dash pattern BACKWARD along the path, so a
+  // segment drawn with dasharray "<len> <rest>" starts at arc length
+  // (circumference - offset). To place segment i at its cumulative position the
+  // offset must therefore be `C - cum` and nothing else.
+  //
+  // The previous `C - dash - cum` also subtracted the segment's own length,
+  // which shifted every segment forward by that amount. With equal weights the
+  // errors happened to cancel into a rotation, which is why this looked fine;
+  // with unequal weights (the normal case for real assignment groups) the
+  // segments overlapped and the donut misreported the weighting.
+  BC.grades.donutSegments = function (groups) {
+    const total = (groups || []).reduce((s, g) => s + (g.group_weight || 0), 0);
+    if (total <= 0) return [];
+    const C = 2 * Math.PI * DONUT_R;
+    const out = [];
+    let cum = 0;
+    for (const g of groups) {
+      const fraction = (g.group_weight || 0) / total;
+      const dash = C * fraction;
+      out.push({
+        name: g.name || "",
+        fraction,
+        percent: Math.round(fraction * 100),
+        dash,
+        gap: C - dash,
+        offset: C - cum,
+      });
+      cum += dash;
+    }
+    return out;
+  };
+
   function donutSVG(groups, hasWeights) {
     // Show weight distribution
     if (!hasWeights) return "";
-    let cum = 0;
-    const total = groups.reduce((s, g) => s + (g.group_weight || 0), 0);
-    if (total <= 0) return "";
-    const R = 26, C = 2 * Math.PI * R;
+    const segments = BC.grades.donutSegments(groups);
+    if (!segments.length) return "";
     // Categorical ramp from the token set, so the donut re-tints per mode instead of
     // staying at fixed light-mode hues.
     const palette = ["var(--bc-cat-1)","var(--bc-cat-2)","var(--bc-cat-3)","var(--bc-cat-4)",
                      "var(--bc-cat-5)","var(--bc-cat-6)","var(--bc-cat-7)","var(--bc-cat-8)"];
     let arcs = "";
     let items = "";
-    groups.forEach((g, i) => {
-      const w = (g.group_weight || 0) / total;
-      const dash = C * w;
-      const off = C - dash - cum;
-      arcs += `<circle cx="30" cy="30" r="${R}" fill="none" stroke="${palette[i%palette.length]}" stroke-width="8" stroke-dasharray="${dash} ${C-dash}" stroke-dashoffset="${off}" transform="rotate(-90 30 30)"/>`;
-      cum += dash;
-      items += `<li><span style="background:${palette[i%palette.length]}"></span>${BC.util.escapeHtml(g.name)} — ${Math.round(w*100)}%</li>`;
+    segments.forEach((s, i) => {
+      const color = palette[i % palette.length];
+      arcs += `<circle cx="30" cy="30" r="${DONUT_R}" fill="none" stroke="${color}" stroke-width="8" stroke-dasharray="${s.dash} ${s.gap}" stroke-dashoffset="${s.offset}" transform="rotate(-90 30 30)"/>`;
+      items += `<li><span style="background:${color}"></span>${BC.util.escapeHtml(s.name)} · ${s.percent}%</li>`;
     });
-    return `<div class="bc-gt-donut"><svg width="60" height="60">${arcs}</svg><ul class="bc-gt-legend">${items}</ul></div>`;
+    return `<div class="bc-gt-donut"><svg width="60" height="60" role="img" aria-label="Assignment group weights">${arcs}</svg><ul class="bc-gt-legend">${items}</ul></div>`;
   }
 
   function trendSVG(hist) {
@@ -242,6 +273,10 @@
     return BC.grades.computeTotal(cloned);
   }
 
+  // The delegated listener above outlives any single build, so it dispatches
+  // through this indirection to whichever rubric is currently mounted.
+  let refreshRef = () => {};
+
   function buildRubricUI(panel, asn, rubric, groups, courseId) {
     const aid = String(asn.id);
     const draft = ((BC.storage.local && BC.storage.local.rubricDrafts) || {})[aid] || {};
@@ -299,9 +334,16 @@
       }
       saveDraft(values);
     }
-    panel.addEventListener("input", (e) => {
-      if (e.target && e.target.type === "range") refresh();
-    });
+    // The panel node is reused across SPA navigations (ensureNode returns the
+    // existing one), so an unguarded addEventListener stacked a duplicate handler
+    // for every assignment visited and ran refresh() once per accumulated listener.
+    if (!panel._bcRubricWired) {
+      panel._bcRubricWired = true;
+      panel.addEventListener("input", (e) => {
+        if (e.target && e.target.type === "range") refreshRef();
+      });
+    }
+    refreshRef = refresh;
     refresh();
   }
 
