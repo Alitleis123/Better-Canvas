@@ -182,4 +182,52 @@ module.exports = {
     assert.deepEqual(bindings, labelled,
       "a binding with no label is unreachable from the UI, and vice versa");
   },
+
+  "migration 5 removes the vestigial profile and ics toggles"() {
+    const BC = fresh();
+    const out = BC.mergeDefaults({ version: 4, activeProfile: "x", calendar: { icsExport: false } }, {});
+    assert.equal(out.activeProfile, undefined,
+      "activeProfile was written on every save and exported in every backup while nothing read it");
+    assert.equal(out.calendar.icsExport, undefined);
+    assert.equal(out.calendar.miniOnDashboard, false, "sibling settings must survive");
+  },
+
+  "every setting in the schema is read by some module"() {
+    // A setting nothing reads is a switch that silently does nothing, which is
+    // the single most common defect class this schema has had.
+    const fs = require("fs");
+    const path = require("path");
+    const { ROOT } = require("./harness");
+    const BC = fresh();
+
+    const leaves = (obj, prefix, out) => {
+      for (const [k, v] of Object.entries(obj)) {
+        const p = prefix ? prefix + "." + k : k;
+        if (v && typeof v === "object" && !Array.isArray(v)) leaves(v, p, out);
+        else out.push(p);
+      }
+      return out;
+    };
+
+    let src = "";
+    const walk = (d) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) walk(p);
+        else if (e.name.endsWith(".js") && !p.endsWith("defaults.js")) src += fs.readFileSync(p, "utf8") + "\n";
+      }
+    };
+    walk(path.join(ROOT, "src"));
+
+    // privacy.telemetry is a deliberate hard-wired declaration, not a switch.
+    const EXEMPT = new Set(["privacy.telemetry", "version"]);
+    const unread = [];
+    for (const p of leaves(BC.defaults, "", [])) {
+      if (EXEMPT.has(p)) continue;
+      const leaf = p.split(".").pop();
+      const re = new RegExp("[.\\[\"']" + leaf.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b");
+      if (!re.test(src)) unread.push(p);
+    }
+    assert.deepEqual(unread, [], "settings with no reader: " + unread.join(", "));
+  },
 };

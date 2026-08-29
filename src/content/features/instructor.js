@@ -89,9 +89,21 @@
     if (!settings.instructor.rosterExport && !settings.instructor.attendanceQuick) {
       BC.injector.removeNode("bc-roster-btn");
     } else {
-      BC.injector.ensureNode("bc-roster-btn", document.querySelector("#content, #main") || document.body, () => {
-        const bar = document.createElement("div");
-        bar.className = "bc-instr-bar";
+      const bar = BC.injector.ensureNode("bc-roster-btn", document.querySelector("#content, #main") || document.body, () => {
+        const d = document.createElement("div");
+        d.className = "bc-instr-bar";
+        const host = document.querySelector("#content, #main") || document.body;
+        host.prepend(d);
+        return d;
+      });
+      // Built OUTSIDE the factory and keyed on the toggles it depends on. The
+      // factory runs once, so building the buttons in there froze the bar at
+      // whatever the settings were the first time this page was opened: toggling
+      // either export off (or on) did nothing until a reload.
+      const sig = (settings.instructor.rosterExport ? "r" : "") + (settings.instructor.attendanceQuick ? "a" : "");
+      if (bar.dataset.bcSig !== sig) {
+        bar.dataset.bcSig = sig;
+        bar.replaceChildren();
         if (settings.instructor.rosterExport) {
           const btn = document.createElement("button");
           btn.className = "bc-btn";
@@ -110,10 +122,7 @@
           hint.textContent = "P/A buttons mark today's attendance (stored locally).";
           bar.appendChild(hint);
         }
-        const host = document.querySelector("#content, #main") || document.body;
-        host.prepend(bar);
-        return bar;
-      });
+      }
     }
 
     if (!settings.instructor.attendanceQuick) {

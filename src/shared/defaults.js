@@ -10,7 +10,6 @@
   BC.VERSION = "3.1.0";
   BC.SETTINGS_KEY = "bcSettings";
   BC.LOCAL_KEY = "bcLocal";
-  BC.PROFILES_KEY = "bcProfiles";
 
   BC.GLOBAL_NAV_ITEMS = [
     { key: "global_nav_dashboard_link", label: "Dashboard" },
@@ -74,9 +73,8 @@
   };
 
   BC.defaults = {
-    version: 4,
+    version: 5,
     enabled: true,
-    activeProfile: "default",
     firstRun: true,
 
     dashboard: {
@@ -220,7 +218,6 @@
     },
 
     calendar: {
-      icsExport: true,
       miniOnDashboard: false,
       syllabusExtract: true,       // offer to add syllabus dates to planner
     },
@@ -315,7 +312,7 @@
     return BC.migrate(merged, carry);
   };
 
-  BC.SETTINGS_VERSION = 4;
+  BC.SETTINGS_VERSION = 5;
 
   // Each entry upgrades settings from (v-1) to v. `carry` collects data that
   // must move to the bcLocal store — storage.load() persists it there.
@@ -379,6 +376,16 @@
 
       // Sanitize a stored value whose options no longer exist.
       if (s.todo && ["list", "kanban", "timeblock"].indexOf(s.todo.view) === -1) s.todo.view = "list";
+    },
+
+    5(s) {
+      // Vestigial: BC.PROFILES_KEY and a "profiles" feature never existed, so
+      // activeProfile was written on every save and exported in every backup
+      // while nothing ever read it.
+      delete s.activeProfile;
+      // The .ics export button is unconditional and always has been, so a toggle
+      // gating nothing was just a dead switch in the Calendar tab.
+      if (s.calendar) delete s.calendar.icsExport;
     },
   };
 
