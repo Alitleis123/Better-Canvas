@@ -28,7 +28,9 @@
 
   async function loadAll() {
     if (Date.now() - cache.loadedAt < 60000 && cache.files.length) return cache.files;
-    const courses = await BC.api.coursesWithScores();
+    // Every active enrollment, not just student ones: a teacher has no student
+    // enrollment, so the library came back empty for them.
+    const courses = await BC.api.activeCourses();
     const active = courses.filter((c) => !c.concluded).slice(0, 20);
     const all = [];
     let failed = 0;

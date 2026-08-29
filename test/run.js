@@ -37,12 +37,23 @@ async function main() {
     const suite = require(path.join(__dirname, file));
     const suiteName = file.replace(/\.test\.js$/, "");
     for (const [name, fn] of Object.entries(suite)) {
+      // Some code under test logs on purpose (util.guard warns about a contained
+      // feature error, the API layer warns on a truncated list). Buffer it and
+      // only surface it when the test actually fails, so a green run is quiet
+      // and a red one keeps the context.
+      const buffered = [];
+      const real = { log: console.log, warn: console.warn, error: console.error };
+      for (const k of Object.keys(real)) {
+        console[k] = (...a) => buffered.push(k + ": " + a.map(String).join(" "));
+      }
       try {
         await fn();
         pass++;
       } catch (e) {
         fail++;
-        failures.push({ suite: suiteName, name, err: e });
+        failures.push({ suite: suiteName, name, err: e, logs: buffered });
+      } finally {
+        Object.assign(console, real);
       }
     }
   }
@@ -50,6 +61,7 @@ async function main() {
   for (const f of failures) {
     console.log(`FAIL  ${f.suite} > ${f.name}`);
     console.log(`      ${f.err.message.split("\n").join("\n      ")}`);
+    for (const line of f.logs || []) console.log(`      | ${line}`);
   }
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

@@ -205,4 +205,53 @@ module.exports = {
     const { api } = setup([{ body: "" }]);
     assert.equal(await api.mutate("POST", "/api/v1/x", {}), null);
   },
+
+  async "coursesWithScores asks only for student enrollments"() {
+    // Scores only mean something for a student enrollment.
+    const { api, calls } = setup([{ body: [] }]);
+    await api.coursesWithScores();
+    assert.match(calls[0].url, /enrollment_type=student/);
+    assert.match(calls[0].url, /include\[\]=total_scores/);
+  },
+
+  async "activeCourses does not filter by enrollment type"() {
+    // Features that merely enumerate courses must see teacher and TA
+    // enrollments too, or those users get an empty panel that reads as
+    // "nothing here" rather than as a wrong query.
+    const { api, calls } = setup([{ body: [] }]);
+    await api.activeCourses();
+    assert.match(calls[0].url, /enrollment_state=active/);
+    assert.noMatch(calls[0].url, /enrollment_type=/,
+      "activeCourses must not restrict the role");
+  },
+
+  async "the two course queries use distinct cache entries"() {
+    const { api, calls } = setup([{ body: [] }, { body: [] }]);
+    await api.coursesWithScores();
+    await api.activeCourses();
+    assert.equal(calls.length, 2, "different queries must not collide in the cache");
+  },
+
+  "features that only enumerate courses use activeCourses"() {
+    const fs = require("fs");
+    const path = require("path");
+    const { ROOT } = require("./harness");
+    for (const f of ["files.js", "announcements.js", "semester.js"]) {
+      const src = fs.readFileSync(path.join(ROOT, "src/content/features", f), "utf8");
+      assert.noMatch(src, /BC\.api\.coursesWithScores\(\)/,
+        `${f} enumerates courses, so it must use activeCourses to include instructors`);
+      assert.match(src, /BC\.api\.activeCourses\(\)/, `${f} should call activeCourses`);
+    }
+  },
+
+  "features that need scores still use coursesWithScores"() {
+    const fs = require("fs");
+    const path = require("path");
+    const { ROOT } = require("./harness");
+    for (const f of ["dashboard.js", "notifications.js"]) {
+      const src = fs.readFileSync(path.join(ROOT, "src/content/features", f), "utf8");
+      assert.match(src, /BC\.api\.coursesWithScores\(\)/,
+        `${f} reads computed scores, so it must keep the student-scoped query`);
+    }
+  },
 };

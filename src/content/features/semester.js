@@ -43,7 +43,9 @@
   }
 
   function render() {
-    BC.api.coursesWithScores().then((courses) => {
+    // Term dates come from any enrollment, so this must not filter to student
+    // ones or an instructor never sees the term progress bar.
+    BC.api.activeCourses().then((courses) => {
       const term = currentTerm(courses);
       if (!term) { BC.injector.removeNode("bc-semester"); return; }
       const now = Date.now();

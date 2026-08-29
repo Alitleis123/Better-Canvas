@@ -29,7 +29,9 @@
   // "we could not reach Canvas" look identical to the user, and the empty state
   // is the more reassuring of the two, so a failure silently reads as good news.
   async function loadAll() {
-    const courses = await BC.api.coursesWithScores();
+    // Every active enrollment: an instructor has no student enrollment, so the
+    // aggregator showed them nothing at all.
+    const courses = await BC.api.activeCourses();
     const active = courses.filter((c) => !c.concluded).slice(0, 15);
     const all = [];
     let failed = 0;

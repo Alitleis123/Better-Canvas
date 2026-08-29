@@ -107,10 +107,25 @@
       return api.getJSON("/api/v1/dashboard/dashboard_cards", { ttl: TTL.cards });
     },
 
+    // Student enrollments only, because the point is the scores. Anything that
+    // merely needs "which courses am I in" must use activeCourses() instead.
     coursesWithScores() {
       return api.getList(
         "/api/v1/courses?enrollment_state=active&enrollment_type=student" +
         "&include[]=total_scores&include[]=concluded&include[]=term&per_page=100",
+        { maxPages: 20, ttl: TTL.courses }
+      );
+    },
+
+    // Every active enrollment, whatever the role. Features that just enumerate
+    // courses (files library, announcements aggregator, term progress) were
+    // using coursesWithScores, so for a teacher or TA -- who has no student
+    // enrollment -- the list came back empty and those panels rendered as
+    // "nothing here" rather than as anything wrong.
+    activeCourses() {
+      return api.getList(
+        "/api/v1/courses?enrollment_state=active" +
+        "&include[]=concluded&include[]=term&per_page=100",
         { maxPages: 20, ttl: TTL.courses }
       );
     },
