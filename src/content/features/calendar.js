@@ -132,5 +132,5 @@
     renderMini(panel);
   }
 
-  BC.registry.register({ id: "calendar", styles: ["bc-mini-cal-css"], nodes: ["bc-mini-cal"], apply });
+  BC.registry.register({ id: "calendar", pages: ["dashboard"], styles: ["bc-mini-cal-css"], nodes: ["bc-mini-cal"], apply });
 })();

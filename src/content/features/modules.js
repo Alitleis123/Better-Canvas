@@ -94,5 +94,5 @@
 
   // bc-mod-bar was injected per module but never declared, so disabling the
   // extension left stale progress bars sitting inside Canvas's module headers.
-  BC.registry.register({ id: "modules", styles: ["bc-mod-css"], nodes: ["bc-mod-summary", "bc-mod-bar"], apply });
+  BC.registry.register({ id: "modules", pages: ["modules"], styles: ["bc-mod-css"], nodes: ["bc-mod-summary", "bc-mod-bar"], apply });
 })();

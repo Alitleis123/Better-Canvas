@@ -176,5 +176,5 @@
     if (!panel.childElementCount) render(panel, settings);
   }
 
-  BC.registry.register({ id: "files", styles: ["bc-files-css"], nodes: ["bc-files-panel"], apply });
+  BC.registry.register({ id: "files", pages: ["dashboard"], styles: ["bc-files-css"], nodes: ["bc-files-panel"], apply });
 })();

@@ -142,7 +142,7 @@
   }
 
   BC.registry.register({
-    id: "discussions",
+    id: "discussions", pages: ["discussions"],
     styles: ["bc-disc-css", "bc-disc-collapse"],
     nodes: ["bc-disc-bar"],
     apply,

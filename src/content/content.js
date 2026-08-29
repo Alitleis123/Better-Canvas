@@ -9,6 +9,8 @@
   const BC = (globalThis.BC = globalThis.BC || {});
 
   let shortcutSig = null;
+  // Drives the "apply once more on the way out" rule for page-scoped features.
+  let lastPage = null;
 
   BC.applyAll = function (settings) {
     if (!settings) return;
@@ -22,8 +24,17 @@
     if (!settings.enabled) return teardown();
     if (tornDown) remount();
 
+    // Page-scoped features are skipped entirely while off their page. applyAll
+    // runs several times a second, so calling all ~24 features on every tick
+    // meant most of them were doing a selector query only to early-return.
+    // They still get one call on the tick the page changes, which is where their
+    // own cleanup branch lives.
+    const pageChanged = ctx.page !== lastPage;
+    lastPage = ctx.page;
+
     for (const f of BC.registry.all()) {
       if (f === sp) continue;
+      if (!BC.registry.shouldApply(f, ctx.page, pageChanged)) continue;
       BC.util.guard(() => f.apply(settings, ctx), f.id);
     }
 
@@ -157,6 +168,7 @@
   // simply never came back.
   function remount() {
     tornDown = false;
+    lastPage = null;   // force one full pass so page-scoped features re-mount
     startAlarms();
   }
 

@@ -91,5 +91,5 @@
     render();
   }
 
-  BC.registry.register({ id: "semester", styles: ["bc-semester-css"], nodes: ["bc-semester"], apply });
+  BC.registry.register({ id: "semester", pages: ["dashboard"], styles: ["bc-semester-css"], nodes: ["bc-semester"], apply });
 })();

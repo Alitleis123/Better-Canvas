@@ -203,7 +203,7 @@
   // bc-ungraded-badge is injected per assignment link but was never declared, so
   // teardown left the badges stuck on Canvas's assignments index.
   BC.registry.register({
-    id: "instructor", styles: ["bc-instr-css"],
+    id: "instructor", styles: ["bc-instr-css"], pages: ["course", "assignments"],
     nodes: ["bc-roster-btn", "bc-ungraded", "bc-ungraded-badge"], apply,
   });
 })();

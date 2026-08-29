@@ -422,5 +422,5 @@
     }
   }
 
-  BC.registry.register({ id: "grades", styles: ["bc-grade-tools"], nodes: ["bc-grade-tools", "bc-rubric"], apply });
+  BC.registry.register({ id: "grades", pages: ["grades", "assignment"], styles: ["bc-grade-tools"], nodes: ["bc-grade-tools", "bc-rubric"], apply });
 })();

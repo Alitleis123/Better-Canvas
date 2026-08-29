@@ -201,7 +201,7 @@
   }
 
   BC.registry.register({
-    id: "quizsaver",
+    id: "quizsaver", pages: ["course"],
     styles: ["bc-quiz-css"],
     nodes: ["bc-quiz-banner", "bc-quiz-dot"],
     apply,

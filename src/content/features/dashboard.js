@@ -418,7 +418,7 @@
   }
 
   BC.registry.register({
-    id: "dashboard",
+    id: "dashboard", pages: ["dashboard"],
     styles: ["bc-dashboard-widgets", "bc-dashboard-ui"],
     // These were injected per card but declared nowhere, so teardown left every
     // badge, grade pill and progress bar stuck on the Canvas cards.

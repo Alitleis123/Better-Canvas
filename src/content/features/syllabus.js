@@ -174,5 +174,5 @@
     buildPanel(panel, found, ctx.courseId);
   }
 
-  BC.registry.register({ id: "syllabus", styles: ["bc-syl-css"], nodes: ["bc-syllabus"], apply });
+  BC.registry.register({ id: "syllabus", pages: ["assignments"], styles: ["bc-syl-css"], nodes: ["bc-syllabus"], apply });
 })();

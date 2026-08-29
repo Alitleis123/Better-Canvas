@@ -84,5 +84,5 @@
     });
   }
 
-  BC.registry.register({ id: "announcements", styles: ["bc-ann-css"], nodes: ["bc-ann-panel"], apply });
+  BC.registry.register({ id: "announcements", pages: ["dashboard"], styles: ["bc-ann-css"], nodes: ["bc-ann-panel"], apply });
 })();
