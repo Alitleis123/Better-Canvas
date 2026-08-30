@@ -131,6 +131,14 @@
       animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important;
     }
 
+    /* Surfaces the selector list above missed, found by measuring their computed
+       background. Only the background is set: their text already inherits our
+       light colour, which is what was unreadable on them. */
+    html.bc-dark [data-bc-lit] {
+      background-color: var(--bc-d-bg2) !important;
+      border-color: var(--bc-d-border) !important;
+    }
+
     /* Rounded UI off */
     :root[data-bc-rounded="0"] .ic-DashboardCard, :root[data-bc-rounded="0"] .btn, :root[data-bc-rounded="0"] input,
     :root[data-bc-rounded="0"] select, :root[data-bc-rounded="0"] .Button { border-radius: 0 !important; }
@@ -208,6 +216,73 @@
            `.bc-logo-text { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color: var(--bc-text); font-weight:700; font-size: var(--bc-text-sm); letter-spacing:.03em; }`;
   }
 
+  // ---- light-surface sweep -------------------------------------------------
+  //
+  // Dark mode sets a text colour on the whole document but backgrounds from a
+  // list of selectors. Colour inherits; background does not. So any Canvas
+  // surface the list misses keeps its LIGHT background, inherits our near-white
+  // text, and renders blank rather than merely unstyled.
+  //
+  // No selector list can be complete against an app we do not control and that
+  // renames its containers between releases, and CSS cannot ask what an
+  // element's computed background actually is. This is the one place a JS pass
+  // is worth its cost: it runs once per page rather than on the ~5x/second apply
+  // tick, is capped, and only ever looks at structural chrome.
+  const LIT = "data-bc-lit";
+
+  // Block-level containers only. Deliberately excludes span/a/button and the
+  // like: a light chip or badge sets its own text colour, so it is already
+  // readable, and repainting it would destroy a deliberate accent.
+  const SWEEP_TAGS = "div,section,header,footer,nav,aside,main,article,form,fieldset," +
+                     "table,thead,tbody,tfoot,tr,td,th,ul,ol,li,dl,dd,dt";
+
+  // Instructor-authored content is off limits: its background is a deliberate
+  // choice by whoever wrote the page, and we would be overriding their design.
+  const CONTENT_SCOPES = ".user_content,.show-content,.description,.assignment-description," +
+                         ".discussion-topic-body,.mce-content-body,.ProseMirror,.bc-note";
+
+  const SWEEP_MAX = 800;
+  // Above this luminance a surface is "light". 0.5 sits between Canvas's greys
+  // and its white panels, well clear of any dark tone we emit.
+  const LIGHT_CUTOFF = 0.5;
+
+  function sweepLightSurfaces() {
+    if (!document.body || !document.documentElement.classList.contains("bc-dark")) return 0;
+    const scope = document.getElementById("application") || document.body;
+    let marked = 0, seen = 0;
+    for (const el of scope.querySelectorAll(SWEEP_TAGS)) {
+      if (++seen > SWEEP_MAX) break;
+      if (el.hasAttribute(LIT)) continue;
+      // Never touch our own UI, and never touch authored course content.
+      if (el.closest("[data-bc-node],[data-better-canvas]," + CONTENT_SCOPES)) continue;
+      let cs;
+      try { cs = getComputedStyle(el); } catch (_) { continue; }
+      if (!cs) continue;
+      // A background image is somebody's deliberate art direction.
+      if (cs.backgroundImage && cs.backgroundImage !== "none") continue;
+      const lum = BC.color.cssLuminance(cs.backgroundColor);
+      if (lum == null || lum < LIGHT_CUTOFF) continue;   // transparent or already dark
+      el.setAttribute(LIT, "");
+      marked++;
+    }
+    return marked;
+  }
+
+  function clearLightSweep() {
+    for (const el of document.querySelectorAll("[" + LIT + "]")) el.removeAttribute(LIT);
+  }
+
+  // Canvas renders progressively, so one pass at apply time misses whatever
+  // mounts after it. Two passes on the page bag cover the common case without
+  // becoming a poll; the bag clears them on navigation.
+  function scheduleSweep() {
+    const bag = BC.lifecycle.pageBag("theming");
+    bag.once("sweep", () => {
+      BC.util.guard(sweepLightSurfaces, "theming:sweep");
+      bag.timeout(() => BC.util.guard(sweepLightSurfaces, "theming:sweep2"), 1200);
+    });
+  }
+
   // Imperative root state. Cheap, but every write is guarded: an unguarded
   // classList or attribute write re-serializes the attribute even when the value
   // is unchanged, which is both a style invalidation and an observer self-trigger,
@@ -279,13 +354,21 @@
     BC.injector.setStyle("bc-theming", lastCss);
 
     applyRootState(settings);
+
+    // Only meaningful in dark mode; clear the marks the moment it is turned off
+    // so nothing stays painted dark on a light page.
+    if (document.documentElement.classList.contains("bc-dark")) scheduleSweep();
+    else clearLightSweep();
   }
+
+  // Exported so the sweep's selection rules can be tested without a browser.
+  BC.theming = Object.assign(BC.theming || {}, { sweepLightSurfaces, clearLightSweep, LIT });
 
   BC.registry.register({
     id: "theming", styles: ["bc-static", "bc-theming"], nodes: ["bc-logo-text"], apply,
     // Teardown removes our stylesheets, so the memo has to be invalidated or a
     // re-enable would skip rebuilding them. (The root-level inline state is cleared
     // centrally in content.js's teardown.)
-    unmount() { lastSig = null; },
+    unmount() { lastSig = null; clearLightSweep(); },
   });
 })();
