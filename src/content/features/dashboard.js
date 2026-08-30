@@ -53,13 +53,16 @@
       ${d.hoverLift ? `.ic-DashboardCard { transition: transform .18s ease, box-shadow .18s ease; }
       .ic-DashboardCard:hover { transform: translateY(-2px); box-shadow: var(--bc-shadow-3, 0 10px 30px rgba(0,0,0,.12)); }` : ""}
     `;
-    if (d.layout === "grid") css += `${GRID} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 16px !important; align-items: start !important; }`;
+    const spanRow = `${GRID} > :not([data-bc-carditem]) { grid-column: 1 / -1 !important; }`;
+    if (d.layout === "grid") css += `${GRID} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 16px !important; align-items: start !important; }
+      ${spanRow}`;
     if (d.layout === "list") css += `${GRID} { display: flex !important; flex-direction: column !important; gap: 8px !important; }
       ${GRID} > * { width: 100% !important; }
       .ic-DashboardCard { display: flex !important; flex-direction: row !important; height: 90px !important; }
       .ic-DashboardCard__header { flex: 0 0 120px !important; }
       .ic-DashboardCard__action-container { display: none !important; }`;
     if (d.layout === "compact") css += `${GRID} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 12px !important; align-items: start !important; }
+      ${spanRow}
       .ic-DashboardCard { max-height: 120px !important; }
       .ic-DashboardCard__header_image { height: 40px !important; }`;
     if (d.layout === "masonry") css += `${GRID} { columns: ${Math.max(2, Math.floor(1200/size))} auto !important; column-gap: 14px !important; display: block !important; }
@@ -82,11 +85,31 @@
       if (el !== host) el.removeAttribute("data-bc-cardgrid");
     }
     if (!host.hasAttribute("data-bc-cardgrid")) host.setAttribute("data-bc-cardgrid", "");
+
+    // Canvas puts headings ("Published Courses") inside this container too, and
+    // making it a grid would drop them into a card slot. Mark the children that
+    // actually hold a card so everything else can be told to span the full row.
+    // Marking the ITEMS rather than negating a card class is what makes this work
+    // whether the cards are direct children or each sits in its own wrapper.
+    const items = new Set();
+    for (const card of cards) {
+      let n = card;
+      while (n && n.parentElement !== host) n = n.parentElement;
+      if (n) items.add(n);
+    }
+    for (const child of Array.from(host.children)) {
+      const want = items.has(child);
+      if (child.hasAttribute("data-bc-carditem") !== want) {
+        if (want) child.setAttribute("data-bc-carditem", "");
+        else child.removeAttribute("data-bc-carditem");
+      }
+    }
     return host;
   }
 
   function unmarkCardGrid() {
     for (const el of document.querySelectorAll("[data-bc-cardgrid]")) el.removeAttribute("data-bc-cardgrid");
+    for (const el of document.querySelectorAll("[data-bc-carditem]")) el.removeAttribute("data-bc-carditem");
   }
 
   function overlayCard(card, spec) {
