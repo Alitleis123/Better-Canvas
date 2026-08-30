@@ -62,6 +62,16 @@
       return { r: +m[1], g: +m[2], b: +m[3], a: isFinite(a) ? a : 1 };
     },
 
+    // How far a colour is from grey, 0..255. A white or grey panel is chrome; a
+    // saturated colour is somebody's deliberate choice (a course colour, a
+    // status badge, a highlight) and must not be repainted as if it were a
+    // surface.
+    chroma(str) {
+      const c = color.parseCssColor(str);
+      if (!c) return 0;
+      return Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b);
+    },
+
     // Relative luminance of a computed colour string, or null when it is too
     // transparent to be what the user actually sees.
     cssLuminance(str, minAlpha) {

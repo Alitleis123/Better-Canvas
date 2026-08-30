@@ -216,4 +216,45 @@ module.exports = {
     assert.noMatch(block, /(^|[^-])color:\s*var\(--bc-d-text/,
       "the sweep should not also force a text colour");
   },
+
+  "a saturated light background is left alone"() {
+    // A pale course colour, a status chip or a highlight can be light enough to
+    // look like a panel by luminance alone. Repainting it would erase the very
+    // thing the colour encodes.
+    const e = env();
+    const paleYellow = e.add("div", "rgb(255, 249, 196)");
+    const paleGreen  = e.add("div", "rgb(200, 247, 197)");
+    const palePink   = e.add("div", "rgb(255, 205, 210)");
+    e.BC.theming.sweepLightSurfaces();
+    for (const el of [paleYellow, paleGreen, palePink]) {
+      assert.notOk(isLit(el), `saturated fill ${el._bg} must be preserved`);
+    }
+  },
+
+  "neutral light surfaces are still swept"() {
+    const e = env();
+    const white = e.add("div", "rgb(255, 255, 255)");
+    const grey  = e.add("div", "rgb(246, 247, 251)");
+    const warm  = e.add("div", "rgb(245, 245, 243)");
+    e.BC.theming.sweepLightSurfaces();
+    for (const el of [white, grey, warm]) assert.ok(isLit(el), `neutral ${el._bg} should be swept`);
+  },
+
+  "dashboard cards are never touched, so course colours survive"() {
+    const e = env();
+    const card = e.add("div", null, null, { className: "ic-DashboardCard" });
+    const header = e.add("div", "rgb(255, 255, 255)", card);
+    e.BC.theming.sweepLightSurfaces();
+    assert.notOk(isLit(card));
+    assert.notOk(isLit(header), "a card's own chrome carries the user's course colour");
+  },
+
+  "the neutrality test uses distance from grey"() {
+    const C = require("./harness").loadCore(require("./harness").createSandbox()).color;
+    assert.equal(C.chroma("rgb(255, 255, 255)"), 0, "white is perfectly neutral");
+    assert.equal(C.chroma("rgb(100, 100, 100)"), 0);
+    assert.ok(C.chroma("rgb(255, 249, 196)") > 24, "a pale yellow is a colour, not chrome");
+    assert.ok(C.chroma("rgb(246, 247, 251)") <= 24, "a faintly cool grey is still chrome");
+    assert.equal(C.chroma("transparent"), 0);
+  },
 };

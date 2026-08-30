@@ -238,8 +238,17 @@
 
   // Instructor-authored content is off limits: its background is a deliberate
   // choice by whoever wrote the page, and we would be overriding their design.
+  // Dashboard cards are excluded for the same reason: the header carries the
+  // user's own course colour.
   const CONTENT_SCOPES = ".user_content,.show-content,.description,.assignment-description," +
-                         ".discussion-topic-body,.mce-content-body,.ProseMirror,.bc-note";
+                         ".discussion-topic-body,.mce-content-body,.ProseMirror,.bc-note," +
+                         ".ic-DashboardCard";
+
+  // Above this distance from grey a background is a deliberate colour rather
+  // than chrome. A pale course colour or a status chip can be light enough to
+  // look like a panel by luminance alone; repainting it would erase the very
+  // thing it encodes.
+  const NEUTRAL_MAX_CHROMA = 24;
 
   const SWEEP_MAX = 800;
   // Above this luminance a surface is "light". 0.5 sits between Canvas's greys
@@ -262,6 +271,8 @@
       if (cs.backgroundImage && cs.backgroundImage !== "none") continue;
       const lum = BC.color.cssLuminance(cs.backgroundColor);
       if (lum == null || lum < LIGHT_CUTOFF) continue;   // transparent or already dark
+      // Only neutral surfaces are chrome. A saturated fill is meaning.
+      if (BC.color.chroma(cs.backgroundColor) > NEUTRAL_MAX_CHROMA) continue;
       el.setAttribute(LIT, "");
       marked++;
     }
