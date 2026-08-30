@@ -219,6 +219,8 @@ src/
 - **`BC.lifecycle.bag(id)`** gives each feature scoped listeners/intervals that are cleared on disable; `pageBag(id)` also clears on SPA navigation. Errors land in the `BC.diag` ring buffer.
 - **Settings UI is shared** via `BC.SettingsUI.render(rootEl, adapter)`. The in-page drawer backs it with live `BC.storage` + `BC.api`; the options page backs it with `chrome.storage` + messaging the active Canvas tab.
 - **Dark mode / theming** is driven by CSS variables. `theming.js` emits one variable block and a static rule set consumes it — re-tinting is a single style swap.
+- **Dark mode does not rely on a selector allowlist.** Colour inherits but background does not, so any Canvas surface a selector list misses keeps its light background, inherits the light text, and renders blank. No list can be complete against an app that renames its containers between releases, and CSS cannot ask what an element's computed background is. So a bounded pass measures it: block containers only, capped, throttled off real DOM change (never a poll), and scoped to skip our own UI, instructor-authored content, background images, already-dark surfaces, dashboard cards, and any *saturated* fill — a pale course colour is meaning, not chrome.
+- **The dashboard card container is derived at runtime**, not matched by class name, and marked `data-bc-cardgrid`. Canvas has changed this markup more than once; `.ic-DashboardCard__box` is the per-card wrapper, and styling it as the container is what made every card a one-column grid and stacked them.
 - **Command palette + shortcuts** are wired centrally in `content.js` from `settings.shortcuts.bindings`, so users can rebind everything from Settings → Shortcuts.
 
 ### Adding a feature
@@ -261,6 +263,9 @@ good enough to exercise the injector and observer against an actual tree.
 | `shortcuts` | combos, chords, typing guards, rebinding |
 | `security` | escaping, URL scheme gating, no eval, no external endpoints |
 | `a11y` | focus management, roles and labels, reduced motion, contrast pairings |
+| `darksweep` | every exclusion the light-surface sweep makes, and its bounds |
+| `dashboardlayout` | card container derivation across both Canvas DOM shapes |
+| `robustness` | async failure paths, unhandled rejections, error containment |
 
 Feature behaviour against a live Canvas instance is still verified in-browser;
 the suite covers the logic, the design system and the integration rules.
