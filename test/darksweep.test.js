@@ -176,4 +176,44 @@ module.exports = {
     assert.noMatch(filter[1], /data-bc-lit/,
       "watching the sweep's own marker would make it retrigger itself forever");
   },
+
+  "the sweep is driven by real DOM change, not a timer"() {
+    // apply() only runs when the observer saw an actual mutation, so throttling
+    // off it means "at most once every few seconds, and only when something
+    // changed" rather than a poll that burns work on an idle page.
+    const fs = require("fs");
+    const path = require("path");
+    const { ROOT } = require("./harness");
+    const src = fs.readFileSync(path.join(ROOT, "src/content/features/theming.js"), "utf8");
+    assert.match(src, /BC\.util\.throttle\(\s*\(\) => BC\.util\.guard\(sweepLightSurfaces/,
+      "the sweep should be throttled, so a re-render is caught but an idle page costs nothing");
+    assert.noMatch(src, /setInterval\([^)]*sweepLightSurfaces/,
+      "the sweep must not become a background poll");
+  },
+
+  "turning dark mode off clears the marks rather than leaving the page dark"() {
+    const fs = require("fs");
+    const path = require("path");
+    const { ROOT } = require("./harness");
+    const src = fs.readFileSync(path.join(ROOT, "src/content/features/theming.js"), "utf8");
+    assert.match(src, /else clearLightSweep\(\);/);
+    assert.match(src, /unmount\(\) \{ lastSig = null; clearLightSweep\(\); \}/,
+      "teardown must clear the marks too");
+  },
+
+  "the sweep only sets a background, never a text colour"() {
+    // The text on these surfaces already inherits our light colour; that is
+    // precisely what was unreadable. Setting a colour as well would be a second
+    // guess at something we already know.
+    const fs = require("fs");
+    const path = require("path");
+    const { ROOT } = require("./harness");
+    const src = fs.readFileSync(path.join(ROOT, "src/content/features/theming.js"), "utf8");
+    const i = src.indexOf("html.bc-dark [data-bc-lit]");
+    assert.ok(i > -1, "the rule acting on the marks should exist");
+    const block = src.slice(i, src.indexOf("}", i));
+    assert.match(block, /background-color:/);
+    assert.noMatch(block, /(^|[^-])color:\s*var\(--bc-d-text/,
+      "the sweep should not also force a text colour");
+  },
 };

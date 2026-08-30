@@ -272,16 +272,16 @@
     for (const el of document.querySelectorAll("[" + LIT + "]")) el.removeAttribute(LIT);
   }
 
-  // Canvas renders progressively, so one pass at apply time misses whatever
-  // mounts after it. Two passes on the page bag cover the common case without
-  // becoming a poll; the bag clears them on navigation.
-  function scheduleSweep() {
-    const bag = BC.lifecycle.pageBag("theming");
-    bag.once("sweep", () => {
-      BC.util.guard(sweepLightSurfaces, "theming:sweep");
-      bag.timeout(() => BC.util.guard(sweepLightSurfaces, "theming:sweep2"), 1200);
-    });
-  }
+  // Canvas renders progressively and re-renders as the user works, so a fixed
+  // number of passes per page always misses something. Throttling instead means
+  // the sweep piggybacks on a signal that already exists: apply() only runs when
+  // the observer saw a real DOM change, so this is "at most once every few
+  // seconds, and only when the page actually changed" rather than a poll. The
+  // leading edge covers first paint and the trailing edge covers whatever
+  // mounted during the window.
+  const SWEEP_INTERVAL = 2500;
+  const throttledSweep = BC.util.throttle(
+    () => BC.util.guard(sweepLightSurfaces, "theming:sweep"), SWEEP_INTERVAL);
 
   // Imperative root state. Cheap, but every write is guarded: an unguarded
   // classList or attribute write re-serializes the attribute even when the value
@@ -357,7 +357,7 @@
 
     // Only meaningful in dark mode; clear the marks the moment it is turned off
     // so nothing stays painted dark on a light page.
-    if (document.documentElement.classList.contains("bc-dark")) scheduleSweep();
+    if (document.documentElement.classList.contains("bc-dark")) throttledSweep();
     else clearLightSweep();
   }
 
