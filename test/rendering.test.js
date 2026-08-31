@@ -34,6 +34,39 @@ function stylesheet(theming) {
   return { rules: M.parseCss(resolve(staticCss)), tokens, BC };
 }
 
+// Apply the runtime sweep to a fixture, using the extension's OWN predicate so
+// the model cannot drift from the shipped rule. Static CSS alone is not what a
+// user sees: the sweep is the safety net for every light surface no selector
+// list names, so a legibility check that ignores it tests a page that never
+// exists.
+function applySweep(BC, fixture) {
+  const tags = new Set(BC.theming.SWEEP_TAGS.split(",").map((t) => t.trim().toUpperCase()));
+  const excluded = BC.theming.CONTENT_SCOPES.split(",").map((c) => c.trim().replace(/^\./, ""));
+  let marked = 0;
+  for (const el of M.walk(fixture)) {
+    if (!tags.has(el.tag)) continue;
+    // Our own UI and authored content are off limits, including their subtrees.
+    let inExcluded = false, isOurs = false;
+    for (let n = el; n; n = n.parent) {
+      if (n.attrs["data-bc-node"]) { isOurs = true; break; }
+      if (n.classes.some((c) => excluded.includes(c))) { inExcluded = true; break; }
+    }
+    if (isOurs) continue;
+    if (!el.bg) continue;                       // transparent: nothing to repaint
+    if (inExcluded) {
+      // Authored boxes are not repainted, only marked so their ink can suit
+      // their own background.
+      const lum = BC.color.cssLuminance(el.bg);
+      if (lum != null && lum >= BC.theming.LIGHT_CUTOFF) { el.attrs["data-bc-paper"] = ""; marked++; }
+      continue;
+    }
+    if (!BC.theming.isSweepable(el.bg, el.bgImage ? "url(x)" : "none")) continue;
+    el.attrs["data-bc-lit"] = "";
+    marked++;
+  }
+  return marked;
+}
+
 // What the user actually sees on an element, given Canvas's own paint plus ours.
 //
 // Both colours resolve the same way: walk from the element upward and stop at
@@ -77,6 +110,7 @@ const describe = (b) =>
 
 function legibilityFailures(fixture, theming) {
   const { rules, BC } = stylesheet(theming);
+  applySweep(BC, fixture);
   const bad = [];
   for (const el of M.walk(fixture)) {
     if (!TEXTY.has(el.tag)) continue;
@@ -155,6 +189,42 @@ module.exports = {
   "nothing on a course page renders text on a same-toned background"() {
     const bad = legibilityFailures(FIX.coursePage());
     assert.deepEqual(bad.map(describe), [], "unreadable text in dark mode");
+  },
+
+  "every modelled Canvas page is legible in dark mode"() {
+    // The dashboard is not the only place this goes wrong; these are the pages
+    // students actually spend their time on.
+    for (const page of ["gradesPage", "modulesPage", "discussionPage", "assignmentPage"]) {
+      const bad = legibilityFailures(FIX[page]());
+      assert.deepEqual(bad.map(describe), [], `unreadable text on ${page}`);
+    }
+  },
+
+  "every modelled page is legible in every dark tone"() {
+    const sb = createSandbox();
+    loadCore(sb);
+    for (const tone of Object.keys(sb.BC.DARK_TONES)) {
+      for (const page of ["dashboard", "coursePage", "gradesPage", "modulesPage",
+                          "discussionPage", "assignmentPage"]) {
+        const bad = legibilityFailures(FIX[page](), { darkTone: tone });
+        assert.deepEqual(bad.map(describe), [], `${page} in tone "${tone}"`);
+      }
+    }
+  },
+
+  "authored message bodies keep their own colours on every page"() {
+    // Instructor and student prose is theirs; we darken the shell around it.
+    const { rules } = stylesheet();
+    for (const page of ["discussionPage", "assignmentPage", "coursePage"]) {
+      for (const el of M.walk(FIX[page]())) {
+        if (!el.classes.includes("user_content") && !el.classes.includes("description")) continue;
+        for (const child of M.walk(el).slice(1)) {
+          const hit = M.declFor(rules, child, "background-color");
+          assert.notOk(hit,
+            `${page}: authored content ${M.path(child).split(" > ").pop()} repainted by "${hit && hit.r.selector}"`);
+        }
+      }
+    }
   },
 
   "legibility holds for every dark tone we ship"() {

@@ -257,4 +257,64 @@ module.exports = {
     assert.ok(C.chroma("rgb(246, 247, 251)") <= 24, "a faintly cool grey is still chrome");
     assert.equal(C.chroma("transparent"), 0);
   },
+
+  "an authored box that paints its own background is marked, not repainted"() {
+    // We hand authored prose our light ink (it is normally transparent and sits
+    // on our dark container), so a box the author DID paint needs ink for its
+    // own colour instead.
+    const e = env();
+    const scope = e.add("div", null, null, { className: "user_content" });
+    const box = e.add("div", "rgb(255, 249, 196)", scope);
+    e.BC.theming.sweepLightSurfaces();
+    assert.notOk(isLit(box), "an authored background must never be repainted");
+    assert.ok(box.hasAttribute("data-bc-paper"),
+      "it must be marked so its ink can suit its own background");
+  },
+
+  "a transparent authored box is left entirely alone"() {
+    // It shows the darkened container behind it, where our light ink is correct.
+    const e = env();
+    const scope = e.add("div", null, null, { className: "user_content" });
+    const plain = e.add("p", null, scope);
+    e.BC.theming.sweepLightSurfaces();
+    assert.notOk(plain.hasAttribute("data-bc-paper"));
+    assert.notOk(isLit(plain));
+  },
+
+  "a dark authored box is not marked as paper"() {
+    const e = env();
+    const scope = e.add("div", null, null, { className: "user_content" });
+    const dark = e.add("div", "rgb(30, 30, 30)", scope);
+    e.BC.theming.sweepLightSurfaces();
+    assert.notOk(dark.hasAttribute("data-bc-paper"),
+      "our light ink already works on a dark authored box");
+  },
+
+  "paper marks are cleared along with the rest"() {
+    const e = env();
+    const scope = e.add("div", null, null, { className: "user_content" });
+    e.add("div", "rgb(255, 255, 255)", scope);
+    e.BC.theming.sweepLightSurfaces();
+    assert.ok(e.doc.querySelectorAll("[data-bc-paper]").length > 0);
+    e.BC.theming.clearLightSweep();
+    assert.equal(e.doc.querySelectorAll("[data-bc-paper]").length, 0);
+  },
+
+  "marking is idempotent across both markers"() {
+    const e = env();
+    const scope = e.add("div", null, null, { className: "user_content" });
+    e.add("div", "rgb(255, 255, 255)", scope);
+    e.add("div", "rgb(255, 255, 255)");
+    assert.equal(e.BC.theming.sweepLightSurfaces(), 2);
+    assert.equal(e.BC.theming.sweepLightSurfaces(), 0);
+  },
+
+  "our own UI is skipped even inside an authored scope"() {
+    const e = env();
+    const scope = e.add("div", null, null, { className: "user_content" });
+    const ours = e.add("div", "rgb(255, 255, 255)", scope, { node: "bc-thing" });
+    e.BC.theming.sweepLightSurfaces();
+    assert.notOk(isLit(ours));
+    assert.notOk(ours.hasAttribute("data-bc-paper"));
+  },
 };

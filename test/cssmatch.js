@@ -19,8 +19,10 @@
 function parseCompound(text) {
   const out = { tag: null, id: null, classes: [], attrs: [], nots: [] };
   let s = text.trim();
-  // Pull :not(...) groups out first; their contents are compounds too.
-  s = s.replace(/:not\(([^)]*)\)/g, (_, inner) => { out.nots.push(parseCompound(inner)); return ""; });
+  // Pull :not(...) groups out first. Their contents may be COMPLEX selectors
+  // (":not(.user_content *)" means "not a descendant of .user_content"), so keep
+  // the raw text and decide how to evaluate it at match time.
+  s = s.replace(/:not\(([^)]*)\)/g, (_, inner) => { out.nots.push(inner.trim()); return ""; });
   // Ignore pseudo-classes/elements we do not model.
   s = s.replace(/::?[a-z-]+(\([^)]*\))?/g, "");
   const tagM = s.match(/^([a-zA-Z][\w-]*)/);
@@ -51,7 +53,12 @@ function matchesCompound(el, c) {
     if (a.op === "^=" && !String(v).startsWith(needle)) return false;
     if (a.op === "$=" && !String(v).endsWith(needle)) return false;
   }
-  for (const n of c.nots) if (matchesCompound(el, n)) return false;
+  for (const n of c.nots) {
+    // A complex argument has to be matched as a whole selector against the
+    // element, walking its ancestors; a simple one is just another compound.
+    const complex = /[\s>]/.test(n);
+    if (complex ? matchesSelector(el, n) : matchesCompound(el, parseCompound(n))) return false;
+  }
   return true;
 }
 

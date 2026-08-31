@@ -27,8 +27,9 @@
     html.bc-dark .ic-DashboardCard, html.bc-dark .ic-DashboardCard__box, html.bc-dark .ic-DashboardCard__link,
     html.bc-dark .ic-notification, html.bc-dark .Announcement, html.bc-dark .discussion-topic,
     html.bc-dark .ic-Table-content-wrapper, html.bc-dark .roster,
-    html.bc-dark table, html.bc-dark thead, html.bc-dark tbody, html.bc-dark tr,
-    html.bc-dark th, html.bc-dark td,
+    html.bc-dark table:not(.user_content *), html.bc-dark thead:not(.user_content *),
+    html.bc-dark tbody:not(.user_content *), html.bc-dark tr:not(.user_content *),
+    html.bc-dark th:not(.user_content *), html.bc-dark td:not(.user_content *),
     html.bc-dark .header-bar, html.bc-dark .navbar, html.bc-dark .assignments-list,
     html.bc-dark .files-page, html.bc-dark #modules, html.bc-dark .context_module,
     html.bc-dark .ic-app-course-nav, html.bc-dark #course_show_secondary {
@@ -144,6 +145,25 @@
       animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important;
     }
 
+    /* Authored prose (a discussion post, an assignment description) is normally
+       transparent, so it sits on the container we darkened above. Canvas
+       declares its own dark ink on these roots, and a declaration always beats
+       an inherited value, so without this the text stays dark on our dark
+       surface. We do NOT darken their background: where the author painted one,
+       the sweep marks it data-bc-paper below and hands the ink back. */
+    html.bc-dark .user_content, html.bc-dark .show-content,
+    html.bc-dark .description, html.bc-dark .assignment-description,
+    html.bc-dark .discussion-topic-body {
+      color: var(--bc-d-text) !important;
+    }
+
+    /* An authored box that paints its own background owns that box entirely, so
+       it gets legible ink for ITS colour rather than ours. --bc-text-inverse is
+       the ink for a surface running against the current mode, which in dark mode
+       is exactly this case: a light box inside a dark page. Placed after the
+       rule above so it wins on the element the author actually painted. */
+    html.bc-dark [data-bc-paper] { color: var(--bc-text-inverse, #16181d) !important; }
+
     /* Surfaces the selector list above missed, found by measuring their computed
        background. Only the background is set: their text already inherits our
        light colour, which is what was unreadable on them. */
@@ -242,6 +262,10 @@
   // is worth its cost: it runs once per page rather than on the ~5x/second apply
   // tick, is capped, and only ever looks at structural chrome.
   const LIT = "data-bc-lit";
+  // Authored content is never repainted, but an authored box that paints its own
+  // light background still needs ink that works ON that background, because the
+  // rule above hands authored prose our light colour.
+  const PAPER = "data-bc-paper";
 
   // Block-level containers only. Deliberately excludes span/a/button and the
   // like: a light chip or badge sets its own text colour, so it is already
@@ -268,24 +292,46 @@
   // and its white panels, well clear of any dark tone we emit.
   const LIGHT_CUTOFF = 0.5;
 
+  // The decision, separated from the DOM walk so tests can apply exactly this
+  // rule to a described page rather than reimplementing it and drifting.
+  function isSweepable(backgroundColor, backgroundImage) {
+    // A background image is somebody's deliberate art direction.
+    if (backgroundImage && backgroundImage !== "none") return false;
+    const lum = BC.color.cssLuminance(backgroundColor);
+    if (lum == null || lum < LIGHT_CUTOFF) return false;   // transparent or already dark
+    // Only neutral surfaces are chrome. A saturated fill is meaning.
+    if (BC.color.chroma(backgroundColor) > NEUTRAL_MAX_CHROMA) return false;
+    return true;
+  }
+
+  // Our own UI and authored course content are off limits whatever their colour.
+  const SWEEP_EXCLUDE = "[data-bc-node],[data-better-canvas]," + CONTENT_SCOPES;
+
   function sweepLightSurfaces() {
     if (!document.body || !document.documentElement.classList.contains("bc-dark")) return 0;
     const scope = document.getElementById("application") || document.body;
     let marked = 0, seen = 0;
     for (const el of scope.querySelectorAll(SWEEP_TAGS)) {
       if (++seen > SWEEP_MAX) break;
-      if (el.hasAttribute(LIT)) continue;
-      // Never touch our own UI, and never touch authored course content.
-      if (el.closest("[data-bc-node],[data-better-canvas]," + CONTENT_SCOPES)) continue;
+      if (el.hasAttribute(LIT) || el.hasAttribute(PAPER)) continue;
+      // Our own UI is skipped unconditionally. Checking it only in the
+      // non-authored branch meant one of our panels rendered inside authored
+      // content fell through to the paper branch and got marked.
+      if (el.closest("[data-bc-node],[data-better-canvas]")) continue;
+      const authored = el.closest(CONTENT_SCOPES);
       let cs;
       try { cs = getComputedStyle(el); } catch (_) { continue; }
       if (!cs) continue;
-      // A background image is somebody's deliberate art direction.
-      if (cs.backgroundImage && cs.backgroundImage !== "none") continue;
       const lum = BC.color.cssLuminance(cs.backgroundColor);
-      if (lum == null || lum < LIGHT_CUTOFF) continue;   // transparent or already dark
-      // Only neutral surfaces are chrome. A saturated fill is meaning.
-      if (BC.color.chroma(cs.backgroundColor) > NEUTRAL_MAX_CHROMA) continue;
+      if (authored) {
+        // Not repainted; just marked so its ink can suit its own background.
+        if (lum != null && lum >= LIGHT_CUTOFF && !el.hasAttribute(PAPER)) {
+          el.setAttribute(PAPER, "");
+          marked++;
+        }
+        continue;
+      }
+      if (!isSweepable(cs.backgroundColor, cs.backgroundImage)) continue;
       el.setAttribute(LIT, "");
       marked++;
     }
@@ -294,6 +340,7 @@
 
   function clearLightSweep() {
     for (const el of document.querySelectorAll("[" + LIT + "]")) el.removeAttribute(LIT);
+    for (const el of document.querySelectorAll("[" + PAPER + "]")) el.removeAttribute(PAPER);
   }
 
   // Canvas renders progressively and re-renders as the user works, so a fixed
@@ -386,7 +433,10 @@
   }
 
   // Exported so the sweep's selection rules can be tested without a browser.
-  BC.theming = Object.assign(BC.theming || {}, { sweepLightSurfaces, clearLightSweep, LIT });
+  BC.theming = Object.assign(BC.theming || {}, {
+    sweepLightSurfaces, clearLightSweep, isSweepable,
+    LIT, PAPER, SWEEP_TAGS, SWEEP_EXCLUDE, CONTENT_SCOPES, LIGHT_CUTOFF,
+  });
 
   BC.registry.register({
     id: "theming", styles: ["bc-static", "bc-theming"], nodes: ["bc-logo-text"], apply,

@@ -142,4 +142,108 @@ function coursePage() {
   ]), PAGE, INK);
 }
 
-module.exports = { dashboard, coursePage, card, WHITE, PAGE, INK, LINK };
+// A course grades table: dense, cell-painted, and the page most students live on.
+function gradesPage() {
+  const row = (bg) => node("tr", ".student_assignment", {}, [
+    paint(node("th", ".title", {}, [paint(node("a", ""), null, LINK)]), bg),
+    paint(node("td", ".due"), bg),
+    paint(node("td", ".assignment_score", {}, [
+      node("span", ".grade"), node("span", ".score_value"),
+    ]), bg),
+    paint(node("td", ".points_possible"), bg),
+  ]);
+  return shell([
+    paint(node("div", ".ic-Action-header", {}, [
+      node("h1", ".ic-Action-header__Heading"),
+    ]), WHITE),
+    paint(node("table", "#grades_summary.editable", {}, [
+      node("thead", "", {}, [
+        node("tr", "", {}, [
+          paint(node("th", ""), PAGE), paint(node("th", ""), PAGE),
+          paint(node("th", ""), PAGE), paint(node("th", ""), PAGE),
+        ]),
+      ]),
+      node("tbody", "", {}, [row(WHITE), row(PAGE), row(WHITE)]),
+    ]), WHITE),
+    paint(node("div", "#student-grades-right-content", {}, [
+      paint(node("div", ".student_assignment.final_grade"), PAGE),
+    ]), WHITE),
+  ]);
+}
+
+// Modules: nested item groups, each with its own painted header.
+function modulesPage() {
+  const item = () => paint(node("li", ".context_module_item.ig-row", {}, [
+    paint(node("a", ".ig-title"), null, LINK),
+    node("div", ".ig-details", {}, [node("span", ".due_date_display")]),
+  ]), WHITE);
+  return shell([
+    paint(node("div", "#context_modules.context_module", {}, [
+      paint(node("div", ".header.ig-header", {}, [
+        node("span", ".name.ig-header-title"),
+        node("span", ".ig-header-admin"),
+      ]), PAGE),
+      node("ul", ".ig-list.context_module_items", {}, [item(), item(), item()]),
+    ]), WHITE),
+  ]);
+}
+
+// A discussion topic: entries plus authored message bodies.
+function discussionPage() {
+  const entry = () => paint(node("div", ".discussion_entry.entry", {}, [
+    node("div", ".header", {}, [paint(node("a", ".author"), null, LINK)]),
+    paint(node("div", ".message.user_content", {}, [
+      node("p", ""),
+      paint(node("blockquote", ""), "#eef3f8"),
+    ]), null, INK),
+  ]), WHITE);
+  return shell([
+    paint(node("div", "#discussion_topic.discussion_entry", {}, [
+      paint(node("div", ".message.user_content", {}, [node("p", "")]), null, INK),
+    ]), WHITE),
+    node("div", "#discussion_subentries", {}, [entry(), entry()]),
+  ]);
+}
+
+// An assignment page with a right sidebar.
+function assignmentPage() {
+  return shell([
+    paint(node("div", "#assignment_show.assignment", {}, [
+      node("h1", ".title"),
+      paint(node("div", ".description.user_content", {}, [
+        node("p", ""),
+        paint(node("table", "", {}, [
+          node("tr", "", {}, [paint(node("td", ""), "#f9f9f9")]),
+        ]), WHITE),
+      ]), null, INK),
+    ]), WHITE),
+    paint(node("div", "#sidebar_content.rs-margin-bottom", {}, [
+      paint(node("div", ".description"), null, INK),
+    ]), WHITE),
+  ]);
+}
+
+// The shared page shell every course page sits in.
+function shell(contentChildren) {
+  return paint(node("html", ".bc-dark", {}, [
+    paint(node("body", "", {}, [
+      node("div", "#application.ic-app", {}, [
+        node("div", "#wrapper.ic-Layout-wrapper", {}, [
+          node("div", "#main.ic-Layout-columns", {}, [
+            paint(node("aside", "#left-side", {}, [
+              node("nav", "#section-tabs", {}, [
+                paint(node("li", "", {}, [paint(node("a", ""), null, LINK)]), WHITE),
+              ]),
+            ]), PAGE),
+            paint(node("div", "#content.ic-Layout-contentMain", {}, contentChildren), PAGE),
+          ]),
+        ]),
+      ]),
+    ]), PAGE, INK),
+  ]), PAGE, INK);
+}
+
+module.exports = {
+  dashboard, coursePage, gradesPage, modulesPage, discussionPage, assignmentPage,
+  card, WHITE, PAGE, INK, LINK,
+};

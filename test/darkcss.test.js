@@ -4,6 +4,11 @@ const path = require("path");
 const { ROOT } = require("./harness");
 const { splitCompounds } = require("./cssmatch");
 
+const AUTHORED_ROOTS = new Set([
+  "user_content", "show-content", "description", "assignment-description",
+  "discussion-topic-body",
+]);
+
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 
 // The dark-mode rule text from each file that emits any.
@@ -104,7 +109,9 @@ module.exports = {
     const src = read("src/content/features/theming.js");
     assert.match(src, /CONTENT_SCOPES[\s\S]{0,400}\.ic-DashboardCard/,
       "dashboard cards must be excluded from the sweep");
-    assert.match(src, /backgroundImage && cs\.backgroundImage !== "none"/,
+    assert.match(src, /function isSweepable\(backgroundColor, backgroundImage\)/,
+      "the sweep decision should be a named, testable predicate");
+    assert.match(src, /if \(backgroundImage && backgroundImage !== "none"\) return false;/,
       "the sweep must skip anything carrying a background image");
   },
 
@@ -151,6 +158,10 @@ module.exports = {
           if (splitCompounds(sel).length > 2) continue;
           const m = sel.match(/\.([\w-]+)\s*$/);
           if (!m) continue;
+          // Authored prose roots are transparent by design: they sit on the
+          // container we darkened, and a box inside them that paints its own
+          // background is handed back legible ink via data-bc-paper.
+          if (AUTHORED_ROOTS.has(m[1])) continue;
           assert.ok(darkened.has(m[1]),
             `${file}: "${sel}" sets our text colour on .${m[1]}, which nothing darkens, so it lands on Canvas's light background`);
         }
