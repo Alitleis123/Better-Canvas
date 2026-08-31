@@ -19,11 +19,16 @@
     html.bc-dark .ic-app-course-menu, html.bc-dark #left-side, html.bc-dark #right-side {
       background-color: var(--bc-d-bg) !important; color: var(--bc-d-text) !important;
     }
+    html.bc-dark .recent_feedback, html.bc-dark .events_list,
+    html.bc-dark .todo-list-header-container, html.bc-dark .events_list_header,
+    html.bc-dark .header-secondary,
     html.bc-dark .Sidebar__TodoListContainer, html.bc-dark .ToDoSidebar,
     html.bc-dark .PlannerApp, html.bc-dark .planner-day, html.bc-dark .planner-empty-state,
     html.bc-dark .ic-DashboardCard, html.bc-dark .ic-DashboardCard__box, html.bc-dark .ic-DashboardCard__link,
     html.bc-dark .ic-notification, html.bc-dark .Announcement, html.bc-dark .discussion-topic,
-    html.bc-dark .ic-Table-content-wrapper, html.bc-dark .roster, html.bc-dark table,
+    html.bc-dark .ic-Table-content-wrapper, html.bc-dark .roster,
+    html.bc-dark table, html.bc-dark thead, html.bc-dark tbody, html.bc-dark tr,
+    html.bc-dark th, html.bc-dark td,
     html.bc-dark .header-bar, html.bc-dark .navbar, html.bc-dark .assignments-list,
     html.bc-dark .files-page, html.bc-dark #modules, html.bc-dark .context_module,
     html.bc-dark .ic-app-course-nav, html.bc-dark #course_show_secondary {
@@ -44,9 +49,13 @@
     }
     html.bc-dark .ic-DashboardCard__header { background-color: var(--bc-d-bg3) !important; color: var(--bc-d-text) !important; }
     html.bc-dark .ic-app-course-nav-toggle { background-color: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important; }
-    html.bc-dark .Sidebar__TodoListContainer h2, html.bc-dark .todo-list-header-container,
-    html.bc-dark .events_list_header, html.bc-dark .recent_feedback,
-    html.bc-dark .ic-DashboardCard__header_hero, html.bc-dark .header-secondary { color: var(--bc-d-text) !important; }
+    /* Colour only, so every selector here must sit INSIDE a surface darkened
+       above. .recent_feedback used to be in this list without being darkened
+       anywhere, which put near-white text on Canvas's white panel; it is now a
+       surface in its own right. The course colour block is not listed either:
+       it is a fill chosen by the user, and forcing our light ink onto it ignores
+       whatever contrast that colour actually has. */
+    html.bc-dark .Sidebar__TodoListContainer h2 { color: var(--bc-d-text) !important; }
     /* The global nav shell got a dark background but no text colour, so anything
        inside it that Canvas gives an explicit dark colour stayed dark on dark. */
     html.bc-dark .ic-app-header { background-color: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important; }

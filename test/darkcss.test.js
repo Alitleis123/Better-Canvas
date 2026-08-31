@@ -2,6 +2,7 @@
 const fs = require("fs");
 const path = require("path");
 const { ROOT } = require("./harness");
+const { splitCompounds } = require("./cssmatch");
 
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 
@@ -122,5 +123,55 @@ module.exports = {
     assert.ok(substringMatch('[class*="card" i]:not([class*="image" i])', "ic-Card"));
     assert.ok(substringMatch('[class*="ic-Dashboard" i][class*="header" i]', "ic-DashboardCard__header"));
     assert.notOk(substringMatch('.some-plain-class', "ic-DashboardCard"));
+  },
+
+  "no dark rule sets a text colour on a surface it does not also darken"() {
+    // The inverse of the rule above, and the one that actually bit: a
+    // colour-only rule leaves Canvas's light background in place and paints
+    // near-white text onto it. Every colour-only selector must therefore name
+    // something that sits INSIDE a surface darkened elsewhere in the sheet, not
+    // a surface of its own.
+    const darkened = new Set();
+    for (const { css } of darkCss()) {
+      for (const r of rules(css)) {
+        if (!/background-color:/.test(r.body)) continue;
+        for (const part of r.selector.split(",")) {
+          const m = part.trim().match(/\.([\w-]+)\s*$/);
+          if (m) darkened.add(m[1]);
+        }
+      }
+    }
+    for (const { file, css } of darkCss()) {
+      for (const r of rules(css)) {
+        if (/background-color:/.test(r.body)) continue;
+        if (!/color:\s*var\(--bc-(d-text|text)/.test(r.body)) continue;
+        for (const part of r.selector.split(",")) {
+          const sel = part.trim();
+          // A descendant selector is fine: its ancestor carries the surface.
+          if (splitCompounds(sel).length > 2) continue;
+          const m = sel.match(/\.([\w-]+)\s*$/);
+          if (!m) continue;
+          assert.ok(darkened.has(m[1]),
+            `${file}: "${sel}" sets our text colour on .${m[1]}, which nothing darkens, so it lands on Canvas's light background`);
+        }
+      }
+    }
+  },
+
+  "table cells are darkened, not just the table"() {
+    // A cell paints its own background, so darkening only the table left the
+    // cells light under inherited light text.
+    const css = darkCss().map((d) => d.css).join("\n");
+    for (const sel of ["html.bc-dark th", "html.bc-dark td"]) {
+      assert.ok(css.includes(sel), `${sel} must be darkened or its text is unreadable`);
+    }
+  },
+
+  "the course colour block is not painted with our ink"() {
+    // It is a fill the user chose; forcing our light text onto it ignores
+    // whatever contrast that colour actually has.
+    const css = darkCss().map((d) => d.css).join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
+    assert.noMatch(css, /ic-DashboardCard__header_hero/,
+      "the course colour block should be left to the card's own styling");
   },
 };
