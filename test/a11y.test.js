@@ -201,7 +201,7 @@ module.exports = {
     // misses therefore renders our near-white text on its own light background
     // and goes blank. The dashboard header was the visible case.
     const src = read("src/content/features/theming.js");
-    assert.match(src, /html\.bc-dark, html\.bc-dark body \{ background: [^;]*; color:/,
+    assert.match(src, /html\.bc-dark, html\.bc-dark body \{ background-color: [^;]*; color:/,
       "the global rule should still set both, so bare text on body stays legible");
     // Page chrome must be covered, and by substring matching rather than exact
     // class names, because Canvas renames these between releases.

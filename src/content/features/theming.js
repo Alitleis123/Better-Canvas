@@ -13,11 +13,11 @@
   const DENSITY_PAD = { compact: 0.6, default: 1.0, spacious: 1.4, cozy: 1.7 };
 
   const staticCSS = `
-    html.bc-dark, html.bc-dark body { background: var(--bc-d-bg) !important; color: var(--bc-d-text) !important; }
+    html.bc-dark, html.bc-dark body { background-color: var(--bc-d-bg) !important; color: var(--bc-d-text) !important; }
     html.bc-dark #wrapper, html.bc-dark #main, html.bc-dark #content,
     html.bc-dark .ic-app-main-content, html.bc-dark .ic-Layout-columns,
     html.bc-dark .ic-app-course-menu, html.bc-dark #left-side, html.bc-dark #right-side {
-      background: var(--bc-d-bg) !important; color: var(--bc-d-text) !important;
+      background-color: var(--bc-d-bg) !important; color: var(--bc-d-text) !important;
     }
     html.bc-dark .Sidebar__TodoListContainer, html.bc-dark .ToDoSidebar,
     html.bc-dark .PlannerApp, html.bc-dark .planner-day, html.bc-dark .planner-empty-state,
@@ -27,29 +27,29 @@
     html.bc-dark .header-bar, html.bc-dark .navbar, html.bc-dark .assignments-list,
     html.bc-dark .files-page, html.bc-dark #modules, html.bc-dark .context_module,
     html.bc-dark .ic-app-course-nav, html.bc-dark #course_show_secondary {
-      background: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important;
+      background-color: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important;
       border-color: var(--bc-d-border) !important;
     }
     html.bc-dark a { color: var(--bc-d-link) !important; }
     html.bc-dark input, html.bc-dark select, html.bc-dark textarea, html.bc-dark button {
-      background: var(--bc-d-bg3) !important; color: var(--bc-d-text) !important;
+      background-color: var(--bc-d-bg3) !important; color: var(--bc-d-text) !important;
       border-color: var(--bc-d-border) !important;
     }
     html.bc-dark .ui-widget-content, html.bc-dark .ic-Form-control input,
     html.bc-dark .ui-dialog, html.bc-dark .modal-body, html.bc-dark [role=dialog] {
-      background: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important;
+      background-color: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important;
     }
     html.bc-dark hr, html.bc-dark .border-bottom, html.bc-dark .border-top {
       border-color: var(--bc-d-border) !important;
     }
-    html.bc-dark .ic-DashboardCard__header { background-color: var(--bc-d-bg3) !important; }
-    html.bc-dark .ic-app-course-nav-toggle { background: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important; }
+    html.bc-dark .ic-DashboardCard__header { background-color: var(--bc-d-bg3) !important; color: var(--bc-d-text) !important; }
+    html.bc-dark .ic-app-course-nav-toggle { background-color: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important; }
     html.bc-dark .Sidebar__TodoListContainer h2, html.bc-dark .todo-list-header-container,
     html.bc-dark .events_list_header, html.bc-dark .recent_feedback,
     html.bc-dark .ic-DashboardCard__header_hero, html.bc-dark .header-secondary { color: var(--bc-d-text) !important; }
     /* The global nav shell got a dark background but no text colour, so anything
        inside it that Canvas gives an explicit dark colour stayed dark on dark. */
-    html.bc-dark .ic-app-header { background: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important; }
+    html.bc-dark .ic-app-header { background-color: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important; }
     html.bc-dark .ic-app-header__menu-list-item a { color: var(--bc-d-text) !important; }
     html.bc-dark img[src*="branded"] { filter: brightness(1.1); }
 
@@ -58,7 +58,7 @@
     html.bc-dark .well, html.bc-dark .alert, html.bc-dark .ic-Card, html.bc-dark .card,
     html.bc-dark .form-actions, html.bc-dark .page-toolbar, html.bc-dark .ig-row,
     html.bc-dark .ig-header, html.bc-dark .item-group-condensed {
-      background: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important;
+      background-color: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important;
       border-color: var(--bc-d-border) !important;
     }
 
@@ -71,18 +71,22 @@
        These use class-substring matching rather than exact names because Canvas
        renames these containers between releases, and an exact-match list silently
        stops covering them. Kept to structural chrome (headers, toolbars, page
-       shells) so it cannot repaint course content. */
+       shells) so it cannot repaint course content.
+
+       Substring matching has to be chosen carefully: [class*="ic-Dashboard"]
+       combined with [class*="header"] also matches ic-DashboardCard__header_image,
+       which is the course card's own artwork. Match the dashboard header by its
+       own names instead. */
     html.bc-dark [class*="Dashboard-header" i],
     html.bc-dark [class*="dashboard_header" i],
     html.bc-dark #dashboard_header_container,
-    html.bc-dark [class*="ic-Dashboard" i][class*="header" i],
     html.bc-dark [class*="PageHeader" i],
     html.bc-dark [class*="ic-Action-header" i],
     html.bc-dark [class*="Toolbar" i],
     html.bc-dark [class*="page-title" i],
     html.bc-dark .header-bar-right, html.bc-dark .ic-Dashboard-header__layout,
     html.bc-dark .ic-Dashboard-header__title, html.bc-dark .ic-Dashboard-header__actions {
-      background: var(--bc-d-bg) !important; color: var(--bc-d-text) !important;
+      background-color: var(--bc-d-bg) !important; color: var(--bc-d-text) !important;
       border-color: var(--bc-d-border) !important;
     }
     /* Headings inside those shells inherit rather than set their own colour. */
@@ -99,7 +103,7 @@
     /* Accent variable — Canvas reads --ic-brand-primary in many places */
     :root[data-bc-accent] { --ic-brand-primary: var(--bc-accent) !important; }
     :root[data-bc-accent] .btn-primary, :root[data-bc-accent] .Button--primary {
-      background: var(--bc-accent) !important; border-color: var(--bc-accent) !important;
+      background-color: var(--bc-accent) !important; border-color: var(--bc-accent) !important;
     }
 
     /* Density */
