@@ -54,8 +54,14 @@
       .ic-DashboardCard:hover { transform: translateY(-2px); box-shadow: var(--bc-shadow-3, 0 10px 30px rgba(0,0,0,.12)); }` : ""}
     `;
     const spanRow = `${GRID} > :not([data-bc-carditem]) { grid-column: 1 / -1 !important; }`;
+    // Canvas gives the card a fixed width, so without this the cards sit
+    // left-aligned inside whatever column width the size slider produced, with
+    // dead space to the right of each one.
+    const fillCell = `${GRID} > [data-bc-carditem] { width: 100% !important; }
+      ${GRID} > [data-bc-carditem] .ic-DashboardCard, ${GRID} > .ic-DashboardCard { width: 100% !important; }`;
     if (d.layout === "grid") css += `${GRID} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 16px !important; align-items: start !important; }
-      ${spanRow}`;
+      ${spanRow}
+      ${fillCell}`;
     if (d.layout === "list") css += `${GRID} { display: flex !important; flex-direction: column !important; gap: 8px !important; }
       ${GRID} > * { width: 100% !important; }
       .ic-DashboardCard { display: flex !important; flex-direction: row !important; height: 90px !important; }
@@ -63,6 +69,7 @@
       .ic-DashboardCard__action-container { display: none !important; }`;
     if (d.layout === "compact") css += `${GRID} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 12px !important; align-items: start !important; }
       ${spanRow}
+      ${fillCell}
       .ic-DashboardCard { max-height: 120px !important; }
       .ic-DashboardCard__header_image { height: 40px !important; }`;
     if (d.layout === "masonry") css += `${GRID} { columns: ${Math.max(2, Math.floor(1200/size))} auto !important; column-gap: 14px !important; display: block !important; }

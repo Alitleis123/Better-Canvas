@@ -128,62 +128,73 @@
   </div>
 </div>
 
-<!-- The extension's real source, in manifest order. -->
-<script src="../../src/shared/defaults.js"></script>
-<script src="../../src/shared/themes.js"></script>
-<script src="../../src/content/core/util.js"></script>
-<script src="../../src/content/core/datetime.js"></script>
-<script src="../../src/content/core/color.js"></script>
-<script src="../../src/shared/tokens.js"></script>
+<!-- The extension's real source, fetched with no-store so an edited file is
+     always what runs. A cached subresource silently tested the old code. -->
 <script>
-// Minimal stand-ins for the pieces theming.js depends on. setStyle does what the
-// real injector does: one keyed <style> tag, appended last.
-window.BC = window.BC || {};
-BC.injector = {
-  setStyle(key, css) {
-    let tag = document.querySelector('style[data-better-canvas="' + key + '"]');
-    if (!css) { if (tag) tag.remove(); return; }
-    if (!tag) { tag = document.createElement("style"); tag.setAttribute("data-better-canvas", key); }
-    if (tag.textContent !== css) tag.textContent = css;
-    document.head.appendChild(tag);
-  },
-  removeStyle(key) { const t = document.querySelector('style[data-better-canvas="' + key + '"]'); if (t) t.remove(); },
-  removeNode(id) { document.querySelectorAll('[data-bc-node="' + id + '"]').forEach(n => n.remove()); },
-  ensureNode(id, parent, factory) {
-    let n = document.querySelector('[data-bc-node="' + id + '"]');
-    if (!n) { n = factory(); n.setAttribute("data-bc-node", id); if (!n.isConnected) (parent||document.body).appendChild(n); }
-    return n;
-  },
-};
-BC.registry = { register(def) { BC.features = BC.features || {}; BC.features[def.id] = def; } };
-BC.lifecycle = { pageBag: () => ({ once(k, fn) { fn(); }, timeout(fn, ms) { setTimeout(fn, ms); } }) };
-</script>
-<script src="../../src/content/core/cache.js"></script>
-<script>
-// Stand-ins for what dashboard.js reaches for. No network: the loaders resolve
-// empty, which is the state that matters for layout.
-BC.detect = { context: () => ({ page: "dashboard", courseId: null, path: "/" }) };
-BC.api = {
-  coursesWithScores: () => Promise.resolve([]),
-  activeCourses: () => Promise.resolve([]),
-  plannerItems: () => Promise.resolve([]),
-  dashboardCards: () => Promise.resolve([]),
-};
-BC.storage = { current: null, local: {}, updateLocal: () => Promise.resolve(), loadLocal: () => Promise.resolve({}) };
-BC.ui = {
-  stat: () => document.createElement("div"),
-  sparkline: () => null,
-  skeleton: () => document.createElement("div"),
-  empty: () => document.createElement("div"),
-  errorState: () => document.createElement("div"),
-};
-BC.requestApply = () => {};
-BC.diag = { push() {}, entries: [] };
-</script>
-<script src="../../src/content/features/theming.js"></script>
-<script src="../../src/content/features/dashboard.js"></script>
-<script>
-// Drive the real apply() with real settings.
+window.__bcReady = (async () => {
+  const inline = [];
+  const sources = [
+    "../../src/shared/defaults.js",
+    "../../src/shared/themes.js",
+    "../../src/content/core/util.js",
+    "../../src/content/core/datetime.js",
+    "../../src/content/core/color.js",
+    "../../src/shared/tokens.js",
+    "../../src/content/core/cache.js",
+  ];
+  const run = (code, name) => {
+    const s = document.createElement("script");
+    s.textContent = code + "\n//# sourceURL=" + name;
+    document.head.appendChild(s);
+  };
+  const load = async (path) => {
+    const r = await fetch(path + "?t=" + Date.now(), { cache: "no-store" });
+    run(await r.text(), path);
+  };
+  for (const src of sources) await load(src);
+
+  // Stand-ins for what the features reach for. setStyle does what the real
+  // injector does: one keyed <style> tag, appended last.
+  window.BC = window.BC || {};
+  BC.injector = {
+    setStyle(key, css) {
+      let tag = document.querySelector('style[data-better-canvas="' + key + '"]');
+      if (!css) { if (tag) tag.remove(); return; }
+      if (!tag) { tag = document.createElement("style"); tag.setAttribute("data-better-canvas", key); }
+      if (tag.textContent !== css) tag.textContent = css;
+      document.head.appendChild(tag);
+    },
+    removeStyle(key) { const t = document.querySelector('style[data-better-canvas="' + key + '"]'); if (t) t.remove(); },
+    removeNode(id) { document.querySelectorAll('[data-bc-node="' + id + '"]').forEach(n => n.remove()); },
+    ensureNode(id, parent, factory) {
+      let n = document.querySelector('[data-bc-node="' + id + '"]');
+      if (!n) { n = factory(); n.setAttribute("data-bc-node", id); if (!n.isConnected) (parent || document.body).appendChild(n); }
+      return n;
+    },
+  };
+  BC.registry = { register(def) { BC.features = BC.features || {}; BC.features[def.id] = def; } };
+  BC.lifecycle = { pageBag: () => ({ once(k, fn) { fn(); }, timeout(fn, ms) { setTimeout(fn, ms); } }) };
+  BC.detect = { context: () => ({ page: "dashboard", courseId: null, path: "/" }) };
+  BC.api = {
+    coursesWithScores: () => Promise.resolve([]),
+    activeCourses: () => Promise.resolve([]),
+    plannerItems: () => Promise.resolve([]),
+    dashboardCards: () => Promise.resolve([]),
+  };
+  BC.storage = { current: null, local: {}, updateLocal: () => Promise.resolve(), loadLocal: () => Promise.resolve({}) };
+  BC.ui = {
+    stat: () => document.createElement("div"), sparkline: () => null,
+    skeleton: () => document.createElement("div"), empty: () => document.createElement("div"),
+    errorState: () => document.createElement("div"),
+  };
+  BC.requestApply = () => {};
+  BC.diag = { push() {}, entries: [] };
+
+  await load("../../src/content/features/theming.js");
+  await load("../../src/content/features/dashboard.js");
+  return true;
+})();
+
 window.__bcApply = function (overrides) {
   const s = BC.mergeDefaults(Object.assign({ version: BC.SETTINGS_VERSION }, overrides || {}));
   const ctx = { page: "dashboard", courseId: null, path: "/" };
@@ -194,6 +205,7 @@ window.__bcApply = function (overrides) {
   BC.theming.sweepLightSurfaces();
   return s;
 };
+
 window.__bcClear = function () {
   BC.theming.clearLightSweep();
   if (BC.features.dashboard.unmount) BC.features.dashboard.unmount();
@@ -221,26 +233,23 @@ window.__bcAudit = function () {
     if (x == null || y == null) return null;
     return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
   };
-  // The background actually behind an element: nearest ancestor painting one.
   const behind = (el) => {
     for (let n = el; n; n = n.parentElement) {
-      const c = getComputedStyle(n).backgroundColor;
-      const p = parse(c);
-      if (p && p.a >= 0.5) return c;
+      const p = parse(getComputedStyle(n).backgroundColor);
+      if (p && p.a >= 0.5) return getComputedStyle(n).backgroundColor;
     }
     return "rgb(255, 255, 255)";
   };
   const hasOwnText = (el) => [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
   for (const el of document.querySelectorAll("#application *")) {
-    if (!hasOwnText(el)) continue;
-    if (!el.getClientRects().length) continue;
+    if (!hasOwnText(el) || !el.getClientRects().length) continue;
     const fg = getComputedStyle(el).color;
     const bg = behind(el);
     const r = ratio(fg, bg);
     if (r == null) continue;
     out.push({
       sel: el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") +
-           (el.className && typeof el.className === "string" ? "." + el.className.trim().split(/\s+/).join(".") : ""),
+           (typeof el.className === "string" && el.className.trim() ? "." + el.className.trim().split(/\s+/).join(".") : ""),
       text: (el.textContent || "").trim().slice(0, 40),
       fg, bg, ratio: +r.toFixed(2),
     });
