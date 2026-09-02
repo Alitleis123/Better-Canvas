@@ -107,8 +107,14 @@ module.exports = {
 
   "course card colour and artwork are never repainted by the sweep"() {
     const src = read("src/content/features/theming.js");
-    assert.match(src, /CONTENT_SCOPES[\s\S]{0,400}\.ic-DashboardCard/,
-      "dashboard cards must be excluded from the sweep");
+    assert.match(src, /NO_REPAINT_SCOPES = "\.ic-DashboardCard"/,
+      "the card's background must be protected from repainting");
+    assert.match(src, /if \(!noRepaint && isSweepable\(/,
+      "the no-repaint scope must gate the background pass");
+    // ...but the card's TEXT is Canvas chrome and still has to be legible, so
+    // the protection must NOT also skip the faint-text pass.
+    assert.noMatch(src, /const authored = el\.closest\(CONTENT_SCOPES\)/,
+      "background protection must not be conflated with leaving text alone");
     assert.match(src, /function isSweepable\(backgroundColor, backgroundImage\)/,
       "the sweep decision should be a named, testable predicate");
     assert.match(src, /if \(backgroundImage && backgroundImage !== "none"\) return false;/,

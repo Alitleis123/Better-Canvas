@@ -11,6 +11,7 @@ function env() {
   sb.getComputedStyle = (el) => ({
     backgroundColor: el._bg == null ? "rgba(0, 0, 0, 0)" : el._bg,
     backgroundImage: el._bgImage || "none",
+    color: el._fg || "rgb(45, 59, 69)",
   });
   load(sb, "src/content/features/theming.js");
   sb.document.documentElement.classList.add("bc-dark");
@@ -22,6 +23,8 @@ function env() {
   const add = (tag, bg, parent, opts) => {
     const el = sb.document.createElement(tag);
     el._bg = bg;
+    if (opts && opts.fg) el._fg = opts.fg;
+    if (opts && opts.text) el.childNodes.push({ nodeType: 3, textContent: opts.text });
     if (opts && opts.bgImage) el._bgImage = opts.bgImage;
     if (opts && opts.className) el.className = opts.className;
     if (opts && opts.node) el.setAttribute("data-bc-node", opts.node);
@@ -316,5 +319,77 @@ module.exports = {
     e.BC.theming.sweepLightSurfaces();
     assert.notOk(isLit(ours));
     assert.notOk(ours.hasAttribute("data-bc-paper"));
+  },
+
+  "text Canvas coloured for a white page is re-mapped on our dark surfaces"() {
+    // Canvas picks its greys for white. A declaration beats the inherited colour
+    // we set on the container, so those greys survive at whatever contrast they
+    // land on. The card subtitle sat at 3.2:1 on the dark card.
+    const e = env();
+    const panel = e.add("div", "rgb(37, 40, 47)");
+    const faint = e.add("div", null, panel, { fg: "rgb(107, 119, 128)", text: "ENGL2700.55077" });
+    e.BC.theming.sweepLightSurfaces();
+    assert.ok(faint.hasAttribute("data-bc-dim"), "faint text on a dark surface must be re-mapped");
+  },
+
+  "text that already has enough contrast is left alone"() {
+    const e = env();
+    const panel = e.add("div", "rgb(37, 40, 47)");
+    const fine = e.add("div", null, panel, { fg: "rgb(230, 233, 238)", text: "Readable" });
+    e.BC.theming.sweepLightSurfaces();
+    assert.notOk(fine.hasAttribute("data-bc-dim"));
+  },
+
+  "only elements with their own text are re-mapped"() {
+    // Marking a container would push a colour onto everything inside it.
+    const e = env();
+    const panel = e.add("div", "rgb(37, 40, 47)");
+    const wrapper = e.add("div", null, panel, { fg: "rgb(107, 119, 128)" });
+    e.add("span", null, wrapper, { fg: "rgb(107, 119, 128)", text: "leaf" });
+    e.BC.theming.sweepLightSurfaces();
+    assert.notOk(wrapper.hasAttribute("data-bc-dim"), "a container holding no text of its own must not be marked");
+  },
+
+  "a dashboard card's background is protected but its text is not"() {
+    // Two different protections. Conflating them left card subtitles unreadable.
+    const e = env();
+    const card = e.add("div", null, null, { className: "ic-DashboardCard" });
+    const hero = e.add("div", "rgb(255, 249, 196)", card);
+    const body = e.add("div", "rgb(37, 40, 47)", card);
+    const sub = e.add("div", null, body, { fg: "rgb(107, 119, 128)", text: "ENGL2700" });
+    e.BC.theming.sweepLightSurfaces();
+    assert.notOk(isLit(hero), "the course colour must never be repainted");
+    assert.ok(sub.hasAttribute("data-bc-dim"), "but the card's text is chrome and must stay legible");
+  },
+
+  "authored prose keeps the colours its writer chose"() {
+    const e = env();
+    const scope = e.add("div", null, null, { className: "user_content" });
+    const prose = e.add("p", null, scope, { fg: "rgb(107, 119, 128)", text: "Read chapters 4 to 6." });
+    e.BC.theming.sweepLightSurfaces();
+    assert.notOk(prose.hasAttribute("data-bc-dim"),
+      "an author's own emphasis is not ours to override");
+  },
+
+  "authored block elements are visited"() {
+    // blockquote and pre were missing from the tag list, so an authored
+    // blockquote with its own light background kept our light ink on it.
+    const e = env();
+    const scope = e.add("div", null, null, { className: "user_content" });
+    for (const tag of ["blockquote", "pre", "figure", "details"]) {
+      const box = e.add(tag, "rgb(238, 243, 248)", scope);
+      e.BC.theming.sweepLightSurfaces();
+      assert.ok(box.hasAttribute("data-bc-paper"), `<${tag}> must be visited by the sweep`);
+    }
+  },
+
+  "dim marks are cleared with the rest"() {
+    const e = env();
+    const panel = e.add("div", "rgb(37, 40, 47)");
+    e.add("div", null, panel, { fg: "rgb(107, 119, 128)", text: "faint" });
+    e.BC.theming.sweepLightSurfaces();
+    assert.ok(e.doc.querySelectorAll("[data-bc-dim]").length > 0);
+    e.BC.theming.clearLightSweep();
+    assert.equal(e.doc.querySelectorAll("[data-bc-dim]").length, 0);
   },
 };

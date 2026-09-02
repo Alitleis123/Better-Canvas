@@ -164,6 +164,14 @@
        rule above so it wins on the element the author actually painted. */
     html.bc-dark [data-bc-paper] { color: var(--bc-text-inverse, #16181d) !important; }
 
+    /* Canvas picks its greys for a white page. On our dark surfaces they land
+       wherever they land, and a declaration beats the inherited colour we set on
+       the container, so they survive at whatever contrast results. Re-mapped to
+       our muted token, which is derived to clear AA against the actual surface.
+       Muted rather than full-strength text because a grey was a deliberate
+       de-emphasis worth preserving. */
+    html.bc-dark [data-bc-dim] { color: var(--bc-d-muted) !important; }
+
     /* Surfaces the selector list above missed, found by measuring their computed
        background. Only the background is set: their text already inherits our
        light colour, which is what was unreadable on them. */
@@ -266,20 +274,30 @@
   // light background still needs ink that works ON that background, because the
   // rule above hands authored prose our light colour.
   const PAPER = "data-bc-paper";
+  // Text whose own colour is too faint against the background it ends up on.
+  const DIM = "data-bc-dim";
 
   // Block-level containers only. Deliberately excludes span/a/button and the
   // like: a light chip or badge sets its own text colour, so it is already
   // readable, and repainting it would destroy a deliberate accent.
   const SWEEP_TAGS = "div,section,header,footer,nav,aside,main,article,form,fieldset," +
-                     "table,thead,tbody,tfoot,tr,td,th,ul,ol,li,dl,dd,dt";
+                     "table,thead,tbody,tfoot,tr,td,th,ul,ol,li,dl,dd,dt," +
+                     // Authored prose reaches for these, and a blockquote or a
+                     // code block routinely carries its own light background.
+                     "blockquote,pre,figure,figcaption,details,summary";
 
-  // Instructor-authored content is off limits: its background is a deliberate
-  // choice by whoever wrote the page, and we would be overriding their design.
-  // Dashboard cards are excluded for the same reason: the header carries the
-  // user's own course colour.
-  const CONTENT_SCOPES = ".user_content,.show-content,.description,.assignment-description," +
-                         ".discussion-topic-body,.mce-content-body,.ProseMirror,.bc-note," +
-                         ".ic-DashboardCard";
+  // Two different protections, previously conflated.
+  //
+  // AUTHORED: prose somebody wrote. Neither its background nor its ink is ours
+  // to change; a light box inside it gets PAPER so its own ink stays legible.
+  const AUTHORED_SCOPES = ".user_content,.show-content,.description,.assignment-description," +
+                          ".discussion-topic-body,.mce-content-body,.ProseMirror,.bc-note";
+  // NO_REPAINT: the background is meaningful (a course colour, artwork) but the
+  // TEXT is Canvas chrome and still has to be readable on our surfaces. Lumping
+  // this in with AUTHORED meant card subtitles kept Canvas's white-page grey at
+  // 3.2:1 on the dark card.
+  const NO_REPAINT_SCOPES = ".ic-DashboardCard";
+  const CONTENT_SCOPES = AUTHORED_SCOPES + "," + NO_REPAINT_SCOPES;
 
   // Above this distance from grey a background is a deliberate colour rather
   // than chrome. A pale course colour or a status chip can be light enough to
@@ -307,9 +325,36 @@
   // Our own UI and authored course content are off limits whatever their colour.
   const SWEEP_EXCLUDE = "[data-bc-node],[data-better-canvas]," + CONTENT_SCOPES;
 
+  // Text a user has to read must be the element's OWN, not a descendant's:
+  // marking a container would push a colour onto everything inside it.
+  function hasOwnText(el) {
+    for (const n of el.childNodes) if (n.nodeType === 3 && n.textContent.trim()) return true;
+    return false;
+  }
+
+  // The background actually behind an element: the nearest ancestor painting an
+  // opaque one. Memoised across the pass, since siblings share ancestors and
+  // this would otherwise be the most expensive part of the sweep.
+  function backgroundBehind(el, memo) {
+    const chain = [];
+    for (let n = el; n; n = n.parentElement) {
+      if (memo.has(n)) { const hit = memo.get(n); for (const c of chain) memo.set(c, hit); return hit; }
+      chain.push(n);
+      let c;
+      try { c = getComputedStyle(n).backgroundColor; } catch (_) { break; }
+      const parsed = BC.color.parseCssColor(c);
+      if (parsed && parsed.a >= 0.5) { for (const x of chain) memo.set(x, c); return c; }
+    }
+    for (const c of chain) memo.set(c, null);
+    return null;
+  }
+
+  const MIN_TEXT_CONTRAST = 4.5;
+
   function sweepLightSurfaces() {
     if (!document.body || !document.documentElement.classList.contains("bc-dark")) return 0;
     const scope = document.getElementById("application") || document.body;
+    const bgMemo = new WeakMap();
     let marked = 0, seen = 0;
     for (const el of scope.querySelectorAll(SWEEP_TAGS)) {
       if (++seen > SWEEP_MAX) break;
@@ -318,7 +363,8 @@
       // non-authored branch meant one of our panels rendered inside authored
       // content fell through to the paper branch and got marked.
       if (el.closest("[data-bc-node],[data-better-canvas]")) continue;
-      const authored = el.closest(CONTENT_SCOPES);
+      const authored = el.closest(AUTHORED_SCOPES);
+      const noRepaint = !authored && el.closest(NO_REPAINT_SCOPES);
       let cs;
       try { cs = getComputedStyle(el); } catch (_) { continue; }
       if (!cs) continue;
@@ -331,8 +377,24 @@
         }
         continue;
       }
-      if (!isSweepable(cs.backgroundColor, cs.backgroundImage)) continue;
-      el.setAttribute(LIT, "");
+      if (!noRepaint && isSweepable(cs.backgroundColor, cs.backgroundImage)) {
+        el.setAttribute(LIT, "");
+        marked++;
+        continue;
+      }
+      // Not a surface to repaint, but it may still be carrying text Canvas
+      // coloured for a white page.
+      if (el.hasAttribute(DIM) || !hasOwnText(el)) continue;
+      const behind = backgroundBehind(el, bgMemo);
+      if (!behind) continue;
+      const fg = BC.color.parseCssColor(cs.color);
+      if (!fg || fg.a < 0.5) continue;
+      const fgHex = BC.color.rgbToHex(fg.r, fg.g, fg.b);
+      const bgParsed = BC.color.parseCssColor(behind);
+      if (!bgParsed) continue;
+      const bgHex = BC.color.rgbToHex(bgParsed.r, bgParsed.g, bgParsed.b);
+      if (BC.color.contrastRatio(fgHex, bgHex) >= MIN_TEXT_CONTRAST) continue;
+      el.setAttribute(DIM, "");
       marked++;
     }
     return marked;
@@ -341,6 +403,7 @@
   function clearLightSweep() {
     for (const el of document.querySelectorAll("[" + LIT + "]")) el.removeAttribute(LIT);
     for (const el of document.querySelectorAll("[" + PAPER + "]")) el.removeAttribute(PAPER);
+    for (const el of document.querySelectorAll("[" + DIM + "]")) el.removeAttribute(DIM);
   }
 
   // Canvas renders progressively and re-renders as the user works, so a fixed
@@ -435,7 +498,9 @@
   // Exported so the sweep's selection rules can be tested without a browser.
   BC.theming = Object.assign(BC.theming || {}, {
     sweepLightSurfaces, clearLightSweep, isSweepable,
-    LIT, PAPER, SWEEP_TAGS, SWEEP_EXCLUDE, CONTENT_SCOPES, LIGHT_CUTOFF,
+    LIT, PAPER, DIM, SWEEP_TAGS, SWEEP_EXCLUDE, CONTENT_SCOPES,
+    AUTHORED_SCOPES, NO_REPAINT_SCOPES, LIGHT_CUTOFF,
+    hasOwnText, backgroundBehind, MIN_TEXT_CONTRAST,
   });
 
   BC.registry.register({
