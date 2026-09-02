@@ -12,18 +12,24 @@ visited because the tag was missing from its list).
 ## Run it
 
 ```sh
-python3 -m http.server 8731          # from the repo root
+node test/browser/serve.js           # from the repo root
 # open http://localhost:8731/test/browser/page.html
 ```
+
+Use this server, not `python3 -m http.server`: it sends `no-store`, and the page
+fetches each source file with a cache-busting query. A cached subresource means
+an edited file is not what the browser runs, which made a fix look applied twice
+before it actually was.
 
 The page loads the extension's real source in manifest order with small
 stand-ins for the pieces that need a live Canvas (storage, the API, the
 registry). `BC.injector.setStyle` is the real behaviour: one keyed `<style>` tag
-appended last.
+appended last. Everything is behind `await window.__bcReady`.
 
 ## Drive it from the console
 
 ```js
+await __bcReady                               // sources are fetched, so wait
 __bcApply({ theming: { darkMode: "on" } })   // apply real settings
 __bcApply({ theming: { darkMode: "on", darkTone: "nord" } })
 __bcClear()                                   // remove every sheet and mark
@@ -59,3 +65,20 @@ against a live Canvas instance is still a manual step.
 - cards lay out in columns: distinct `getBoundingClientRect().y` values across `.ic-DashboardCard`
 - `__bcApply({theming:{darkMode:"off"}})` leaves zero `[data-bc-lit]`,
   `[data-bc-paper]` and `[data-bc-dim]` marks
+
+## Full sweep
+
+Paste this to run every tone against every layout in one go:
+
+```js
+await __bcReady;
+const fails = [];
+for (const tone of Object.keys(BC.DARK_TONES))
+  for (const layout of ["grid", "list", "masonry", "compact"]) {
+    __bcClear();
+    __bcApply({ theming: { darkMode: "on", darkTone: tone }, dashboard: { layout } });
+    const bad = __bcAudit().filter(a => a.ratio < 4.5);
+    if (bad.length) fails.push(`${tone}/${layout}: ` + bad.map(b => b.sel + " " + b.ratio).join(", "));
+  }
+fails;   // [] means clean
+```
