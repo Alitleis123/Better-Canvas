@@ -65,12 +65,26 @@
     // the rule harmless on a card whose colour we could not read.
     const spine = `
       .ic-DashboardCard {
-        box-shadow: inset 3px 0 0 var(--bc-course, transparent) !important;
-        /* Only transform is transitioned. box-shadow interpolating from "none"
-           holds its start value for the whole duration, so the spine appeared
-           blank on first paint, and animating an identity cue in on every load
-           is noise rather than craft. The spine is simply there. */
+        position: relative !important;
+        /* Only transform is transitioned. Animating an identity cue in on every
+           load is noise rather than craft; the spine is simply there. */
         transition: transform var(--bc-dur-2, 160ms) var(--bc-ease-standard, ease) !important;
+      }
+      /* A pseudo-element, NOT an inset box-shadow. An inset shadow paints above
+         the element's own background but BELOW its children's, and every part of
+         a card (artwork, hero, body, action row) paints its own background, so
+         the spine was covered everywhere except the few pixels no child reached
+         -- it showed as a stub at the bottom-left corner. This sits above the
+         children instead. */
+      .ic-DashboardCard::before {
+        content: "" !important;
+        position: absolute !important;
+        left: 0 !important; top: 0 !important; bottom: 0 !important;
+        width: 3px !important;
+        background: var(--bc-course, transparent) !important;
+        z-index: 3 !important;
+        pointer-events: none !important;
+        border-top-left-radius: inherit; border-bottom-left-radius: inherit;
       }
       .ic-DashboardCard:focus-within {
         outline: 2px solid var(--bc-focus-ring, var(--bc-accent)) !important;
