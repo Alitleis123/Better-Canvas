@@ -50,10 +50,53 @@
     let css = `
       .ic-DashboardCard { border-radius: ${rad} !important; overflow: hidden; }
       .ic-DashboardCard__link, .ic-DashboardCard__box { border-radius: ${rad} !important; }
-      ${d.hoverLift ? `.ic-DashboardCard { transition: transform .18s ease, box-shadow .18s ease; }
-      .ic-DashboardCard:hover { transform: translateY(-2px); box-shadow: var(--bc-shadow-3, 0 10px 30px rgba(0,0,0,.12)); }` : ""}
+      ${d.hoverLift ? `.ic-DashboardCard:hover { transform: translateY(-2px); }
+      :root[data-bc-motion="0"] .ic-DashboardCard:hover { transform: none; }
+      @media (prefers-reduced-motion: reduce) { .ic-DashboardCard:hover { transform: none; } }` : ""}
     `;
     const spanRow = `${GRID} > :not([data-bc-carditem]) { grid-column: 1 / -1 !important; }`;
+
+    // "Quiet instrument": the course colour runs the full height of the card as a
+    // spine, not just the header block. Scrolling past the artwork, the spine is
+    // what still tells you which course a card is. An inset shadow rather than a
+    // border so it costs no layout and survives the card's overflow:hidden.
+    //
+    // --bc-course is stamped per card in applyCourseIdentity; the fallback keeps
+    // the rule harmless on a card whose colour we could not read.
+    const spine = `
+      .ic-DashboardCard {
+        box-shadow: inset 3px 0 0 var(--bc-course, transparent) !important;
+        /* Only transform is transitioned. box-shadow interpolating from "none"
+           holds its start value for the whole duration, so the spine appeared
+           blank on first paint, and animating an identity cue in on every load
+           is noise rather than craft. The spine is simply there. */
+        transition: transform var(--bc-dur-2, 160ms) var(--bc-ease-standard, ease) !important;
+      }
+      .ic-DashboardCard:focus-within {
+        outline: 2px solid var(--bc-focus-ring, var(--bc-accent)) !important;
+        outline-offset: 2px !important;
+      }
+      /* Typography: a clear three-step hierarchy where Canvas has one. Figures are
+         tabular so a column of course codes lines up. */
+      .ic-DashboardCard__header-title, .ic-DashboardCard__header-title span {
+        font-size: var(--bc-text-lg, 15px) !important;
+        font-weight: var(--bc-weight-semibold, 600) !important;
+        line-height: var(--bc-leading-tight, 1.25) !important;
+      }
+      .ic-DashboardCard__header-subtitle {
+        font-variant-numeric: tabular-nums !important;
+        font-size: var(--bc-text-xs, 12px) !important;
+        color: var(--bc-muted) !important;
+      }
+      .ic-DashboardCard__header-term {
+        font-size: var(--bc-text-2xs, 11px) !important;
+        color: var(--bc-text-subtle, var(--bc-muted)) !important;
+      }
+      /* The action row is the one part that should recede. */
+      .ic-DashboardCard__action-container {
+        background: var(--bc-surface-3) !important;
+        border-top: 1px solid var(--bc-border-subtle, var(--bc-border)) !important;
+      }`;
     // Canvas gives the card a fixed width, so without this the cards sit
     // left-aligned inside whatever column width the size slider produced, with
     // dead space to the right of each one.
@@ -61,8 +104,10 @@
       ${GRID} > [data-bc-carditem] .ic-DashboardCard, ${GRID} > .ic-DashboardCard { width: 100% !important; }`;
     if (d.layout === "grid") css += `${GRID} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 16px !important; align-items: start !important; }
       ${spanRow}
-      ${fillCell}`;
-    if (d.layout === "list") css += `${GRID} { display: flex !important; flex-direction: column !important; gap: 8px !important; }
+      ${fillCell}
+      ${spine}`;
+    if (d.layout === "list") css += `${spine}
+      ${GRID} { display: flex !important; flex-direction: column !important; gap: 8px !important; }
       ${GRID} > * { width: 100% !important; }
       .ic-DashboardCard { display: flex !important; flex-direction: row !important; height: 90px !important; }
       .ic-DashboardCard__header { flex: 0 0 120px !important; }
@@ -70,9 +115,11 @@
     if (d.layout === "compact") css += `${GRID} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 12px !important; align-items: start !important; }
       ${spanRow}
       ${fillCell}
+      ${spine}
       .ic-DashboardCard { max-height: 120px !important; }
       .ic-DashboardCard__header_image { height: 40px !important; }`;
-    if (d.layout === "masonry") css += `${GRID} { columns: ${Math.max(2, Math.floor(1200/size))} auto !important; column-gap: 14px !important; display: block !important; }
+    if (d.layout === "masonry") css += `${spine}
+      ${GRID} { columns: ${Math.max(2, Math.floor(1200/size))} auto !important; column-gap: 14px !important; display: block !important; }
       .ic-DashboardCard { break-inside: avoid !important; margin-bottom: 14px !important; }`;
     return css;
   }
@@ -112,6 +159,61 @@
       }
     }
     return host;
+  }
+
+  // The course colour lives in Canvas's own markup: an inline background on the
+  // hero block, or the link's background on cards with artwork. Read it once per
+  // card and stamp it as a custom property, so the spine and any hover state can
+  // reference it from CSS without re-reading computed styles every tick.
+  //
+  // A per-card stamp rather than a stylesheet because the value is per course,
+  // and generating N rules would mean rebuilding the sheet whenever a card
+  // re-rendered.
+  function applyCourseIdentity(card, spec) {
+    // An explicit user override always wins over whatever Canvas painted.
+    const chosen = spec && spec.color && BC.color.isHex(spec.color) ? spec.color : null;
+    if (chosen) {
+      if (card.dataset.bcCourseColour !== chosen) {
+        card.style.setProperty("--bc-course", chosen);
+        card.dataset.bcCourseColour = chosen;
+      }
+      return;
+    }
+    if (card.dataset.bcCourseColour) return;   // already resolved for this card
+    // Priority order, not document order. querySelector with a selector list
+    // returns whichever matches FIRST in the tree, and Canvas nests the hero
+    // inside the image wrapper, so a card with artwork returned the wrapper --
+    // which carries a background image and no colour to read.
+    const candidates = [];
+    for (const sel of [".ic-DashboardCard__header_hero",
+                       ".ic-DashboardCard__header_image",
+                       ".ic-DashboardCard__link"]) {
+      const el = card.querySelector(sel);
+      if (el) candidates.push(el);
+    }
+    candidates.push(card);
+    let found = null;
+    for (const el of candidates) {
+      let bg;
+      try { bg = getComputedStyle(el).backgroundColor; } catch (_) { continue; }
+      const parsed = BC.color.parseCssColor(bg);
+      // Skip transparent, and skip our own dark surfaces: a card whose colour we
+      // already repainted would otherwise stamp itself grey.
+      if (!parsed || parsed.a < 0.5) continue;
+      if (BC.color.chroma(bg) < 12) continue;
+      found = BC.color.rgbToHex(parsed.r, parsed.g, parsed.b);
+      break;
+    }
+    if (!found) return;
+    card.style.setProperty("--bc-course", found);
+    card.dataset.bcCourseColour = found;
+  }
+
+  function clearCourseIdentity() {
+    for (const el of document.querySelectorAll("[data-bc-course-colour]")) {
+      el.style.removeProperty("--bc-course");
+      delete el.dataset.bcCourseColour;
+    }
   }
 
   function unmarkCardGrid() {
@@ -476,6 +578,7 @@
       const effHidden = spec.hidden === true
         || (d.autoHideConcluded && concludedIds && concludedIds.has(id))
         || (!!query && name.indexOf(query) === -1);
+      applyCourseIdentity(card, spec);
       overlayCard(card, { ...spec, hidden: effHidden });
       if (d.showInlineGrade)   overlayInlineGrade(card, id, scoresMap);
       if (d.showProgressBar)   overlayProgress(card, plannerCountByCourse);
@@ -498,6 +601,7 @@
     apply,
     unmount() {
       unmarkCardGrid();
+      clearCourseIdentity();
       scoresMap.clear();
       plannerCountByCourse.clear();
       dueSoonByCourse.clear();

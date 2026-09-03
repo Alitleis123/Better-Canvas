@@ -280,11 +280,20 @@
   // Block-level containers only. Deliberately excludes span/a/button and the
   // like: a light chip or badge sets its own text colour, so it is already
   // readable, and repainting it would destroy a deliberate accent.
-  const SWEEP_TAGS = "div,section,header,footer,nav,aside,main,article,form,fieldset," +
-                     "table,thead,tbody,tfoot,tr,td,th,ul,ol,li,dl,dd,dt," +
-                     // Authored prose reaches for these, and a blockquote or a
-                     // code block routinely carries its own light background.
-                     "blockquote,pre,figure,figcaption,details,summary";
+  // Two different tag sets, because the two passes want different things.
+  //
+  // SURFACE: block containers only. An inline element's background is a chip or
+  // a highlight, and repainting it would destroy a deliberate accent.
+  const SURFACE_TAGS = "div,section,header,footer,nav,aside,main,article,form,fieldset," +
+                       "table,thead,tbody,tfoot,tr,td,th,ul,ol,li,dl,dd,dt," +
+                       // Authored prose reaches for these, and a blockquote or a
+                       // code block routinely carries its own light background.
+                       "blockquote,pre,figure,figcaption,details,summary";
+  // TEXT: anything that can hold a run of text. Canvas wraps most labels in a
+  // span, so a block-only walk never saw the text that most needed checking --
+  // every dashboard card title sits in one.
+  const TEXT_TAGS = SURFACE_TAGS + ",span,a,b,strong,em,i,small,label,p,h1,h2,h3,h4,h5,h6,caption,figcaption,time,code";
+  const SWEEP_TAGS = TEXT_TAGS;
 
   // Two different protections, previously conflated.
   //
@@ -353,6 +362,7 @@
   }
 
   const MIN_TEXT_CONTRAST = 4.5;
+  const SURFACE_TAG_SET = new Set(SURFACE_TAGS.split(",").map((t) => t.trim().toUpperCase()));
 
   function sweepLightSurfaces() {
     if (!document.body || !document.documentElement.classList.contains("bc-dark")) return 0;
@@ -379,7 +389,8 @@
         }
         continue;
       }
-      if (isSweepable(cs.backgroundColor, cs.backgroundImage)) {
+      const isSurfaceTag = SURFACE_TAG_SET.has(el.tagName);
+      if (isSurfaceTag && isSweepable(cs.backgroundColor, cs.backgroundImage)) {
         el.setAttribute(LIT, "");
         marked++;
         continue;
@@ -500,7 +511,7 @@
   // Exported so the sweep's selection rules can be tested without a browser.
   BC.theming = Object.assign(BC.theming || {}, {
     sweepLightSurfaces, clearLightSweep, isSweepable,
-    LIT, PAPER, DIM, SWEEP_TAGS, SWEEP_EXCLUDE, CONTENT_SCOPES,
+    LIT, PAPER, DIM, SWEEP_TAGS, SURFACE_TAGS, TEXT_TAGS, SWEEP_EXCLUDE, CONTENT_SCOPES,
     AUTHORED_SCOPES, LIGHT_CUTOFF,
     hasOwnText, backgroundBehind, MIN_TEXT_CONTRAST,
   });

@@ -101,11 +101,14 @@ module.exports = {
     for (const k of Object.keys(r.light)) emitted.add("--bc-" + k);
     for (const m of BC.tokens.staticCss().matchAll(/(--bc-[\w-]+)\s*:/g)) emitted.add(m[1]);
     // Aliases and runtime-set properties.
+    // Set at runtime rather than emitted by the token layer: aliases, values
+    // driven by a setting, and per-element stamps whose value differs per node
+    // (--bc-course is one course colour per card, so it cannot be a rule).
     for (const extra of ["--bc-d-bg", "--bc-d-bg2", "--bc-d-bg3", "--bc-d-border",
                          "--bc-d-text", "--bc-d-muted", "--bc-d-link",
                          "--bc-density", "--bc-todo-accent", "--bc-sidebar-w",
                          "--bc-pattern-ink", "--bc-ruler-tint", "--bc-note-bg",
-                         "--bc-note-border", "--bc-note-text"]) emitted.add(extra);
+                         "--bc-note-border", "--bc-note-text", "--bc-course"]) emitted.add(extra);
 
     const missing = new Map();
     for (const abs of jsFiles(path.join(ROOT, "src"))) {
@@ -213,5 +216,18 @@ module.exports = {
       assert.match(block, /padding:\s*[^;]*var\(--bc-space/,
         `${sel} must take its padding from the spacing scale so density applies`);
     }
+  },
+
+  "a per-element custom property is set alongside a fallback"() {
+    // --bc-course is one colour per card, so it cannot be a stylesheet rule. Any
+    // rule reading it must still render sensibly on a card whose colour could
+    // not be resolved.
+    const src = read("src/content/features/dashboard.js");
+    for (const m of src.matchAll(/var\(--bc-course([^)]*)\)/g)) {
+      assert.match(m[1], /^,\s*\S/, "var(--bc-course) must carry a fallback");
+    }
+    assert.match(src, /card\.style\.setProperty\("--bc-course"/,
+      "the property has to actually be stamped on the card");
+    assert.match(src, /clearCourseIdentity/, "and cleared on teardown");
   },
 };

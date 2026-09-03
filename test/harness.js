@@ -18,7 +18,7 @@ const ROOT = path.resolve(__dirname, "..");
 function makeElement(tag) {
   const el = {
     tagName: String(tag || "div").toUpperCase(),
-    children: [], childNodes: [], attributes: {}, style: {}, dataset: {},
+    children: [], childNodes: [], attributes: {}, style: {},
     classList: {
       _s: new Set(),
       add(...c) { c.forEach((x) => this._s.add(x)); },
@@ -84,6 +84,23 @@ function makeElement(tag) {
     },
     nodeType: 1,
   };
+  // In a real DOM `dataset` is a live view over data-* attributes, so
+  // querySelectorAll("[data-x]") finds an element set via dataset.x. A plain
+  // object silently breaks that, which makes selector-based cleanup look broken
+  // in tests while working in a browser.
+  const toAttr = (k) => "data-" + k.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
+  el.dataset = new Proxy({}, {
+    get: (_, k) => (typeof k === "string" && el.attributes[toAttr(k)] !== undefined
+      ? el.attributes[toAttr(k)] : undefined),
+    set: (_, k, v) => { el.attributes[toAttr(k)] = String(v); return true; },
+    has: (_, k) => typeof k === "string" && el.attributes[toAttr(k)] !== undefined,
+    deleteProperty: (_, k) => { delete el.attributes[toAttr(k)]; return true; },
+    ownKeys: () => Object.keys(el.attributes)
+      .filter((a) => a.startsWith("data-"))
+      .map((a) => a.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase())),
+    getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }),
+  });
+
   Object.defineProperty(el, "childElementCount", {
     get() { return el.children.filter((c) => c && c.nodeType === 1).length; },
     enumerable: true, configurable: true,

@@ -21,6 +21,11 @@ function dashboard({ wrapped, heading }) {
   };
   sb.BC.storage = { current: null, local: {}, updateLocal: () => Promise.resolve() };
   sb.BC.requestApply = () => {};
+  sb.getComputedStyle = (el) => ({
+    backgroundColor: el._bg == null ? "rgba(0, 0, 0, 0)" : el._bg,
+    backgroundImage: el._bgImage || "none",
+    color: el._fg || "rgb(45, 59, 69)",
+  });
   load(sb, "src/content/features/dashboard.js");
 
   const doc = sb.document;
@@ -39,6 +44,17 @@ function dashboard({ wrapped, heading }) {
   for (let i = 0; i < 3; i++) {
     const card = doc.createElement("div");
     card.className = "ic-DashboardCard";
+    // Canvas nests the hero (carrying the course colour) inside the image
+    // wrapper, so the identity pass has to prefer it by priority, not by
+    // document order.
+    const imageWrap = doc.createElement("div");
+    imageWrap.className = "ic-DashboardCard__header_image";
+    imageWrap._bgImage = i === 0 ? 'url("art.png")' : "none";
+    const hero = doc.createElement("div");
+    hero.className = "ic-DashboardCard__header_hero";
+    hero._bg = ["rgb(181, 138, 60)", "rgb(74, 157, 127)", "rgb(140, 90, 158)"][i % 3];
+    imageWrap.appendChild(hero);
+    card.appendChild(imageWrap);
     const link = doc.createElement("a");
     link.className = "ic-DashboardCard__link";
     link.setAttribute("href", "/courses/" + (i + 1));
@@ -199,5 +215,84 @@ module.exports = {
     assert.ok(filter);
     assert.noMatch(filter[1], /data-bc-cardgrid/);
     assert.noMatch(filter[1], /data-bc-carditem/);
+  },
+
+  "each card is stamped with its own course colour"() {
+    // The spine is what still identifies a course once the artwork has scrolled
+    // past, so every card needs its own value.
+    const env = dashboard({ wrapped: false });
+    applyDashboard(env, settings());
+    const stamped = env.cards.map((c) => c.dataset.bcCourseColour);
+    assert.deepEqual(stamped, ["#b58a3c", "#4a9d7f", "#8c5a9e"]);
+    for (const c of env.cards) {
+      assert.equal(c.style["--bc-course"], c.dataset.bcCourseColour,
+        "the custom property must carry the colour the spine reads");
+    }
+  },
+
+  "the hero wins over the image wrapper that contains it"() {
+    // querySelector with a selector list returns whatever matches first in the
+    // TREE, and Canvas nests the hero inside the wrapper, so a card with artwork
+    // resolved to the wrapper, which has an image and no colour to read.
+    const env = dashboard({ wrapped: false });
+    applyDashboard(env, settings());
+    assert.equal(env.cards[0].dataset.bcCourseColour, "#b58a3c",
+      "a card with artwork must still resolve its course colour");
+  },
+
+  "a user's chosen colour overrides what Canvas painted"() {
+    const env = dashboard({ wrapped: false });
+    const s = settings();
+    const id = env.cards[0].querySelector("a.ic-DashboardCard__link").getAttribute("href").split("/").pop();
+    s.dashboard.courses[id] = { color: "#ff0000" };
+    applyDashboard(env, s);
+    assert.equal(env.cards[0].dataset.bcCourseColour, "#ff0000");
+  },
+
+  "a neutral surface is never mistaken for a course colour"() {
+    // Our own dark surfaces are grey; stamping one as the course colour would
+    // give every card an identical invisible spine.
+    const env = dashboard({ wrapped: false });
+    for (const c of env.cards) {
+      c.querySelector(".ic-DashboardCard__header_hero")._bg = "rgb(37, 40, 47)";
+      c._bg = "rgb(37, 40, 47)";
+    }
+    applyDashboard(env, settings());
+    for (const c of env.cards) {
+      assert.equal(c.dataset.bcCourseColour, undefined,
+        "a grey is chrome, not an identity");
+    }
+  },
+
+  "course colours are cleared on teardown"() {
+    const env = dashboard({ wrapped: false });
+    applyDashboard(env, settings());
+    assert.ok(env.cards[0].dataset.bcCourseColour);
+    env.sb.BC.features.dashboard.unmount();
+    for (const c of env.cards) assert.equal(c.dataset.bcCourseColour, undefined);
+  },
+
+  "the spine is not animated, only the hover lift is"() {
+    // box-shadow interpolating from "none" holds its start value for the whole
+    // duration, so an animated spine renders blank on first paint; and animating
+    // an identity cue in on every load is noise.
+    const src = read("src/content/features/dashboard.js");
+    const i = src.indexOf("const spine =");
+    const block = src.slice(i, src.indexOf("`;", i));
+    assert.match(block, /transition: transform var\(--bc-dur-2/);
+    assert.noMatch(block, /transition:[^;]*box-shadow/,
+      "box-shadow must not be transitioned");
+  },
+
+  "the card treatment uses tokens, not literals"() {
+    const src = read("src/content/features/dashboard.js");
+    const i = src.indexOf("const spine =");
+    const block = src.slice(i, src.indexOf("`;", i));
+    for (const token of ["--bc-text-lg", "--bc-weight-semibold", "--bc-muted",
+                         "--bc-surface-3", "--bc-focus-ring"]) {
+      assert.ok(block.includes(token), `the card treatment should use ${token}`);
+    }
+    assert.match(block, /font-variant-numeric: tabular-nums/,
+      "course codes are figures and should align");
   },
 };
