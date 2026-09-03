@@ -107,14 +107,15 @@ module.exports = {
 
   "course card colour and artwork are never repainted by the sweep"() {
     const src = read("src/content/features/theming.js");
-    assert.match(src, /NO_REPAINT_SCOPES = "\.ic-DashboardCard"/,
-      "the card's background must be protected from repainting");
-    assert.match(src, /if \(!noRepaint && isSweepable\(/,
-      "the no-repaint scope must gate the background pass");
-    // ...but the card's TEXT is Canvas chrome and still has to be legible, so
-    // the protection must NOT also skip the faint-text pass.
-    assert.noMatch(src, /const authored = el\.closest\(CONTENT_SCOPES\)/,
-      "background protection must not be conflated with leaving text alone");
+    // Artwork and course colours are protected by MEASUREMENT, not by excluding
+    // the card subtree. Excluding it also shielded the card's plain white body,
+    // which left a white panel under every header in dark mode.
+    assert.noMatch(src, /NO_REPAINT_SCOPES/,
+      "a card needs no scope exclusion; isSweepable already protects what matters");
+    assert.match(src, /if \(backgroundImage && backgroundImage !== "none"\) return false;/,
+      "artwork is protected by skipping anything carrying a background image");
+    assert.match(src, /chroma\(backgroundColor\) > NEUTRAL_MAX_CHROMA\) return false;/,
+      "course colours are protected by skipping saturated fills");
     assert.match(src, /function isSweepable\(backgroundColor, backgroundImage\)/,
       "the sweep decision should be a named, testable predicate");
     assert.match(src, /if \(backgroundImage && backgroundImage !== "none"\) return false;/,

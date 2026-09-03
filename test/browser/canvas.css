@@ -30,6 +30,9 @@ a { color: #0374b5; text-decoration: none; }
 .ic-DashboardCard__header_image { height: 146px; background-size: cover; background-position: center; }
 .ic-DashboardCard__header_hero { height: 146px; }
 .ic-DashboardCard__link { display: block; padding: 10px 12px; color: #2d3b45; }
+/* The card body Canvas paints white. Our static rules do not name this element,
+   so the sweep is what has to darken it. */
+.ic-DashboardCard__header-content { display: block; padding: 10px 12px; color: #2d3b45; background: #fff; }
 .ic-DashboardCard__header-title { font-weight: 700; margin-bottom: 2px; }
 .ic-DashboardCard__header-subtitle, .ic-DashboardCard__header-term { font-size: 12px; color: #6b7780; }
 .ic-DashboardCard__action-container { padding: 6px 12px 10px; display: flex; gap: 10px; }

@@ -243,13 +243,29 @@ module.exports = {
     for (const el of [white, grey, warm]) assert.ok(isLit(el), `neutral ${el._bg} should be swept`);
   },
 
-  "dashboard cards are never touched, so course colours survive"() {
+  "a card's course colour and artwork survive, but its plain body is darkened"() {
+    // Protection comes from measuring the fill, not from excluding the card:
+    // excluding it also shielded the white body, leaving a white panel under
+    // every card header in dark mode.
     const e = env();
     const card = e.add("div", null, null, { className: "ic-DashboardCard" });
-    const header = e.add("div", "rgb(255, 255, 255)", card);
+    const hero = e.add("div", "rgb(74, 157, 127)", card);        // course colour
+    const art = e.add("div", "rgb(255, 255, 255)", card, { bgImage: 'url("x.png")' });
+    const body = e.add("div", "rgb(255, 255, 255)", card);       // plain chrome
     e.BC.theming.sweepLightSurfaces();
-    assert.notOk(isLit(card));
-    assert.notOk(isLit(header), "a card's own chrome carries the user's course colour");
+    assert.notOk(isLit(hero), "a saturated course colour must survive");
+    assert.notOk(isLit(art), "course artwork must survive");
+    assert.ok(isLit(body), "the card's plain white body must be darkened");
+  },
+
+  "a pale course colour still survives"() {
+    // The measurement has to hold for light course colours too, not just dark
+    // ones, or a pastel course would be repainted as chrome.
+    const e = env();
+    const card = e.add("div", null, null, { className: "ic-DashboardCard" });
+    const pale = e.add("div", "rgb(255, 214, 224)", card);
+    e.BC.theming.sweepLightSurfaces();
+    assert.notOk(isLit(pale), "a pale course colour is still a colour");
   },
 
   "the neutrality test uses distance from grey"() {

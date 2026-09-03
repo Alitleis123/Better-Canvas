@@ -169,8 +169,11 @@
     // we've committed not to do. contrastText picks the better endpoint and
     // ensureContrast can only improve on it, so this is always the best achievable.
     const accentContrast = C.ensureContrast(C.contrastText(accent), accent, AA_TEXT);
-    const accentText = C.ensureContrast(accent, S2, AA_TEXT);
-    const accentStroke = C.ensureContrast(accent, S2, AA_NONTEXT);
+    // Guarded against every surface, like text and muted are. Guarding only S2
+    // left links failing on S3, which is where they most often sit: a dashboard
+    // card body, a table cell, an inner panel. A card title came out at 3.93:1.
+    const accentText = guardOn(accent, AA_TEXT, [S2, S3, S1]);
+    const accentStroke = guardOn(accent, AA_NONTEXT, [S2, S3, S1]);
     const dark = mode === "dark";
 
     const t = {

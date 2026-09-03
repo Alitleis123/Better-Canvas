@@ -292,12 +292,15 @@
   // to change; a light box inside it gets PAPER so its own ink stays legible.
   const AUTHORED_SCOPES = ".user_content,.show-content,.description,.assignment-description," +
                           ".discussion-topic-body,.mce-content-body,.ProseMirror,.bc-note";
-  // NO_REPAINT: the background is meaningful (a course colour, artwork) but the
-  // TEXT is Canvas chrome and still has to be readable on our surfaces. Lumping
-  // this in with AUTHORED meant card subtitles kept Canvas's white-page grey at
-  // 3.2:1 on the dark card.
-  const NO_REPAINT_SCOPES = ".ic-DashboardCard";
-  const CONTENT_SCOPES = AUTHORED_SCOPES + "," + NO_REPAINT_SCOPES;
+  // A dashboard card needs NO scope exclusion at all. What has to survive there
+  // is the course artwork and the course colour, and isSweepable already
+  // protects both by measuring them: it skips anything carrying a background
+  // image, and anything whose fill is saturated rather than neutral.
+  //
+  // Excluding the whole .ic-DashboardCard subtree instead was too blunt. It also
+  // shielded the card's white body, which is plain neutral chrome, so every card
+  // kept a white panel under its header in dark mode.
+  const CONTENT_SCOPES = AUTHORED_SCOPES;
 
   // Above this distance from grey a background is a deliberate colour rather
   // than chrome. A pale course colour or a status chip can be light enough to
@@ -364,7 +367,6 @@
       // content fell through to the paper branch and got marked.
       if (el.closest("[data-bc-node],[data-better-canvas]")) continue;
       const authored = el.closest(AUTHORED_SCOPES);
-      const noRepaint = !authored && el.closest(NO_REPAINT_SCOPES);
       let cs;
       try { cs = getComputedStyle(el); } catch (_) { continue; }
       if (!cs) continue;
@@ -377,7 +379,7 @@
         }
         continue;
       }
-      if (!noRepaint && isSweepable(cs.backgroundColor, cs.backgroundImage)) {
+      if (isSweepable(cs.backgroundColor, cs.backgroundImage)) {
         el.setAttribute(LIT, "");
         marked++;
         continue;
@@ -499,7 +501,7 @@
   BC.theming = Object.assign(BC.theming || {}, {
     sweepLightSurfaces, clearLightSweep, isSweepable,
     LIT, PAPER, DIM, SWEEP_TAGS, SWEEP_EXCLUDE, CONTENT_SCOPES,
-    AUTHORED_SCOPES, NO_REPAINT_SCOPES, LIGHT_CUTOFF,
+    AUTHORED_SCOPES, LIGHT_CUTOFF,
     hasOwnText, backgroundBehind, MIN_TEXT_CONTRAST,
   });
 

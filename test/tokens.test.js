@@ -81,6 +81,37 @@ module.exports = {
     }
   },
 
+  "link and accent text clear AA on EVERY surface"() {
+    // Guarding only surface-2 left links failing on surface-3, which is where
+    // they most often sit: a card body, a table cell, an inner panel.
+    for (const th of allThemings()) {
+      const r = BC.tokens.resolve(th);
+      for (const mode of ["light", "dark"]) {
+        const t = r[mode];
+        for (const surf of ["surface-1", "surface-2", "surface-3"]) {
+          for (const token of ["link", "accent-text"]) {
+            const ratio = C.contrastRatio(t[token], t[surf]);
+            assert.ok(ratio >= AA,
+              `${token} on ${surf} in ${mode} = ${ratio.toFixed(2)} for ${JSON.stringify(th)}`);
+          }
+        }
+      }
+    }
+  },
+
+  "accent-stroke clears the 3:1 non-text floor on every surface"() {
+    for (const th of allThemings()) {
+      const r = BC.tokens.resolve(th);
+      for (const mode of ["light", "dark"]) {
+        for (const surf of ["surface-1", "surface-2", "surface-3"]) {
+          const ratio = C.contrastRatio(r[mode]["accent-stroke"], r[mode][surf]);
+          assert.ok(ratio >= AA_NONTEXT,
+            `accent-stroke on ${surf} in ${mode} = ${ratio.toFixed(2)}`);
+        }
+      }
+    }
+  },
+
   "accent-stroke clears the 3:1 non-text floor on panels"() {
     for (const th of allThemings()) {
       const r = BC.tokens.resolve(th);
