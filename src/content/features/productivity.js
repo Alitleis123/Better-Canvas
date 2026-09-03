@@ -29,21 +29,37 @@
       transition: width var(--bc-dur-2, 150ms) var(--bc-ease-out, ease);
     }
 
-    /* Anchored bottom-LEFT, stacked above the quiz-draft dot. These used to sit
-       bottom-right, where the toast stack and the Pomodoro dock also live, so a
-       toast landed on top of them. Nothing else competes for this corner. */
+    /* Bottom-RIGHT, sharing the corner budget with the Pomodoro dock and the
+       toast stack rather than competing with it. left:16px put these on top of
+       Canvas's global navigation rail, which is roughly 100px wide.
+
+       Quiet by default: a surface chip with a border, not an accent-filled
+       pill. These are page utilities, not the primary action on the page, and
+       two saturated lozenges permanently floating over the content read as
+       loud. The accent appears on hover and focus, where it means something. */
     .bc-copyurl-btn, .bc-print-btn {
-      position: fixed; left: 16px; z-index: var(--bc-z-dock, 2147480000);
-      background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); border: 0;
-      padding: 6px 10px; border-radius: var(--bc-radius-pill, 999px); cursor: pointer;
+      position: fixed; right: 16px; z-index: var(--bc-z-dock, 2147480000);
+      display: inline-flex; align-items: center; gap: var(--bc-space-2, 6px);
+      background: var(--bc-surface-2, #fff); color: var(--bc-text, inherit);
+      border: 1px solid var(--bc-border, #e5e7eb);
+      padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px);
+      border-radius: var(--bc-radius-pill, 999px); cursor: pointer;
       font-family: var(--bc-font-sans); font-size: var(--bc-text-xs, 12px);
-      box-shadow: var(--bc-shadow-2, 0 2px 8px rgba(0,0,0,.15));
+      box-shadow: var(--bc-shadow-1, 0 1px 3px rgba(0,0,0,.12));
+      transition: background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
+                  border-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
+    }
+    .bc-copyurl-btn:hover, .bc-print-btn:hover {
+      background: var(--bc-surface-4, rgba(0,0,0,.05));
+      border-color: var(--bc-accent-border, var(--bc-accent));
     }
     .bc-copyurl-btn:focus-visible, .bc-print-btn:focus-visible {
       outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px;
     }
-    .bc-copyurl-btn { bottom: 52px; }
-    .bc-print-btn { bottom: 88px; }
+    /* Stacked above whatever dock is mounted, and the toast host is told to
+       clear both via --bc-utility-h. */
+    .bc-copyurl-btn { bottom: calc(16px + var(--bc-dock-bottom, 0px)); }
+    .bc-print-btn { bottom: calc(52px + var(--bc-dock-bottom, 0px)); }
     /* Printing the page should not print our own floating chrome. */
     @media print {
       .bc-copyurl-btn, .bc-print-btn, .bc-ruler, .bc-progress-bar { display: none !important; }
@@ -141,6 +157,20 @@
     document.body.appendChild(b);
   }
   function uninstallUrlButton() { BC.injector.removeNode("bc-copyurl-btn"); }
+
+  // Publish the footprint so the toast stack starts above these rather than on
+  // top of them. Two buttons stacked plus the gap below the lower one.
+  const UTILITY_CLEARANCE = "88px";
+  function setUtilityClearance(on) {
+    const root = document.documentElement;
+    if (on) {
+      if (root.style.getPropertyValue("--bc-utility-h") !== UTILITY_CLEARANCE) {
+        root.style.setProperty("--bc-utility-h", UTILITY_CLEARANCE);
+      }
+    } else if (root.style.getPropertyValue("--bc-utility-h")) {
+      root.style.removeProperty("--bc-utility-h");
+    }
+  }
 
   function installPrintButton() {
     if (document.querySelector('[data-bc-node="bc-print-btn"]')) return;
@@ -339,6 +369,7 @@
     p.readingProgress ? installProgress() : uninstallProgress();
     p.copyUrlButton ? installUrlButton() : uninstallUrlButton();
     p.printFriendly ? installPrintButton() : uninstallPrintButton();
+    setUtilityClearance(!!(p.copyUrlButton || p.printFriendly));
     BC.injector.setStyle("bc-productivity-css", CSS);
 
     if (p.stickyNotes && BC.storage.loadLocal) BC.storage.loadLocal().then(syncNotesIfChanged);
@@ -362,6 +393,7 @@
       dragEl = null;
       notesSig = null;
       textareaCount = -1;
+      setUtilityClearance(false);
       for (const ta of document.querySelectorAll("textarea, [contenteditable=true]")) {
         delete ta._bcDraft;
         delete ta._bcWc;

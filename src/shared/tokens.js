@@ -361,10 +361,12 @@
   --bc-z-toast: 2147483200;
 
   /* Bottom-right corner budget. The toast stack, the Pomodoro dock and the
-     page-utility buttons all anchor here and used to overlap each other.
-     Whichever persistent dock is mounted raises this, and the toast stack
-     starts above it. */
-  --bc-dock-bottom: 0px;
+     page-utility buttons all anchor here and used to overlap each other. Each
+     piece of persistent chrome raises its own slot, and the toast stack starts
+     above the sum, so the corner is arbitrated in one place rather than by each
+     feature guessing an offset. */
+  --bc-dock-bottom: 0px;   /* Pomodoro dock */
+  --bc-utility-h: 0px;     /* Copy URL / Print buttons */
 }
 
 /* A gentler curve than the legacy --bc-density multiplier: at 0.6 a 4px gap

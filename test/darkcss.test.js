@@ -11,14 +11,21 @@ const AUTHORED_ROOTS = new Set([
 
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 
-// The dark-mode rule text from each file that emits any.
+// The dark-mode rule text. theming.js is taken from the composed sheet it
+// actually emits, because its template contains interpolated constants that
+// stay literal if the source is read raw.
 function darkCss() {
-  const out = [];
-  for (const f of ["src/content/features/theming.js", "src/content/frame.js"]) {
-    const src = read(f);
-    for (const m of src.matchAll(/`([\s\S]*?)`/g)) {
-      if (m[1].includes("bc-dark")) out.push({ file: f, css: m[1] });
-    }
+  const { createSandbox, loadCore, load } = require("./harness");
+  const sb = createSandbox();
+  loadCore(sb);
+  sb.BC.registry = { register() {} };
+  sb.BC.injector = { setStyle() {}, removeNode() {}, ensureNode() {} };
+  sb.BC.lifecycle = { pageBag: () => ({ once() {}, timeout() {} }) };
+  load(sb, "src/content/features/theming.js");
+  const out = [{ file: "src/content/features/theming.js", css: sb.BC.theming.rawStaticCss() }];
+  const frame = read("src/content/frame.js");
+  for (const m of frame.matchAll(/`([\s\S]*?)`/g)) {
+    if (m[1].includes("bc-dark")) out.push({ file: "src/content/frame.js", css: m[1] });
   }
   return out;
 }

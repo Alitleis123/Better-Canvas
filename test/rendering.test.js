@@ -15,8 +15,10 @@ function stylesheet(theming) {
   sb.BC.lifecycle = { pageBag: () => ({ once() {}, timeout() {} }) };
   load(sb, "src/content/features/theming.js");
 
-  const src = fs.readFileSync(path.join(ROOT, "src/content/features/theming.js"), "utf8");
-  const staticCss = src.match(/const staticCSS = `([\s\S]*?)`;/)[1];
+  // The real composed sheet, not the source text. A template literal in the
+  // source can contain interpolations, and reading it raw leaves those literal,
+  // so the test would measure selectors that never ship.
+  const staticCss = sb.BC.theming.rawStaticCss();
 
   const BC = sb.BC;
   const tokens = BC.tokens.resolve(theming || {}).dark;

@@ -12,6 +12,14 @@
   const FONT_SCALE = { xs: 0.85, s: 0.92, m: 1.0, l: 1.08, xl: 1.18 };
   const DENSITY_PAD = { compact: 0.6, default: 1.0, spacious: 1.4, cozy: 1.7 };
 
+  // Our own UI must be exempt from the generic element rules below. Those rules
+  // exist to darken Canvas's inputs and buttons, but they match by TAG, so they
+  // also hit every button and input the extension itself renders -- the Print and
+  // Copy URL actions came out as generic dark chips instead of accent buttons,
+  // and their own styling could not win against an !important tag rule.
+  const NOT_OURS = ':not([data-bc-node]):not([data-bc-node] *)' +
+                   ':not([class^="bc-"]):not([class*=" bc-"])';
+
   const staticCSS = `
     html.bc-dark, html.bc-dark body { background-color: var(--bc-d-bg) !important; color: var(--bc-d-text) !important; }
     html.bc-dark #wrapper, html.bc-dark #main, html.bc-dark #content,
@@ -36,8 +44,9 @@
       background-color: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important;
       border-color: var(--bc-d-border) !important;
     }
-    html.bc-dark a { color: var(--bc-d-link) !important; }
-    html.bc-dark input, html.bc-dark select, html.bc-dark textarea, html.bc-dark button {
+    html.bc-dark a${NOT_OURS} { color: var(--bc-d-link) !important; }
+    html.bc-dark input${NOT_OURS}, html.bc-dark select${NOT_OURS},
+    html.bc-dark textarea${NOT_OURS}, html.bc-dark button${NOT_OURS} {
       background-color: var(--bc-d-bg3) !important; color: var(--bc-d-text) !important;
       border-color: var(--bc-d-border) !important;
     }
@@ -509,7 +518,11 @@
   }
 
   // Exported so the sweep's selection rules can be tested without a browser.
+  // Exposed so tests measure the sheet that actually ships. Reading the source
+  // text instead meant an interpolated constant stayed literal in the test, and
+  // the test then measured a selector that matches nothing.
   BC.theming = Object.assign(BC.theming || {}, {
+    staticSheet, rawStaticCss: () => staticCSS,
     sweepLightSurfaces, clearLightSweep, isSweepable,
     LIT, PAPER, DIM, SWEEP_TAGS, SURFACE_TAGS, TEXT_TAGS, SWEEP_EXCLUDE, CONTENT_SCOPES,
     AUTHORED_SCOPES, LIGHT_CUTOFF,

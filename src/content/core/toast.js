@@ -10,8 +10,10 @@
   const CSS = `
     .bc-toast-host {
       position: fixed; right: 16px;
-      /* Sits above whichever persistent dock is mounted in this corner. */
-      bottom: calc(16px + var(--bc-dock-bottom, 0px));
+      /* Sits above whichever persistent chrome is mounted in this corner: the
+         Pomodoro dock raises --bc-dock-bottom, the page-utility buttons raise
+         --bc-utility-h. */
+      bottom: calc(16px + var(--bc-dock-bottom, 0px) + var(--bc-utility-h, 0px));
       display: flex; flex-direction: column; gap: var(--bc-space-3, 8px);
       z-index: var(--bc-z-toast, 2147483200); pointer-events: none;
       font-family: var(--bc-font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);

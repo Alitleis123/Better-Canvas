@@ -150,14 +150,20 @@ module.exports = {
 
   "the bottom-right corner is arbitrated by one shared variable"() {
     // The toast stack, the Pomodoro dock and the page-utility buttons all anchor
-    // near this corner and used to overlap.
-    assert.match(BC.tokens.staticCss(), /--bc-dock-bottom:/);
-    assert.match(read("src/content/core/toast.js"), /bottom: calc\([^)]*var\(--bc-dock-bottom/);
+    // in this corner. They share it by arbitration rather than by each feature
+    // guessing an offset, and the toast stack starts above the sum.
+    const staticCss = BC.tokens.staticCss();
+    assert.match(staticCss, /--bc-dock-bottom:/);
+    assert.match(staticCss, /--bc-utility-h:/);
+    assert.match(read("src/content/core/toast.js"),
+      /bottom: calc\([^)]*var\(--bc-dock-bottom[^)]*\)[^)]*var\(--bc-utility-h/,
+      "the toast stack must clear every slot, not just one");
+    // Each feature raises its own slot rather than positioning around others.
     assert.match(read("src/content/features/todo.js"), /--bc-dock-bottom/);
-    // The utility buttons moved out of the contested corner entirely.
     const prod = read("src/content/features/productivity.js");
-    assert.match(prod, /\.bc-copyurl-btn, \.bc-print-btn \{[^}]*left: 16px/,
-      "the utility buttons must not share the toast corner");
+    assert.match(prod, /--bc-utility-h/, "the utility buttons must publish their footprint");
+    assert.noMatch(prod, /\.bc-copyurl-btn, \.bc-print-btn \{[^}]*left: 16px/,
+      "left:16px places them on top of Canvas's global navigation rail");
   },
 
   "motion respects both the in-app switch and the OS setting"() {
