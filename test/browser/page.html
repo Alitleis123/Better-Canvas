@@ -203,6 +203,8 @@ window.__bcReady = (async () => {
 
   await load("../../src/content/features/theming.js");
   await load("../../src/content/features/dashboard.js");
+  await load("../../src/content/core/toast.js");
+  await load("../../src/content/features/productivity.js");
   return true;
 })();
 
@@ -212,6 +214,7 @@ window.__bcApply = function (overrides) {
   BC.storage.current = s;
   BC.features.theming.apply(s, ctx);
   BC.features.dashboard.apply(s, ctx);
+  if (BC.features.productivity) BC.features.productivity.apply(s, ctx);
   // apply() throttles the sweep; run it directly so a test does not have to wait.
   BC.theming.sweepLightSurfaces();
   return s;
