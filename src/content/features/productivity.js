@@ -33,21 +33,41 @@
        toast stack rather than competing with it. left:16px put these on top of
        Canvas's global navigation rail, which is roughly 100px wide.
 
-       Quiet by default: a surface chip with a border, not an accent-filled
-       pill. These are page utilities, not the primary action on the page, and
-       two saturated lozenges permanently floating over the content read as
-       loud. The accent appears on hover and focus, where it means something. */
+       At rest each is a 32px disc showing only its glyph, so two rarely-used
+       utilities do not permanently occupy a labelled strip over the content.
+       The label slides out on hover or focus. The label text stays in the DOM
+       throughout (clipped, not hidden) so a screen reader always reads the full
+       name, and each button carries an aria-label regardless. */
     .bc-copyurl-btn, .bc-print-btn {
       position: fixed; right: 16px; z-index: var(--bc-z-dock, 2147480000);
-      display: inline-flex; align-items: center; gap: var(--bc-space-2, 6px);
+      display: inline-flex; align-items: center; justify-content: flex-start;
+      height: 32px; padding: 0; overflow: hidden;
       background: var(--bc-surface-2, #fff); color: var(--bc-text, inherit);
       border: 1px solid var(--bc-border, #e5e7eb);
-      padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px);
       border-radius: var(--bc-radius-pill, 999px); cursor: pointer;
       font-family: var(--bc-font-sans); font-size: var(--bc-text-xs, 12px);
       box-shadow: var(--bc-shadow-1, 0 1px 3px rgba(0,0,0,.12));
       transition: background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
                   border-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
+    }
+    /* The glyph is the fixed part: a 30px square that keeps the disc round. */
+    .bc-util-ic {
+      flex: 0 0 30px; width: 30px; height: 30px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: var(--bc-text-sm, 13px); line-height: 1;
+    }
+    /* Clipped rather than display:none, so it stays in the accessibility tree.
+       max-width animates; width:auto would not. */
+    .bc-util-label {
+      max-width: 0; opacity: 0; white-space: nowrap;
+      padding-right: 0;
+      transition: max-width var(--bc-dur-2, 160ms) var(--bc-ease-standard, ease),
+                  opacity var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
+                  padding-right var(--bc-dur-2, 160ms) var(--bc-ease-standard, ease);
+    }
+    .bc-copyurl-btn:hover .bc-util-label, .bc-print-btn:hover .bc-util-label,
+    .bc-copyurl-btn:focus-visible .bc-util-label, .bc-print-btn:focus-visible .bc-util-label {
+      max-width: 140px; opacity: 1; padding-right: var(--bc-space-4, 10px);
     }
     .bc-copyurl-btn:hover, .bc-print-btn:hover {
       background: var(--bc-surface-4, rgba(0,0,0,.05));
@@ -56,10 +76,13 @@
     .bc-copyurl-btn:focus-visible, .bc-print-btn:focus-visible {
       outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px;
     }
+    /* Nothing to animate when motion is reduced: the label simply appears. */
+    :root[data-bc-motion="0"] .bc-util-label { transition: none; }
+    @media (prefers-reduced-motion: reduce) { .bc-util-label { transition: none; } }
     /* Stacked above whatever dock is mounted, and the toast host is told to
        clear both via --bc-utility-h. */
     .bc-copyurl-btn { bottom: calc(16px + var(--bc-dock-bottom, 0px)); }
-    .bc-print-btn { bottom: calc(52px + var(--bc-dock-bottom, 0px)); }
+    .bc-print-btn { bottom: calc(56px + var(--bc-dock-bottom, 0px)); }
     /* Printing the page should not print our own floating chrome. */
     @media print {
       .bc-copyurl-btn, .bc-print-btn, .bc-ruler, .bc-progress-bar { display: none !important; }
@@ -143,8 +166,13 @@
     if (document.querySelector('[data-bc-node="bc-copyurl-btn"]')) return;
     const b = document.createElement("button");
     b.className = "bc-copyurl-btn";
+    b.type = "button";
     b.setAttribute("data-bc-node", "bc-copyurl-btn");
-    b.textContent = "🔗 Copy URL";
+    // aria-label as well as the clipped text: the name must not depend on a
+    // visual state.
+    b.setAttribute("aria-label", "Copy page URL");
+    b.appendChild(BC.util.el("span", { class: "bc-util-ic", "aria-hidden": "true", text: "\u26ad" }));
+    b.appendChild(BC.util.el("span", { class: "bc-util-label", text: "Copy URL" }));
     b.addEventListener("click", () => {
       // Clipboard writes reject on a denied permission or an unfocused document,
       // and the success toast used to fire from a chain with no catch, so a
@@ -159,8 +187,9 @@
   function uninstallUrlButton() { BC.injector.removeNode("bc-copyurl-btn"); }
 
   // Publish the footprint so the toast stack starts above these rather than on
-  // top of them. Two buttons stacked plus the gap below the lower one.
-  const UTILITY_CLEARANCE = "88px";
+  // top of them. Two 32px discs at 16px and 56px, so the upper one reaches 88px;
+  // the toast host already adds its own 16px base, leaving an 8px gap.
+  const UTILITY_CLEARANCE = "80px";
   function setUtilityClearance(on) {
     const root = document.documentElement;
     if (on) {
@@ -176,8 +205,11 @@
     if (document.querySelector('[data-bc-node="bc-print-btn"]')) return;
     const b = document.createElement("button");
     b.className = "bc-print-btn";
+    b.type = "button";
     b.setAttribute("data-bc-node", "bc-print-btn");
-    b.textContent = "🖨 Print";
+    b.setAttribute("aria-label", "Print this page");
+    b.appendChild(BC.util.el("span", { class: "bc-util-ic", "aria-hidden": "true", text: "\u2302" }));
+    b.appendChild(BC.util.el("span", { class: "bc-util-label", text: "Print" }));
     b.addEventListener("click", () => window.print());
     document.body.appendChild(b);
   }

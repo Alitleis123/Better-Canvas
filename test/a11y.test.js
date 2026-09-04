@@ -230,4 +230,32 @@ module.exports = {
         "a block sets a dark background without setting the text colour: " + block.trim().slice(0, 90));
     }
   },
+
+  "a utility button's name does not depend on a visual state"() {
+    // The label is clipped to zero width at rest, not hidden, so it stays in the
+    // accessibility tree; and each button carries an aria-label regardless, so
+    // the name never depends on hover.
+    const src = read("src/content/features/productivity.js");
+    for (const name of ["Copy page URL", "Print this page"]) {
+      assert.ok(src.includes(name), `a utility button is missing the aria-label "${name}"`);
+    }
+    assert.match(src, /\.bc-util-label \{[^}]*max-width: 0;/,
+      "the label must be clipped, not display:none, or it leaves the a11y tree");
+    assert.noMatch(src, /\.bc-util-label \{[^}]*display:\s*none/);
+    assert.match(src, /class: "bc-util-ic", "aria-hidden": "true"/,
+      "the decorative glyph must be hidden from assistive tech");
+  },
+
+  "the utility label reveals on focus, not only on hover"() {
+    // Hover-only would make it unreachable by keyboard.
+    const src = read("src/content/features/productivity.js");
+    assert.match(src, /:focus-visible \.bc-util-label/,
+      "the label must expand on keyboard focus too");
+  },
+
+  "the utility label does not animate under reduced motion"() {
+    const src = read("src/content/features/productivity.js");
+    assert.match(src, /data-bc-motion="0"\] \.bc-util-label \{ transition: none/);
+    assert.match(src, /prefers-reduced-motion: reduce\) \{ \.bc-util-label \{ transition: none/);
+  },
 };
