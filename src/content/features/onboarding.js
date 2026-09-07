@@ -50,11 +50,7 @@
 
     function markSeen() {
       done = true;
-      BC.storage.update((d) => {
-        d.onboarding.seen = true;
-        d.firstRun = false;
-        d.onboarding.lastWhatsNewVersion = BC.VERSION;
-      });
+      BC.storage.update((d) => { d.onboarding.seen = true; });
     }
 
     function finish() { markSeen(); dlg.close(); }
@@ -79,5 +75,5 @@
 
   // Styling now comes entirely from the shared kit's tokens — this used to hardcode
   // #fff / #111 / #6b7280 / #4f46e5 / #ddd / #1a1d24 and ignore the theme.
-  BC.registry.register({ id: "onboarding", styles: [], nodes: ["bc-tour"], apply });
+  BC.registry.register({ id: "onboarding", pages: ["dashboard"], styles: [], nodes: ["bc-tour"], apply });
 })();

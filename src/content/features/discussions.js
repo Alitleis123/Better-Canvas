@@ -32,14 +32,22 @@
     setTimeout(() => next.classList.remove("bc-flash"), 1600);
   }
 
+  // Counting every word in every post is O(page) and apply() runs several times a
+  // second, so on a long thread this was re-tokenising the entire discussion
+  // continuously. The post/unread counts are cheap selector lengths and act as a
+  // change key: the expensive word pass only reruns when the thread actually
+  // changed. Cached across ticks, invalidated on SPA navigation.
+  let statsCache = null;
   function stats() {
     const posts = document.querySelectorAll("#discussion_subentries .discussion_entry").length;
     const unread = document.querySelectorAll(".discussion_entry.unread, .entry.unread").length;
+    if (statsCache && statsCache.posts === posts && statsCache.unread === unread) return statsCache;
     let words = 0;
     document.querySelectorAll("#discussion_subentries .message, #discussion_topic .message").forEach((m) => {
       words += (m.textContent.trim().match(/\S+/g) || []).length;
     });
-    return { posts, unread, words };
+    statsCache = { posts, unread, words };
+    return statsCache;
   }
 
   async function highlightInstructors(courseId) {
@@ -97,6 +105,7 @@
     const onTopic = ctx.page === "discussions" && /\/discussion_topics\/\d+/.test(ctx.path);
     if (!anyOn || !onTopic) {
       collapsed = false;
+      statsCache = null;
       BC.injector.removeNode("bc-disc-bar");
       BC.injector.setStyle("bc-disc-css", "");
       BC.injector.setStyle("bc-disc-collapse", "");
@@ -117,10 +126,13 @@
       if (d.wordCount) {
         const s = stats();
         const meta = bar.querySelector(".bc-disc-meta");
-        if (meta) meta.textContent =
-          s.posts + " repl" + (s.posts === 1 ? "y" : "ies") +
+        const text = s.posts + " repl" + (s.posts === 1 ? "y" : "ies") +
           (s.unread ? " · " + s.unread + " unread" : "") +
           " · " + s.words.toLocaleString() + " words";
+        // Read before write: assigning textContent replaces the child text node
+        // even when the string is identical, which the observer sees as a DOM
+        // change and turns into another applyAll.
+        if (meta && meta.textContent !== text) meta.textContent = text;
       }
     } else {
       BC.injector.removeNode("bc-disc-bar");
@@ -130,7 +142,7 @@
   }
 
   BC.registry.register({
-    id: "discussions",
+    id: "discussions", pages: ["discussions"],
     styles: ["bc-disc-css", "bc-disc-collapse"],
     nodes: ["bc-disc-bar"],
     apply,

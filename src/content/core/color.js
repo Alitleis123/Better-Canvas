@@ -49,6 +49,37 @@
       return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
     },
 
+    // Parse what getComputedStyle actually returns: "rgb(r, g, b)",
+    // "rgba(r, g, b, a)", "transparent", or a hex. Returns {r,g,b,a} or null.
+    parseCssColor(str) {
+      const s = String(str == null ? "" : str).trim().toLowerCase();
+      if (!s || s === "transparent" || s === "none") return null;
+      if (s[0] === "#") { const c = color.hexToRgb(s); return c ? { r: c.r, g: c.g, b: c.b, a: 1 } : null; }
+      const m = s.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.%]+))?\s*\)$/);
+      if (!m) return null;
+      let a = 1;
+      if (m[4] != null) a = m[4].indexOf("%") > -1 ? parseFloat(m[4]) / 100 : parseFloat(m[4]);
+      return { r: +m[1], g: +m[2], b: +m[3], a: isFinite(a) ? a : 1 };
+    },
+
+    // How far a colour is from grey, 0..255. A white or grey panel is chrome; a
+    // saturated colour is somebody's deliberate choice (a course colour, a
+    // status badge, a highlight) and must not be repainted as if it were a
+    // surface.
+    chroma(str) {
+      const c = color.parseCssColor(str);
+      if (!c) return 0;
+      return Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b);
+    },
+
+    // Relative luminance of a computed colour string, or null when it is too
+    // transparent to be what the user actually sees.
+    cssLuminance(str, minAlpha) {
+      const c = color.parseCssColor(str);
+      if (!c || c.a < (minAlpha == null ? 0.5 : minAlpha)) return null;
+      return color.relLuminance(color.rgbToHex(c.r, c.g, c.b));
+    },
+
     // WCAG contrast ratio, 1..21.
     contrastRatio(a, b) {
       const x = color.relLuminance(a), y = color.relLuminance(b);

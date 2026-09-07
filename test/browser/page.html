@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Better Canvas visual harness</title>
+<link rel="stylesheet" href="canvas.css">
+<script>document.write('<link rel="stylesheet" href="canvas.css?t=' + Date.now() + '">');</script>
+</head>
+<body>
+<div id="application" class="ic-app">
+  <header id="header" class="ic-app-header">
+    <ul id="menu" style="list-style:none;margin:0;padding:0;display:flex;gap:16px">
+      <li class="ic-app-header__menu-list-item"><a class="ic-app-header__menu-list-link" href="#">Dashboard</a></li>
+      <li class="ic-app-header__menu-list-item"><a class="ic-app-header__menu-list-link" href="#">Courses</a></li>
+    </ul>
+  </header>
+  <div id="wrapper" class="ic-Layout-wrapper">
+    <div id="main" class="ic-Layout-columns">
+      <div id="content-wrapper" class="ic-Layout-contentWrapper" style="flex:1;min-width:0">
+        <div id="content" class="ic-Layout-contentMain">
+
+          <div class="ic-Dashboard-header__layout">
+            <h1 class="ic-Dashboard-header__title">Dashboard</h1>
+            <div class="ic-Dashboard-header__actions">
+              <button class="Button">Switch to new dashboard view</button>
+            </div>
+          </div>
+
+          <div id="DashboardCard_Container">
+            <div class="ic-DashboardCard__box">
+              <h2 class="ic-DashboardCard__box_header">Published Courses</h2>
+              <!-- card with an image header -->
+              <div class="ic-DashboardCard">
+                <div class="ic-DashboardCard__header">
+                  <div class="ic-DashboardCard__header_image"
+                       style="background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22262%22 height=%22146%22><rect width=%22262%22 height=%22146%22 fill=%22%23b58a3c%22/><text x=%2231%22 y=%2285%22 font-size=%2236%22 fill=%22%23fff%22>POE</text></svg>')">
+                    <div class="ic-DashboardCard__header_hero" style="background-color:#b58a3c"></div>
+                  </div>
+                  <a class="ic-DashboardCard__link" href="/courses/1">
+                    <div class="ic-DashboardCard__header-content">
+                    <div class="ic-DashboardCard__header-title"><span>ENGL2700 55077 Creative Writing</span></div>
+                    <div class="ic-DashboardCard__header-subtitle">ENGL2700.55077.202650</div>
+                    <div class="ic-DashboardCard__header-term">202650_2A Summer 2026</div>
+                    </div>
+                  </a>
+                </div>
+                <nav class="ic-DashboardCard__action-container"><a href="#">Announcements</a><a href="#">Files</a></nav>
+              </div>
+              <!-- card with a solid course colour -->
+              <div class="ic-DashboardCard">
+                <div class="ic-DashboardCard__header">
+                  <div class="ic-DashboardCard__header_hero" style="background-color:#4a9d7f"></div>
+                  <a class="ic-DashboardCard__link" href="/courses/2">
+                    <div class="ic-DashboardCard__header-content">
+                    <div class="ic-DashboardCard__header-title"><span>SOCL2320 33716 Statistical Analysis</span></div>
+                    <div class="ic-DashboardCard__header-subtitle">SOCL2320.33716.202630</div>
+                    <div class="ic-DashboardCard__header-term">202630_1 Spring 2026</div>
+                    </div>
+                  </a>
+                </div>
+                <nav class="ic-DashboardCard__action-container"><a href="#">Announcements</a><a href="#">Discussions</a></nav>
+              </div>
+              <div class="ic-DashboardCard">
+                <div class="ic-DashboardCard__header">
+                  <div class="ic-DashboardCard__header_hero" style="background-color:#8c5a9e"></div>
+                  <a class="ic-DashboardCard__link" href="/courses/3">
+                    <div class="ic-DashboardCard__header-content">
+                    <div class="ic-DashboardCard__header-title"><span>COMM3750 51076 Special Effects</span></div>
+                    <div class="ic-DashboardCard__header-subtitle">COMM3750.51076.202650</div>
+                    <div class="ic-DashboardCard__header-term">202650_2A Summer 2026</div>
+                    </div>
+                  </a>
+                </div>
+                <nav class="ic-DashboardCard__action-container"><a href="#">Announcements</a></nav>
+              </div>
+              <div class="ic-DashboardCard">
+                <div class="ic-DashboardCard__header">
+                  <div class="ic-DashboardCard__header_hero" style="background-color:#c0562e"></div>
+                  <a class="ic-DashboardCard__link" href="/courses/4">
+                    <div class="ic-DashboardCard__header-content">
+                    <div class="ic-DashboardCard__header-title"><span>HIST1100 Modern History</span></div>
+                    <div class="ic-DashboardCard__header-subtitle">HIST1100.11002.202650</div>
+                    <div class="ic-DashboardCard__header-term">202650_2A Summer 2026</div>
+                    </div>
+                  </a>
+                </div>
+                <nav class="ic-DashboardCard__action-container"><a href="#">Files</a></nav>
+              </div>
+            </div>
+          </div>
+
+          <h2 style="margin-top:24px">Assignment description (instructor authored)</h2>
+          <div class="description user_content">
+            <p>Read chapters 4 through 6 and answer the questions below.</p>
+            <div class="callout">Remember: submissions close at 11:59pm.</div>
+            <blockquote>"Quoth the raven, nevermore."</blockquote>
+            <table><tr><td>Week 1</td><td>Introduction</td></tr><tr><td>Week 2</td><td>Method</td></tr></table>
+          </div>
+
+          <h2 style="margin-top:24px">Grades table</h2>
+          <table id="grades_summary">
+            <thead><tr><th>Assignment</th><th>Due</th><th>Score</th></tr></thead>
+            <tbody>
+              <tr><th class="title"><a href="#">Essay 1</a></th><td>Sep 3</td><td>92/100</td></tr>
+              <tr><th class="title"><a href="#">Essay 2</a></th><td>Sep 17</td><td>88/100</td></tr>
+            </tbody>
+          </table>
+
+          <h2 style="margin-top:24px">Discussion</h2>
+          <div class="discussion_entry">
+            <div class="header"><a class="author" href="#">Megan Hahn</a></div>
+            <div class="message user_content"><p>Welcome to the course discussion board.</p></div>
+          </div>
+
+          <h2 style="margin-top:24px">Modules</h2>
+          <div class="context_module">
+            <div class="header ig-header"><span class="name">Week 1</span></div>
+            <ul class="ig-list">
+              <li class="ig-row"><a class="ig-title" href="#">Lecture slides</a></li>
+              <li class="ig-row"><a class="ig-title" href="#">Reading</a></li>
+            </ul>
+          </div>
+
+        </div>
+      </div>
+      <div id="right-side-wrapper">
+        <aside id="right-side">
+          <div class="Sidebar__TodoListContainer">
+            <div class="todo-list-header-container">To Do</div>
+            <div><a href="#">Reminder: Sexual Violence P...</a><div>Up2Us Foundations</div></div>
+          </div>
+          <div class="recent_feedback">
+            <h2 style="margin:0 0 6px;font-size:16px">Recent Feedback</h2>
+            <span>Nothing for now</span>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- The extension's real source, fetched with no-store so an edited file is
+     always what runs. A cached subresource silently tested the old code. -->
+<script>
+window.__bcReady = (async () => {
+  const inline = [];
+  const sources = [
+    "../../src/shared/defaults.js",
+    "../../src/shared/themes.js",
+    "../../src/content/core/util.js",
+    "../../src/content/core/datetime.js",
+    "../../src/content/core/color.js",
+    "../../src/shared/tokens.js",
+    "../../src/content/core/cache.js",
+  ];
+  const run = (code, name) => {
+    const s = document.createElement("script");
+    s.textContent = code + "\n//# sourceURL=" + name;
+    document.head.appendChild(s);
+  };
+  const load = async (path) => {
+    const r = await fetch(path + "?t=" + Date.now(), { cache: "no-store" });
+    run(await r.text(), path);
+  };
+  for (const src of sources) await load(src);
+
+  // Stand-ins for what the features reach for. setStyle does what the real
+  // injector does: one keyed <style> tag, appended last.
+  window.BC = window.BC || {};
+  BC.injector = {
+    setStyle(key, css) {
+      let tag = document.querySelector('style[data-better-canvas="' + key + '"]');
+      if (!css) { if (tag) tag.remove(); return; }
+      if (!tag) { tag = document.createElement("style"); tag.setAttribute("data-better-canvas", key); }
+      if (tag.textContent !== css) tag.textContent = css;
+      document.head.appendChild(tag);
+    },
+    removeStyle(key) { const t = document.querySelector('style[data-better-canvas="' + key + '"]'); if (t) t.remove(); },
+    removeNode(id) { document.querySelectorAll('[data-bc-node="' + id + '"]').forEach(n => n.remove()); },
+    ensureNode(id, parent, factory) {
+      let n = document.querySelector('[data-bc-node="' + id + '"]');
+      if (!n) { n = factory(); n.setAttribute("data-bc-node", id); if (!n.isConnected) (parent || document.body).appendChild(n); }
+      return n;
+    },
+  };
+  BC.registry = { register(def) { BC.features = BC.features || {}; BC.features[def.id] = def; } };
+  BC.lifecycle = { pageBag: () => ({ once(k, fn) { fn(); }, timeout(fn, ms) { setTimeout(fn, ms); } }) };
+  BC.detect = { context: () => ({ page: "dashboard", courseId: null, path: "/" }) };
+  BC.api = {
+    coursesWithScores: () => Promise.resolve([]),
+    activeCourses: () => Promise.resolve([]),
+    plannerItems: () => Promise.resolve([]),
+    dashboardCards: () => Promise.resolve([]),
+  };
+  BC.storage = { current: null, local: {}, updateLocal: () => Promise.resolve(), loadLocal: () => Promise.resolve({}) };
+  BC.ui = {
+    stat: () => document.createElement("div"), sparkline: () => null,
+    skeleton: () => document.createElement("div"), empty: () => document.createElement("div"),
+    errorState: () => document.createElement("div"),
+  };
+  BC.requestApply = () => {};
+  BC.diag = { push() {}, entries: [] };
+
+  await load("../../src/content/features/theming.js");
+  await load("../../src/content/features/dashboard.js");
+  await load("../../src/content/core/toast.js");
+  await load("../../src/content/features/productivity.js");
+  return true;
+})();
+
+window.__bcApply = function (overrides) {
+  const s = BC.mergeDefaults(Object.assign({ version: BC.SETTINGS_VERSION }, overrides || {}));
+  const ctx = { page: "dashboard", courseId: null, path: "/" };
+  BC.storage.current = s;
+  BC.features.theming.apply(s, ctx);
+  BC.features.dashboard.apply(s, ctx);
+  if (BC.features.productivity) BC.features.productivity.apply(s, ctx);
+  // apply() throttles the sweep; run it directly so a test does not have to wait.
+  BC.theming.sweepLightSurfaces();
+  return s;
+};
+
+window.__bcClear = function () {
+  BC.theming.clearLightSweep();
+  if (BC.features.dashboard.unmount) BC.features.dashboard.unmount();
+  document.documentElement.classList.remove("bc-dark");
+  document.querySelectorAll("style[data-better-canvas]").forEach(n => n.remove());
+  document.querySelectorAll("[data-bc-cardgrid],[data-bc-carditem]").forEach(n => {
+    n.removeAttribute("data-bc-cardgrid"); n.removeAttribute("data-bc-carditem");
+  });
+};
+
+// Every element carrying visible text, with what it renders as.
+window.__bcAudit = function () {
+  const out = [];
+  const parse = (c) => {
+    const m = String(c).match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+))?/);
+    return m ? { r: +m[1], g: +m[2], b: +m[3], a: m[4] == null ? 1 : +m[4] } : null;
+  };
+  const lum = (c) => {
+    const p = parse(c); if (!p) return null;
+    const f = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(p.r) + 0.7152 * f(p.g) + 0.0722 * f(p.b);
+  };
+  const ratio = (a, b) => {
+    const x = lum(a), y = lum(b);
+    if (x == null || y == null) return null;
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  };
+  const behind = (el) => {
+    for (let n = el; n; n = n.parentElement) {
+      const p = parse(getComputedStyle(n).backgroundColor);
+      if (p && p.a >= 0.5) return getComputedStyle(n).backgroundColor;
+    }
+    return "rgb(255, 255, 255)";
+  };
+  const hasOwnText = (el) => [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
+  for (const el of document.querySelectorAll("#application *")) {
+    if (!hasOwnText(el) || !el.getClientRects().length) continue;
+    const fg = getComputedStyle(el).color;
+    const bg = behind(el);
+    const r = ratio(fg, bg);
+    if (r == null) continue;
+    out.push({
+      sel: el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") +
+           (typeof el.className === "string" && el.className.trim() ? "." + el.className.trim().split(/\s+/).join(".") : ""),
+      text: (el.textContent || "").trim().slice(0, 40),
+      fg, bg, ratio: +r.toFixed(2),
+    });
+  }
+  return out;
+};
+</script>
+</body>
+</html>

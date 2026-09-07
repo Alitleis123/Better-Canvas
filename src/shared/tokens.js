@@ -88,7 +88,7 @@
   // Resolve one mode's colour tokens, applying the readability guard.
   function resolveMode(pal, mode) {
     const C = BC.color;
-    const guard = { textCorrected: false, surfaceFallback: false };
+    const guard = { textCorrected: false, surfaceFallback: false, hierarchyCollapsed: false };
 
     const S1 = pal.bg, S2 = pal.bg2, S3 = pal.bg3, border = pal.border;
 
@@ -121,11 +121,44 @@
     // branch would be unreachable.
     if (mode === "dark" && C.relLuminance(text) < 0.5) guard.surfaceFallback = true;
 
-    // Guard muted, then keep it distinguishable from body text — and re-guard,
-    // because the distinctness mix would otherwise throw away the contrast we just
-    // established (it dropped muted to ~2.6:1 on light custom backgrounds).
-    let muted = guardOn(pal.muted, AA_TEXT, [S3, S2, S1]);
-    if (C.contrastRatio(muted, text) < 1.3) muted = guardOn(C.mix(text, S2, 0.35), AA_TEXT, [S3, S2, S1]);
+    // Guard muted, then keep it distinguishable from body text.
+    //
+    // Distinctness is separated INTO the surface and AWAY from it, in that order.
+    // Mixing toward the surface is the prettier direction and is what a normal
+    // theme takes, but it costs contrast, so the result has to be re-guarded --
+    // and on a surface where text only just clears AA (a near-white custom
+    // "dark" background pushes text to a mid grey) re-guarding drags the mix
+    // straight back onto text and the two become indistinguishable.
+    //
+    // Stepping AWAY from the surface has the opposite property: it monotonically
+    // increases contrast against every surface, so AA is preserved for free and
+    // separation from text is always reachable. `separate` therefore tries the
+    // toward-surface mix first and falls back to stepping outward.
+    const MIN_SEPARATION = 1.3;
+    const separate = (from, surfaces, towardMix) => {
+      const pretty = guardOn(towardMix, AA_TEXT, surfaces);
+      if (C.contrastRatio(pretty, from) >= MIN_SEPARATION) return pretty;
+      // Whichever endpoint the primary surface is farther from is the direction
+      // that gains contrast rather than losing it.
+      const endpoint = C.contrastRatio("#000000", S2) >= C.contrastRatio("#ffffff", S2) ? "#000000" : "#ffffff";
+      for (let i = 1; i <= 12; i++) {
+        const out = C.mix(from, endpoint, i / 12 * 0.6);
+        if (C.contrastRatio(out, from) >= MIN_SEPARATION) return guardOn(out, AA_TEXT, surfaces);
+      }
+      return pretty;
+    };
+
+    const mutedSurfaces = [S3, S2, S1];
+    let muted = guardOn(pal.muted, AA_TEXT, mutedSurfaces);
+    if (C.contrastRatio(muted, text) < MIN_SEPARATION) {
+      muted = separate(text, mutedSurfaces, C.mix(text, S2, 0.35));
+    }
+    // A mid-luminance surface admits no type hierarchy at all: every ink that
+    // clears 4.5:1 against it is crushed into a narrow band near one endpoint,
+    // so body and muted text cannot be told apart no matter how they are
+    // derived. AA still holds -- the text is readable -- but the hierarchy is
+    // gone, and that is worth telling the user rather than shipping silently.
+    guard.hierarchyCollapsed = C.contrastRatio(muted, text) < MIN_SEPARATION;
     const textSubtle = guardOn(C.mix(muted, S2, 0.28), AA_TEXT, [S3, S2]);
 
     // Accent family. The accent FILL is never altered — the user picked it. What
@@ -136,8 +169,11 @@
     // we've committed not to do. contrastText picks the better endpoint and
     // ensureContrast can only improve on it, so this is always the best achievable.
     const accentContrast = C.ensureContrast(C.contrastText(accent), accent, AA_TEXT);
-    const accentText = C.ensureContrast(accent, S2, AA_TEXT);
-    const accentStroke = C.ensureContrast(accent, S2, AA_NONTEXT);
+    // Guarded against every surface, like text and muted are. Guarding only S2
+    // left links failing on S3, which is where they most often sit: a dashboard
+    // card body, a table cell, an inner panel. A card title came out at 3.93:1.
+    const accentText = guardOn(accent, AA_TEXT, [S2, S3, S1]);
+    const accentStroke = guardOn(accent, AA_NONTEXT, [S2, S3, S1]);
     const dark = mode === "dark";
 
     const t = {
@@ -214,6 +250,7 @@
           // True when EITHER mode had to fall back, since the settings surfaces
           // need one consistent answer.
           surfaceFallback: light.guard.surfaceFallback || dark.guard.surfaceFallback,
+          hierarchyCollapsed: light.guard.hierarchyCollapsed || dark.guard.hierarchyCollapsed,
         },
       };
     },
@@ -322,6 +359,14 @@
   --bc-z-modal: 2147482500;
   --bc-z-palette: 2147483000;
   --bc-z-toast: 2147483200;
+
+  /* Bottom-right corner budget. The toast stack, the Pomodoro dock and the
+     page-utility buttons all anchor here and used to overlap each other. Each
+     piece of persistent chrome raises its own slot, and the toast stack starts
+     above the sum, so the corner is arbitrated in one place rather than by each
+     feature guessing an offset. */
+  --bc-dock-bottom: 0px;   /* Pomodoro dock */
+  --bc-utility-h: 0px;     /* Copy URL / Print buttons */
 }
 
 /* A gentler curve than the legacy --bc-density multiplier: at 0.6 a 4px gap

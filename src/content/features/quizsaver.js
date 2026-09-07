@@ -12,9 +12,11 @@
   const CSS = `
     .bc-quiz-banner {
       display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-      margin: 10px 0; padding: 10px 14px; border-radius: 10px;
+      margin: var(--bc-space-4, 10px) 0;
+      padding: var(--bc-space-4, 10px) var(--bc-space-6, 14px);
+      border-radius: var(--bc-radius-lg, 10px);
       background: var(--bc-surface-2, #eef2ff); border: 1px solid var(--bc-border, #e5e7eb);
-      font-size: 14px;
+      font-size: var(--bc-text-md, 14px);
     }
     .bc-quiz-banner .bc-btn { padding: 4px 10px; }
     .bc-quiz-save-dot {
@@ -194,13 +196,14 @@
       }, true);
     });
 
-    pruneOld();
+    // Once per page visit, not once per apply tick (which is several a second).
+    bag.once("prune", pruneOld);
     const draft = BC.storage.local && BC.storage.local.quizDrafts && BC.storage.local.quizDrafts[draftKey()];
     if (draft && draft.answers && diffCount(draft) > 0) ensureBanner(draft);
   }
 
   BC.registry.register({
-    id: "quizsaver",
+    id: "quizsaver", pages: ["course"],
     styles: ["bc-quiz-css"],
     nodes: ["bc-quiz-banner", "bc-quiz-dot"],
     apply,

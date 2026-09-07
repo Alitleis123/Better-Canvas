@@ -33,7 +33,16 @@ function Build-Target($name, $manifestSource) {
     Write-Host "Built $name -> $out" -ForegroundColor Cyan
 }
 
+function Run-Tests {
+    $node = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $node) { Write-Host "node not found; skipping tests." -ForegroundColor Yellow; return }
+    Write-Host "Running test suite..."
+    & node (Join-Path $root "test\run.js")
+    if ($LASTEXITCODE -ne 0) { throw "Test suite failed; not building." }
+}
+
 Check-Syntax
+Run-Tests
 Build-Target "chrome"  "manifest.json"
 Build-Target "firefox" "manifest.firefox.json"
 

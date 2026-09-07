@@ -1,0 +1,66 @@
+/* An approximation of Canvas's own stylesheet: the parts that matter for how
+   the extension's dark mode and layout interact with it. Light panels, dark
+   ink, and containers that paint their own backgrounds. */
+* { box-sizing: border-box; }
+body { margin: 0; background: #f5f5f5; color: #2d3b45; font: 14px/1.5 "Lato", system-ui, sans-serif; }
+a { color: #0374b5; text-decoration: none; }
+
+#application { display: block; }
+.ic-app-header { background: #394b58; color: #fff; padding: 8px 12px; }
+.ic-app-header__menu-list-item { list-style: none; }
+.ic-app-header__menu-list-link { color: #fff; }
+
+.ic-Layout-columns { display: flex; gap: 16px; padding: 16px; align-items: flex-start; }
+.ic-Layout-contentMain { flex: 1; background: #f5f5f5; padding: 0 12px; min-width: 0; }
+#right-side-wrapper { width: 280px; flex: 0 0 280px; }
+#right-side { background: #f5f5f5; }
+
+.ic-Dashboard-header__layout { background: #fff; padding: 12px 16px; display: flex;
+  align-items: center; justify-content: space-between; border-bottom: 1px solid #c7cdd1; }
+.ic-Dashboard-header__title { margin: 0; font-size: 28px; font-weight: 300; }
+.Button { background: #fff; color: #2d3b45; border: 1px solid #c7cdd1; padding: 8px 14px; border-radius: 3px; }
+
+/* Canvas's own dashboard card grid: a flex-wrap container of per-card boxes. */
+#DashboardCard_Container { padding: 16px 0; }
+.ic-DashboardCard__box { display: flex; flex-wrap: wrap; gap: 16px; }
+.ic-DashboardCard__box_header { width: 100%; margin: 0 0 8px; font-size: 16px; }
+.ic-DashboardCard { width: 262px; background: #fff; border: 1px solid #c7cdd1;
+  border-radius: 4px; overflow: hidden; position: relative; }
+.ic-DashboardCard__header { position: relative; }
+.ic-DashboardCard__header_image { height: 146px; background-size: cover; background-position: center; }
+.ic-DashboardCard__header_hero { height: 146px; }
+.ic-DashboardCard__link { display: block; padding: 10px 12px; color: #2d3b45; }
+/* The card body Canvas paints white. Our static rules do not name this element,
+   so the sweep is what has to darken it. */
+.ic-DashboardCard__header-content { display: block; padding: 10px 12px; color: #2d3b45; background: #fff; }
+.ic-DashboardCard__header-title { font-weight: 700; margin-bottom: 2px; }
+.ic-DashboardCard__header-subtitle, .ic-DashboardCard__header-term { font-size: 12px; color: #6b7780; }
+.ic-DashboardCard__action-container { padding: 6px 12px 10px; display: flex; gap: 10px; }
+
+.Sidebar__TodoListContainer { background: #fff; border: 1px solid #c7cdd1; padding: 12px; margin-bottom: 12px; }
+.todo-list-header-container { background: #fff; padding: 4px 0; font-weight: 700; }
+.recent_feedback { background: #fff; border: 1px solid #c7cdd1; padding: 12px; }
+
+/* Course pages */
+#left-side { width: 200px; flex: 0 0 200px; background: #f5f5f5; }
+#section-tabs { list-style: none; margin: 0; padding: 0; }
+#section-tabs li { background: #fff; border-bottom: 1px solid #eee; }
+#section-tabs a { display: block; padding: 8px 12px; }
+
+table { border-collapse: collapse; width: 100%; background: #fff; }
+th { background: #f5f5f5; text-align: left; padding: 8px; border-bottom: 1px solid #c7cdd1; }
+td { background: #fff; padding: 8px; border-bottom: 1px solid #eee; }
+
+.ic-Action-header { background: #fff; padding: 12px 16px; border-bottom: 1px solid #c7cdd1; }
+.ic-Action-header__Heading { margin: 0; font-size: 23px; font-weight: 300; }
+
+/* Instructor-authored content: Canvas declares its own ink here. */
+.user_content, .description { color: #2d3b45; }
+.user_content .callout { background: #fff9c4; color: #3e2723; padding: 12px; border-radius: 4px; }
+.user_content blockquote { background: #eef3f8; padding: 8px 12px; margin: 8px 0; }
+
+.discussion_entry { background: #fff; border: 1px solid #c7cdd1; padding: 12px; margin-bottom: 10px; }
+.ig-header { background: #f5f5f5; padding: 10px 12px; font-weight: 700; }
+.ig-row { background: #fff; padding: 8px 12px; border-bottom: 1px solid #eee; list-style: none; }
+.context_module { background: #fff; border: 1px solid #c7cdd1; margin-bottom: 12px; }
+.ig-list { margin: 0; padding: 0; }

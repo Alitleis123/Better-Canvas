@@ -190,8 +190,12 @@
     for (const k in attrs || {}) {
       if (k === "class") n.className = attrs[k];
       else if (k === "text") n.textContent = attrs[k];
-      else if (k.indexOf("on") === 0) n.addEventListener(k.slice(2), attrs[k]);
-      else n.setAttribute(k, attrs[k]);
+      // Lowercased, and only when the value is actually a function. "onClick"
+      // would otherwise register a listener for a "Click" event that never
+      // fires, and an attribute like "only" would be swallowed as a handler.
+      else if (k.indexOf("on") === 0 && typeof attrs[k] === "function") {
+        n.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
+      } else n.setAttribute(k, attrs[k]);
     }
     for (const c of children || []) n.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
     return n;

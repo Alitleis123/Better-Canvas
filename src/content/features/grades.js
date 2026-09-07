@@ -11,6 +11,11 @@
 
   BC.grades = BC.grades || {};
 
+  // Values reaching an HTML attribute below come from settings and bcLocal, and
+  // the settings Import button accepts an arbitrary JSON file, so they are not
+  // trusted input even though they originate "locally".
+  const esc = (v) => BC.util.escapeHtml(v);
+
   BC.grades.gradePoints = function (score, scaleKey) {
     const scale = BC.GPA_SCALES[scaleKey] || BC.GPA_SCALES["standard-4"];
     for (const band of scale.bands) if (score >= band.min) return { points: band.points, letter: band.letter };
@@ -48,17 +53,17 @@
     .bc-grade-tools { margin: 16px 0; }
     .bc-grade-tools h3 { margin: 0 0 10px; font-size: 15px; }
     .bc-gt-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .bc-gt-card { padding: 10px; border-radius: 8px; background: var(--bc-surface-3, #f7fafc); }
+    .bc-gt-card { padding: var(--bc-space-4, 10px); border-radius: var(--bc-radius-md, 8px); background: var(--bc-surface-3, #f7fafc); }
     .bc-gt-total { font-size: 24px; font-weight: 800; }
     .bc-gt-label { color: var(--bc-muted, #6b7280); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
     .bc-gt-goal { display: flex; align-items: center; gap: 6px; }
-    .bc-gt-goal input { padding: 4px; width: 68px; border: 1px solid var(--bc-border, #e5e7eb); border-radius: 4px; background: transparent; color: inherit; }
+    .bc-gt-goal input { padding: 4px; width: 68px; border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-sm, 4px); background: transparent; color: inherit; }
     .bc-gt-donut { display: flex; align-items: center; gap: 8px; }
     .bc-gt-legend li { list-style: none; font-size: 12px; }
-    .bc-gt-legend span { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+    .bc-gt-legend span { display: inline-block; width: 8px; height: 8px; border-radius: var(--bc-radius-sm, 2px); margin-right: 4px; }
     .bc-gt-missing { color: var(--bc-danger, #b91c1c); font-size: var(--bc-text-xs, 12px); margin-top: 6px; }
     .bc-gt-final { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
-    .bc-gt-final input { padding: 4px; width: 68px; border: 1px solid var(--bc-border, #e5e7eb); border-radius: 4px; background: transparent; color: inherit; }
+    .bc-gt-final input { padding: 4px; width: 68px; border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-sm, 4px); background: transparent; color: inherit; }
     .bc-gt-trend { margin-top: 12px; }
     .bc-gt-trend-meta { display: flex; gap: 14px; font-size: 11px; color: var(--bc-muted, #6b7280); margin-top: 2px; }
     .bc-rubric { margin: 0 0 16px; }
@@ -78,28 +83,59 @@
     return BC.api.assignmentGroups(courseId);
   }
 
+  const DONUT_R = 26;
+
+  // Pure arc geometry, exported so it can be tested without a DOM.
+  //
+  // stroke-dashoffset shifts the dash pattern BACKWARD along the path, so a
+  // segment drawn with dasharray "<len> <rest>" starts at arc length
+  // (circumference - offset). To place segment i at its cumulative position the
+  // offset must therefore be `C - cum` and nothing else.
+  //
+  // The previous `C - dash - cum` also subtracted the segment's own length,
+  // which shifted every segment forward by that amount. With equal weights the
+  // errors happened to cancel into a rotation, which is why this looked fine;
+  // with unequal weights (the normal case for real assignment groups) the
+  // segments overlapped and the donut misreported the weighting.
+  BC.grades.donutSegments = function (groups) {
+    const total = (groups || []).reduce((s, g) => s + (g.group_weight || 0), 0);
+    if (total <= 0) return [];
+    const C = 2 * Math.PI * DONUT_R;
+    const out = [];
+    let cum = 0;
+    for (const g of groups) {
+      const fraction = (g.group_weight || 0) / total;
+      const dash = C * fraction;
+      out.push({
+        name: g.name || "",
+        fraction,
+        percent: Math.round(fraction * 100),
+        dash,
+        gap: C - dash,
+        offset: C - cum,
+      });
+      cum += dash;
+    }
+    return out;
+  };
+
   function donutSVG(groups, hasWeights) {
     // Show weight distribution
     if (!hasWeights) return "";
-    let cum = 0;
-    const total = groups.reduce((s, g) => s + (g.group_weight || 0), 0);
-    if (total <= 0) return "";
-    const R = 26, C = 2 * Math.PI * R;
+    const segments = BC.grades.donutSegments(groups);
+    if (!segments.length) return "";
     // Categorical ramp from the token set, so the donut re-tints per mode instead of
     // staying at fixed light-mode hues.
     const palette = ["var(--bc-cat-1)","var(--bc-cat-2)","var(--bc-cat-3)","var(--bc-cat-4)",
                      "var(--bc-cat-5)","var(--bc-cat-6)","var(--bc-cat-7)","var(--bc-cat-8)"];
     let arcs = "";
     let items = "";
-    groups.forEach((g, i) => {
-      const w = (g.group_weight || 0) / total;
-      const dash = C * w;
-      const off = C - dash - cum;
-      arcs += `<circle cx="30" cy="30" r="${R}" fill="none" stroke="${palette[i%palette.length]}" stroke-width="8" stroke-dasharray="${dash} ${C-dash}" stroke-dashoffset="${off}" transform="rotate(-90 30 30)"/>`;
-      cum += dash;
-      items += `<li><span style="background:${palette[i%palette.length]}"></span>${BC.util.escapeHtml(g.name)} — ${Math.round(w*100)}%</li>`;
+    segments.forEach((s, i) => {
+      const color = palette[i % palette.length];
+      arcs += `<circle cx="30" cy="30" r="${DONUT_R}" fill="none" stroke="${color}" stroke-width="8" stroke-dasharray="${s.dash} ${s.gap}" stroke-dashoffset="${s.offset}" transform="rotate(-90 30 30)"/>`;
+      items += `<li><span style="background:${color}"></span>${BC.util.escapeHtml(s.name)} · ${s.percent}%</li>`;
     });
-    return `<div class="bc-gt-donut"><svg width="60" height="60">${arcs}</svg><ul class="bc-gt-legend">${items}</ul></div>`;
+    return `<div class="bc-gt-donut"><svg width="60" height="60" role="img" aria-label="Assignment group weights">${arcs}</svg><ul class="bc-gt-legend">${items}</ul></div>`;
   }
 
   function trendSVG(hist) {
@@ -178,7 +214,7 @@
             <div class="bc-gt-label">Current course grade</div>
             <div class="bc-gt-total">${total != null ? total.toFixed(2) + "%" : "—"}</div>
             <div class="bc-gt-goal">Goal:
-              <input type="number" min="0" max="150" step="0.5" value="${goal}" data-goal>
+              <input type="number" min="0" max="150" step="0.5" value="${esc(goal)}" data-goal>
               <span data-goal-status></span>
             </div>
             <div class="bc-gt-final">
@@ -242,6 +278,10 @@
     return BC.grades.computeTotal(cloned);
   }
 
+  // The delegated listener above outlives any single build, so it dispatches
+  // through this indirection to whichever rubric is currently mounted.
+  let refreshRef = () => {};
+
   function buildRubricUI(panel, asn, rubric, groups, courseId) {
     const aid = String(asn.id);
     const draft = ((BC.storage.local && BC.storage.local.rubricDrafts) || {})[aid] || {};
@@ -253,10 +293,10 @@
       const assessed = assessment[c.id] && assessment[c.id].points;
       const start = draft[c.id] != null ? draft[c.id] : (assessed != null ? assessed : c.points || 0);
       rows += `
-        <div class="bc-rubric-crit" data-crit="${BC.util.escapeHtml(String(c.id))}" data-max="${c.points || 0}">
+        <div class="bc-rubric-crit" data-crit="${BC.util.escapeHtml(String(c.id))}" data-max="${esc(c.points || 0)}">
           <label><span>${BC.util.escapeHtml(c.description || "Criterion")}</span>
-            <span><b data-val>${start}</b> / ${c.points || 0}</span></label>
-          <input type="range" min="0" max="${c.points || 0}" step="0.5" value="${start}">
+            <span><b data-val>${esc(start)}</b> / ${esc(c.points || 0)}</span></label>
+          <input type="range" min="0" max="${esc(c.points || 0)}" step="0.5" value="${esc(start)}">
         </div>`;
     }
 
@@ -299,9 +339,16 @@
       }
       saveDraft(values);
     }
-    panel.addEventListener("input", (e) => {
-      if (e.target && e.target.type === "range") refresh();
-    });
+    // The panel node is reused across SPA navigations (ensureNode returns the
+    // existing one), so an unguarded addEventListener stacked a duplicate handler
+    // for every assignment visited and ran refresh() once per accumulated listener.
+    if (!panel._bcRubricWired) {
+      panel._bcRubricWired = true;
+      panel.addEventListener("input", (e) => {
+        if (e.target && e.target.type === "range") refreshRef();
+      });
+    }
+    refreshRef = refresh;
     refresh();
   }
 
@@ -380,5 +427,5 @@
     }
   }
 
-  BC.registry.register({ id: "grades", styles: ["bc-grade-tools"], nodes: ["bc-grade-tools", "bc-rubric"], apply });
+  BC.registry.register({ id: "grades", pages: ["grades", "assignment"], styles: ["bc-grade-tools"], nodes: ["bc-grade-tools", "bc-rubric"], apply });
 })();

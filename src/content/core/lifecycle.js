@@ -32,7 +32,13 @@
   BC.features = BC.features || {};
 
   BC.registry = {
-    // def: { id, styles: [], nodes: [], apply(settings, ctx), unmount?() }
+    // def: { id, styles: [], nodes: [], pages?: [], apply(settings, ctx), unmount?() }
+    //
+    // `pages` is an optional allowlist of BC.detect page names. A feature that
+    // declares it is only applied on those pages, plus exactly once more on the
+    // tick where the page changes -- that final call is what lets it tear its own
+    // nodes down on the way out. Features with no `pages` are global and always
+    // run. See BC.registry.shouldApply.
     register(def) {
       if (!def || !def.id || typeof def.apply !== "function") {
         BC.util.warn("registry: invalid feature definition", def && def.id);
@@ -41,6 +47,13 @@
       features.set(def.id, def);
       BC.features[def.id] = def;
       return def;
+    },
+
+    // A page-scoped feature off its page has nothing to do, but it still has to
+    // be given the one call after a navigation that removes what it left behind.
+    shouldApply(def, page, pageChanged) {
+      if (!def.pages) return true;
+      return def.pages.indexOf(page) !== -1 || pageChanged;
     },
     get(id) { return features.get(id); },
     all() { return Array.from(features.values()); },

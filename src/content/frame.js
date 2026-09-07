@@ -23,19 +23,23 @@
         --bc-link: ${pd.link}; --bc-accent: ${pd.accent};
       }
       html.bc-dark, html.bc-dark body {
-        background: var(--bc-surface-1) !important; color: var(--bc-text) !important;
+        background-color: var(--bc-surface-1) !important; color: var(--bc-text) !important;
       }
       html.bc-dark a { color: var(--bc-link) !important; }
       html.bc-dark input, html.bc-dark select, html.bc-dark textarea, html.bc-dark button {
-        background: var(--bc-surface-3) !important; color: var(--bc-text) !important;
+        background-color: var(--bc-surface-3) !important; color: var(--bc-text) !important;
         border-color: var(--bc-border) !important;
       }
       html.bc-dark table, html.bc-dark th, html.bc-dark td {
-        background: var(--bc-surface-2) !important; color: var(--bc-text) !important;
+        background-color: var(--bc-surface-2) !important; color: var(--bc-text) !important;
         border-color: var(--bc-border) !important;
       }
       html.bc-dark hr { border-color: var(--bc-border) !important; }
-      html.bc-dark [role="dialog"], html.bc-dark [class*="card" i],
+      /* Excludes the parts of a card that carry imagery or a deliberate colour:
+         [class*="card"] alone also matches things like
+         ic-DashboardCard__header_image. */
+      html.bc-dark [role="dialog"],
+      html.bc-dark [class*="card" i]:not([class*="header" i]):not([class*="image" i]):not([class*="hero" i]),
       html.bc-dark .user_content, html.bc-dark .quiz-header, html.bc-dark .question,
       html.bc-dark [style*="background-color: rgb(255, 255, 255)"],
       html.bc-dark [style*="background: rgb(255, 255, 255)"],
@@ -43,7 +47,7 @@
       html.bc-dark [style*="background: #fff" i] {
         background-color: var(--bc-surface-2) !important; color: var(--bc-text) !important;
       }
-      html.bc-dark ::selection { background: var(--bc-accent); color: var(--bc-accent-contrast, #fff); }
+      html.bc-dark ::selection { background-color: var(--bc-accent); color: var(--bc-accent-contrast, #fff); }
     `;
   }
 
@@ -62,11 +66,21 @@
     if (el) el.remove();
   }
 
+  // Only armed while the mode actually needs a clock. A SpeedGrader page can host
+  // several same-origin frames and each one ran this timer for the life of the
+  // tab regardless of the mode.
+  let scheduleTimer = null;
+  function syncScheduleTimer() {
+    if (lastMode === "scheduled" && !scheduleTimer) scheduleTimer = setInterval(load, 60000);
+    else if (lastMode !== "scheduled" && scheduleTimer) { clearInterval(scheduleTimer); scheduleTimer = null; }
+  }
+
   function apply(settings) {
     try {
       const doc = document.documentElement;
       if (!doc) return;
       lastMode = (settings && settings.theming && settings.theming.darkMode) || "";
+      syncScheduleTimer();
       const dark = !!settings && settings.enabled !== false && BC.isDarkActive(settings);
       doc.classList.toggle("bc-dark", dark);
       if (!dark) { removeStyle(); return; }
@@ -90,5 +104,4 @@
   try {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", load);
   } catch (_) {}
-  setInterval(() => { if (lastMode === "scheduled") load(); }, 60000);
 })();

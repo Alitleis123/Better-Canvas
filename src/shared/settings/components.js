@@ -301,9 +301,14 @@
     refresh();
     btn.addEventListener("click", () => { recording = true; refresh(); btn.focus(); });
     btn.addEventListener("blur", () => { recording = false; chordBuf = ""; refresh(); });
+    // Pressing a modifier alone fires keydown with e.key === "Shift"/"Meta"/etc.
+    // Recording that produced nonsense bindings like "Shift+Shift" that could
+    // never match a real event, silently breaking the shortcut.
+    const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "OS", "AltGraph", "CapsLock"]);
     btn.addEventListener("keydown", (e) => {
       if (!recording) return;
       if (e.key === "Escape") { recording = false; refresh(); btn.blur(); return; }
+      if (MODIFIER_KEYS.has(e.key)) { e.preventDefault(); return; }   // wait for a real key
       e.preventDefault();
       const parts = [];
       if (e.metaKey || e.ctrlKey) parts.push("Mod");

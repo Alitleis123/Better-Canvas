@@ -53,6 +53,10 @@
     <script src="../shared/defaults.js"></script>
     <script src="../shared/themes.js"></script>
     <script src="../content/core/util.js"></script>
+    <!-- isDarkActive() needs BC.dt to evaluate a scheduled dark window; without
+         it the popup silently reported "not dark" and rendered light while the
+         Canvas page next to it was dark. -->
+    <script src="../content/core/datetime.js"></script>
     <script src="../content/core/color.js"></script>
     <script src="../shared/tokens.js"></script>
     <script src="popup.js"></script>

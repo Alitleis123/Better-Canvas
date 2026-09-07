@@ -12,9 +12,11 @@
 
   const CSS = `
     .bc-semester {
-      display: flex; align-items: center; gap: 12px; margin: 6px 0 12px; padding: 10px 14px;
-      border-radius: 10px; background: var(--bc-surface-2, #f3f4f6);
-      border: 1px solid var(--bc-border, #e5e7eb); font-size: 13px;
+      display: flex; align-items: center; gap: var(--bc-space-5, 12px);
+      margin: var(--bc-space-2, 6px) 0 var(--bc-space-5, 12px);
+      padding: var(--bc-space-4, 10px) var(--bc-space-6, 14px);
+      border-radius: var(--bc-radius-lg, 10px); background: var(--bc-surface-2, #f3f4f6);
+      border: 1px solid var(--bc-border, #e5e7eb); font-size: var(--bc-text-sm, 13px);
     }
     .bc-semester-label { font-weight: 600; white-space: nowrap; }
     .bc-semester-track { flex: 1; height: 6px; border-radius: 999px; background: var(--bc-surface-3, #e5e7eb); overflow: hidden; }
@@ -41,7 +43,9 @@
   }
 
   function render() {
-    BC.api.coursesWithScores().then((courses) => {
+    // Term dates come from any enrollment, so this must not filter to student
+    // ones or an instructor never sees the term progress bar.
+    BC.api.activeCourses().then((courses) => {
       const term = currentTerm(courses);
       if (!term) { BC.injector.removeNode("bc-semester"); return; }
       const now = Date.now();
@@ -65,10 +69,18 @@
         else host.appendChild(div);
         return div;
       });
-      node.querySelector(".bc-semester-label").textContent =
-        (term.name || "This term") + " · Week " + week + " of " + weeks;
-      node.querySelector(".bc-semester-fill").style.width = pct + "%";
-      node.querySelector(".bc-semester-days").textContent = daysLeft + " day" + (daysLeft === 1 ? "" : "s") + " left · " + pct + "%";
+      // render() runs on every apply tick; rewriting identical text still swaps
+      // the child text node, which the observer reads as a change and schedules
+      // yet another applyAll.
+      const set = (sel, text) => {
+        const el = node.querySelector(sel);
+        if (el && el.textContent !== text) el.textContent = text;
+      };
+      set(".bc-semester-label", (term.name || "This term") + " · Week " + week + " of " + weeks);
+      set(".bc-semester-days", daysLeft + " day" + (daysLeft === 1 ? "" : "s") + " left · " + pct + "%");
+      const fill = node.querySelector(".bc-semester-fill");
+      const w = pct + "%";
+      if (fill && fill.style.width !== w) fill.style.width = w;
     }).catch((e) => BC.diag.push("semester", e));
   }
 
@@ -83,5 +95,5 @@
     render();
   }
 
-  BC.registry.register({ id: "semester", styles: ["bc-semester-css"], nodes: ["bc-semester"], apply });
+  BC.registry.register({ id: "semester", pages: ["dashboard"], styles: ["bc-semester-css"], nodes: ["bc-semester"], apply });
 })();

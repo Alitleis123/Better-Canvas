@@ -32,25 +32,207 @@
     return rules.join("\n");
   }
 
+  // The element that actually contains the cards is found at runtime and marked
+  // with data-bc-cardgrid, so the layout rules never have to guess a Canvas class
+  // name. See markCardGrid.
+  //
+  // This previously targeted .ic-DashboardCard__box for the container rules while
+  // ALSO treating that same class as per-card chrome (border-radius, and the dark
+  // background in theming.js). It cannot be both. It is the per-card wrapper, so
+  // `display: grid` landed on every individual card -- each became a one-column
+  // grid containing itself -- and the real container never got a layout at all,
+  // which is why the cards stacked in a single column.
+  const GRID = "[data-bc-cardgrid]";
+
   function layoutCss(d) {
     const size = { s: 200, m: 250, l: 320 }[d.cardSize || "m"] || 250;
     const rad = (d.cardRadius|0) + "px";
     let css = `
       .ic-DashboardCard { border-radius: ${rad} !important; overflow: hidden; }
       .ic-DashboardCard__link, .ic-DashboardCard__box { border-radius: ${rad} !important; }
-      ${d.hoverLift ? `.ic-DashboardCard { transition: transform .18s ease, box-shadow .18s ease; }
-      .ic-DashboardCard:hover { transform: translateY(-2px); box-shadow: var(--bc-shadow-3, 0 10px 30px rgba(0,0,0,.12)); }` : ""}
+      ${d.hoverLift ? `.ic-DashboardCard:hover { transform: translateY(-2px); }
+      :root[data-bc-motion="0"] .ic-DashboardCard:hover { transform: none; }
+      @media (prefers-reduced-motion: reduce) { .ic-DashboardCard:hover { transform: none; } }` : ""}
     `;
-    if (d.layout === "grid") css += `.ic-DashboardCard__box { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 16px !important; }`;
-    if (d.layout === "list") css += `.ic-DashboardCard__box { display: flex !important; flex-direction: column !important; gap: 8px !important; }
+    const spanRow = `${GRID} > :not([data-bc-carditem]) { grid-column: 1 / -1 !important; }`;
+
+    // "Quiet instrument": the course colour runs the full height of the card as a
+    // spine, not just the header block. Scrolling past the artwork, the spine is
+    // what still tells you which course a card is. An inset shadow rather than a
+    // border so it costs no layout and survives the card's overflow:hidden.
+    //
+    // --bc-course is stamped per card in applyCourseIdentity; the fallback keeps
+    // the rule harmless on a card whose colour we could not read.
+    const spine = `
+      .ic-DashboardCard {
+        position: relative !important;
+        /* Only transform is transitioned. Animating an identity cue in on every
+           load is noise rather than craft; the spine is simply there. */
+        transition: transform var(--bc-dur-2, 160ms) var(--bc-ease-standard, ease) !important;
+      }
+      /* A pseudo-element, NOT an inset box-shadow. An inset shadow paints above
+         the element's own background but BELOW its children's, and every part of
+         a card (artwork, hero, body, action row) paints its own background, so
+         the spine was covered everywhere except the few pixels no child reached
+         -- it showed as a stub at the bottom-left corner. This sits above the
+         children instead. */
+      .ic-DashboardCard::before {
+        content: "" !important;
+        position: absolute !important;
+        left: 0 !important; top: 0 !important; bottom: 0 !important;
+        width: 3px !important;
+        background: var(--bc-course, transparent) !important;
+        z-index: 3 !important;
+        pointer-events: none !important;
+        border-top-left-radius: inherit; border-bottom-left-radius: inherit;
+      }
+      .ic-DashboardCard:focus-within {
+        outline: 2px solid var(--bc-focus-ring, var(--bc-accent)) !important;
+        outline-offset: 2px !important;
+      }
+      /* Typography: a clear three-step hierarchy where Canvas has one. Figures are
+         tabular so a column of course codes lines up. */
+      .ic-DashboardCard__header-title, .ic-DashboardCard__header-title span {
+        font-size: var(--bc-text-lg, 15px) !important;
+        font-weight: var(--bc-weight-semibold, 600) !important;
+        line-height: var(--bc-leading-tight, 1.25) !important;
+      }
+      .ic-DashboardCard__header-subtitle {
+        font-variant-numeric: tabular-nums !important;
+        font-size: var(--bc-text-xs, 12px) !important;
+        color: var(--bc-muted) !important;
+      }
+      .ic-DashboardCard__header-term {
+        font-size: var(--bc-text-2xs, 11px) !important;
+        color: var(--bc-text-subtle, var(--bc-muted)) !important;
+      }
+      /* The action row is the one part that should recede. */
+      .ic-DashboardCard__action-container {
+        background: var(--bc-surface-3) !important;
+        border-top: 1px solid var(--bc-border-subtle, var(--bc-border)) !important;
+      }`;
+    // Canvas gives the card a fixed width, so without this the cards sit
+    // left-aligned inside whatever column width the size slider produced, with
+    // dead space to the right of each one.
+    const fillCell = `${GRID} > [data-bc-carditem] { width: 100% !important; }
+      ${GRID} > [data-bc-carditem] .ic-DashboardCard, ${GRID} > .ic-DashboardCard { width: 100% !important; }`;
+    if (d.layout === "grid") css += `${GRID} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 16px !important; align-items: start !important; }
+      ${spanRow}
+      ${fillCell}
+      ${spine}`;
+    if (d.layout === "list") css += `${spine}
+      ${GRID} { display: flex !important; flex-direction: column !important; gap: 8px !important; }
+      ${GRID} > * { width: 100% !important; }
       .ic-DashboardCard { display: flex !important; flex-direction: row !important; height: 90px !important; }
       .ic-DashboardCard__header { flex: 0 0 120px !important; }
       .ic-DashboardCard__action-container { display: none !important; }`;
-    if (d.layout === "compact") css += `.ic-DashboardCard { max-height: 120px !important; }
+    if (d.layout === "compact") css += `${GRID} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 12px !important; align-items: start !important; }
+      ${spanRow}
+      ${fillCell}
+      ${spine}
+      .ic-DashboardCard { max-height: 120px !important; }
       .ic-DashboardCard__header_image { height: 40px !important; }`;
-    if (d.layout === "masonry") css += `.ic-DashboardCard__box { columns: ${Math.max(2, Math.floor(1200/size))} auto !important; column-gap: 14px !important; }
+    if (d.layout === "masonry") css += `${spine}
+      ${GRID} { columns: ${Math.max(2, Math.floor(1200/size))} auto !important; column-gap: 14px !important; display: block !important; }
       .ic-DashboardCard { break-inside: avoid !important; margin-bottom: 14px !important; }`;
     return css;
+  }
+
+  // Canvas has changed this container's markup more than once, so derive it from
+  // where the cards actually are rather than from a class name. Cards can be
+  // wrapped one level deep, so climb to the nearest ancestor that holds all of
+  // them. data-bc-cardgrid is not in the observer's attributeFilter, so writing
+  // it cannot retrigger applyAll.
+  function markCardGrid(cards) {
+    if (!cards.length) return null;
+    let host = cards[0].parentElement;
+    // If the parent holds only this one card it is a wrapper, not the container.
+    while (host && host !== document.body && host.childElementCount === 1) host = host.parentElement;
+    if (!host || host === document.body || host === document.documentElement) return null;
+    for (const el of document.querySelectorAll("[data-bc-cardgrid]")) {
+      if (el !== host) el.removeAttribute("data-bc-cardgrid");
+    }
+    if (!host.hasAttribute("data-bc-cardgrid")) host.setAttribute("data-bc-cardgrid", "");
+
+    // Canvas puts headings ("Published Courses") inside this container too, and
+    // making it a grid would drop them into a card slot. Mark the children that
+    // actually hold a card so everything else can be told to span the full row.
+    // Marking the ITEMS rather than negating a card class is what makes this work
+    // whether the cards are direct children or each sits in its own wrapper.
+    const items = new Set();
+    for (const card of cards) {
+      let n = card;
+      while (n && n.parentElement !== host) n = n.parentElement;
+      if (n) items.add(n);
+    }
+    for (const child of Array.from(host.children)) {
+      const want = items.has(child);
+      if (child.hasAttribute("data-bc-carditem") !== want) {
+        if (want) child.setAttribute("data-bc-carditem", "");
+        else child.removeAttribute("data-bc-carditem");
+      }
+    }
+    return host;
+  }
+
+  // The course colour lives in Canvas's own markup: an inline background on the
+  // hero block, or the link's background on cards with artwork. Read it once per
+  // card and stamp it as a custom property, so the spine and any hover state can
+  // reference it from CSS without re-reading computed styles every tick.
+  //
+  // A per-card stamp rather than a stylesheet because the value is per course,
+  // and generating N rules would mean rebuilding the sheet whenever a card
+  // re-rendered.
+  function applyCourseIdentity(card, spec) {
+    // An explicit user override always wins over whatever Canvas painted.
+    const chosen = spec && spec.color && BC.color.isHex(spec.color) ? spec.color : null;
+    if (chosen) {
+      if (card.dataset.bcCourseColour !== chosen) {
+        card.style.setProperty("--bc-course", chosen);
+        card.dataset.bcCourseColour = chosen;
+      }
+      return;
+    }
+    if (card.dataset.bcCourseColour) return;   // already resolved for this card
+    // Priority order, not document order. querySelector with a selector list
+    // returns whichever matches FIRST in the tree, and Canvas nests the hero
+    // inside the image wrapper, so a card with artwork returned the wrapper --
+    // which carries a background image and no colour to read.
+    const candidates = [];
+    for (const sel of [".ic-DashboardCard__header_hero",
+                       ".ic-DashboardCard__header_image",
+                       ".ic-DashboardCard__link"]) {
+      const el = card.querySelector(sel);
+      if (el) candidates.push(el);
+    }
+    candidates.push(card);
+    let found = null;
+    for (const el of candidates) {
+      let bg;
+      try { bg = getComputedStyle(el).backgroundColor; } catch (_) { continue; }
+      const parsed = BC.color.parseCssColor(bg);
+      // Skip transparent, and skip our own dark surfaces: a card whose colour we
+      // already repainted would otherwise stamp itself grey.
+      if (!parsed || parsed.a < 0.5) continue;
+      if (BC.color.chroma(bg) < 12) continue;
+      found = BC.color.rgbToHex(parsed.r, parsed.g, parsed.b);
+      break;
+    }
+    if (!found) return;
+    card.style.setProperty("--bc-course", found);
+    card.dataset.bcCourseColour = found;
+  }
+
+  function clearCourseIdentity() {
+    for (const el of document.querySelectorAll("[data-bc-course-colour]")) {
+      el.style.removeProperty("--bc-course");
+      delete el.dataset.bcCourseColour;
+    }
+  }
+
+  function unmarkCardGrid() {
+    for (const el of document.querySelectorAll("[data-bc-cardgrid]")) el.removeAttribute("data-bc-cardgrid");
+    for (const el of document.querySelectorAll("[data-bc-carditem]")) el.removeAttribute("data-bc-carditem");
   }
 
   function overlayCard(card, spec) {
@@ -358,10 +540,26 @@
       .bc-gpa-card { margin-bottom: var(--bc-space-5, 12px); }
     `);
 
+    // Load whatever any ENABLED consumer needs, not just the one feature that
+    // happens to share a name with the loader. The GPA card reads scoresMap and
+    // the due badge reads dueSoonByCourse, so gating those loads on
+    // showInlineGrade / showProgressBar meant turning on only the GPA card or
+    // only the badge left its data source empty forever and the feature simply
+    // never appeared.
+    //
+    // These run BEFORE the card check: none of them need a card to exist. The
+    // GPA card mounts into the sidebar, so gating it on cards meant it never
+    // appeared on a dashboard rendering no cards at all.
+    if (d.showInlineGrade || (d.widgets && d.widgets.gpa)) ensureLoaded("scores", loadInlineGrades);
+    if (d.showProgressBar || d.showBadges) ensureLoaded("planner", loadPlannerCounts);
+    if (d.widgets && d.widgets.gpa) ensureGpaCard(settings);
+    else BC.injector.removeNode("bc-gpa-card");
+
     // course cards
     if (d.autoHideConcluded) maybeFetchConcluded(true);
     const cards = document.querySelectorAll(".ic-DashboardCard");
-    if (!cards.length) return;
+    if (!cards.length) { unmarkCardGrid(); return; }
+    markCardGrid(Array.from(cards));
 
     // Build id order + reordering
     const cardsById = new Map();
@@ -383,8 +581,6 @@
 
     if (d.courseSearch) ensureCourseSearch();
     else BC.injector.removeNode("bc-course-search");
-    if (d.widgets && d.widgets.gpa) ensureGpaCard(settings);
-    else BC.injector.removeNode("bc-gpa-card");
 
     // Apply per-card overrides
     for (const [id, card] of cardsById) {
@@ -396,6 +592,7 @@
       const effHidden = spec.hidden === true
         || (d.autoHideConcluded && concludedIds && concludedIds.has(id))
         || (!!query && name.indexOf(query) === -1);
+      applyCourseIdentity(card, spec);
       overlayCard(card, { ...spec, hidden: effHidden });
       if (d.showInlineGrade)   overlayInlineGrade(card, id, scoresMap);
       if (d.showProgressBar)   overlayProgress(card, plannerCountByCourse);
@@ -407,18 +604,18 @@
     const container = document.getElementById("DashboardCard_Container") || document.querySelector(".ic-DashboardCard__box");
     if (container) container.style.display = ""; // let CSS layoutCss govern
 
-    if (d.showInlineGrade) ensureLoaded("scores", loadInlineGrades);
-    if (d.showProgressBar) ensureLoaded("planner", loadPlannerCounts);
   }
 
   BC.registry.register({
-    id: "dashboard",
+    id: "dashboard", pages: ["dashboard"],
     styles: ["bc-dashboard-widgets", "bc-dashboard-ui"],
     // These were injected per card but declared nowhere, so teardown left every
     // badge, grade pill and progress bar stuck on the Canvas cards.
     nodes: ["bc-inline-grade", "bc-progress", "bc-badges", "bc-card-spark", "bc-course-search", "bc-gpa-card"],
     apply,
     unmount() {
+      unmarkCardGrid();
+      clearCourseIdentity();
       scoresMap.clear();
       plannerCountByCourse.clear();
       dueSoonByCourse.clear();

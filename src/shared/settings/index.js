@@ -260,7 +260,11 @@
     const s = store.get();
     const cur = (s.dashboard.courses && s.dashboard.courses[c.id]) || {};
     const wrap = h("div.bc-course-row", null);
-    const swatch = h("span.bc-course-swatch", { style: { background: cur.color || c.color || "#c7d2fe" } });
+    // The "no colour set" swatch is theme-derived; it was a fixed pale indigo
+    // that read as a real colour choice and ignored dark mode entirely.
+    const swatch = h("span.bc-course-swatch", {
+      style: { background: cur.color || c.color || "var(--bc-accent-weak, rgba(79,70,229,.12))" },
+    });
     const name = el("input", { type: "text", class: "bc-text bc-course-name", placeholder: c.name, value: cur.nickname || "" });
     name.addEventListener("input", () => store.set((x) => { x.dashboard.courses[c.id] = { ...(x.dashboard.courses[c.id] || {}), nickname: name.value }; }));
     const color = el("input", { type: "color", value: cur.color || c.color || "#0374b5" });
@@ -397,10 +401,41 @@
     });
   }
 
+  // tokens.js falls the SETTINGS surfaces back to a safe neutral when the chosen
+  // background can't carry legible text, and deliberately leaves Canvas pages
+  // alone. That trade is only defensible if we say so; until now nothing did, so
+  // the drawer silently stopped matching the theme with no explanation.
+  function contrastNotice(store) {
+    const box = h("div.bc-notice", null);
+    const sync = () => {
+      const g = BC.tokens.resolve(store.get().theming).guard;
+      const msgs = [];
+      if (g.surfaceFallback) {
+        msgs.push("This background is too light for dark mode, so these settings panels " +
+                  "use a neutral palette to stay readable. Canvas pages still use your colour.");
+      }
+      if (g.hierarchyCollapsed) {
+        msgs.push("At this background lightness, body text and secondary text can't be told " +
+                  "apart while staying readable. Pick a darker or lighter background to get " +
+                  "the type hierarchy back.");
+      }
+      const text = msgs.join(" ");
+      if (box.textContent !== text) box.textContent = text;
+      box.classList.toggle("bc-hidden", !text);
+    };
+    sync();
+    S_bind(box, sync);
+    return box;
+  }
+  // Components owns the bind registry; this is the one place outside it that needs
+  // to register a plain reactive node.
+  function S_bind(node, fn) { return BC.SettingsComponents.bindings.add(node, fn); }
+
   function renderTheming(store) {
     const S = BC.SettingsComponents;
     const t = store.get().theming;
     const c = h("div.bc-tab-body", null);
+    c.appendChild(contrastNotice(store));
     c.appendChild(S.section({ title: "Dark mode", children: [
       S.row({ label: "Dark mode",
         control: S.select({ get: () => t.darkMode, set: (v) => store.set((x) => { x.theming.darkMode = v; }),
@@ -577,7 +612,8 @@
             const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json";
             inp.onchange = () => {
               const f = inp.files && inp.files[0]; if (!f) return;
-              f.text().then((txt) => {
+              f.text().catch(() => null).then((txt) => {
+                if (txt == null) { BC.toast && BC.toast.error("Couldn't read that file"); return; }
                 try {
                   const j = JSON.parse(txt);
                   if (!j || typeof j !== "object" || !j.settings) throw new Error("bad");
@@ -769,7 +805,54 @@
         ]) }),
       S.row({ label: "Toolbar badge for unread items", control: S.switch({ get: () => n.badgeCount, set: (v) => store.set((x) => { x.notifications.badgeCount = v; }) }) }),
     ]}));
+
+    // Every notification already gets recorded to bcLocal.notifHistory and pruned
+    // to the last 100, but nothing ever displayed it, so the writes bought
+    // nothing. A dismissed toast is otherwise gone for good.
+    const histMount = h("div", null);
+    c.appendChild(histMount);
+    renderNotifHistory(histMount, store);
     return c;
+  }
+
+  function renderNotifHistory(mount, store) {
+    const S = BC.SettingsComponents;
+    const draw = (local) => {
+      const items = (local && local.notifHistory) || [];
+      const children = items.slice(0, 20).map((e) => h("div.bc-ins-row", null, [
+        h("span", null, e.title || e.type || "Notification"),
+        h("span.bc-ins-val", null, e.iso ? BC.dt.relative(e.iso) : ""),
+      ]));
+      if (!children.length) {
+        children.push(h("p.bc-hint", null, "Nothing yet. Reminders you receive will be listed here."));
+      } else {
+        children.push(h("div.bc-inline", null, [
+          S.button({
+            label: "Clear history", variant: "ghost",
+            onClick: () => {
+              const adapter = store.adapter || {};
+              if (!adapter.getLocal || !adapter.saveLocal) return;
+              Promise.resolve(adapter.getLocal()).then((l) => {
+                const next = Object.assign({}, l || {}, { notifHistory: [] });
+                return adapter.saveLocal(next);
+              }).then(() => {
+                draw({ notifHistory: [] });
+                BC.toast && BC.toast.info("Notification history cleared");
+              }).catch(() => BC.toast && BC.toast.error("Couldn't clear the history"));
+            },
+          }),
+        ]));
+      }
+      mount.replaceChildren(S.section({
+        title: "Recent notifications",
+        description: "The last 100 reminders, kept on this device only.",
+        children,
+      }));
+    };
+
+    const adapter = store.adapter || {};
+    if (adapter.getLocal) Promise.resolve(adapter.getLocal()).then(draw).catch(() => draw(null));
+    else draw(null);
   }
 
   function renderFiles(store) {
@@ -976,7 +1059,10 @@
           Math.round((i / (scores.length - 1)) * 140) + "," + Math.round(30 - ((v - min) / span) * 26 + 2)
         ).join(" ");
         const delta = scores[scores.length - 1] - scores[0];
-        const color = delta >= 0 ? "#059669" : "#dc2626";
+        // Tokens, not literals: these are the only two colours in the settings
+        // UI that were pinned to light-mode hues, so the trend arrows stayed
+        // bright green/red on a dark surface.
+        const color = delta >= 0 ? "var(--bc-success)" : "var(--bc-danger)";
         const spark = h("span.bc-ins-spark");
         spark.innerHTML = '<svg width="140" height="32" viewBox="0 0 140 32"><polyline fill="none" stroke="' +
           color + '" stroke-width="2" points="' + pts + '"/></svg>';
@@ -1055,7 +1141,10 @@
           label: "Copy diagnostics",
           onClick: () => {
             const text = JSON.stringify(BC.diag.entries, null, 2);
-            if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => BC.toast && BC.toast.success("Diagnostics copied"));
+            if (!navigator.clipboard) { BC.toast && BC.toast.error("Clipboard unavailable here"); return; }
+            navigator.clipboard.writeText(text)
+              .then(() => BC.toast && BC.toast.success("Diagnostics copied"))
+              .catch(() => BC.toast && BC.toast.error("Couldn't copy diagnostics"));
           },
         }),
         S.button({ label: "Clear", variant: "ghost", onClick: () => { BC.diag.clear(); BC.toast && BC.toast.info("Diagnostics cleared"); } }),
@@ -1109,7 +1198,8 @@
     const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json";
     inp.onchange = () => {
       const f = inp.files && inp.files[0]; if (!f) return;
-      f.text().then((txt) => {
+      f.text().catch(() => null).then((txt) => {
+        if (txt == null) { BC.toast && BC.toast.error("Couldn't read that file"); return; }
         let parsed = null;
         try { parsed = JSON.parse(txt); } catch (_) { parsed = null; }
         if (!parsed || typeof parsed !== "object") { BC.toast && BC.toast.error("Invalid settings file"); return; }
@@ -1176,13 +1266,16 @@
   .bc-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 4px 12px; }
   .bc-brand { display: flex; align-items: center; gap: 10px; }
   .bc-logo {
-    width: 34px; height: 34px; border-radius: 8px; background: var(--accent);
-    color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 800;
+    width: 34px; height: 34px; border-radius: var(--bc-radius-md, 8px); background: var(--accent);
+    /* The accent is user-chosen, so the label has to be the derived contrast
+       colour; a hardcoded white vanished on light accents. */
+    color: var(--bc-accent-contrast, #fff);
+    display: inline-flex; align-items: center; justify-content: center; font-weight: 800;
   }
   .bc-brand-name { font-weight: 700; }
   .bc-brand-sub  { font-size: 11px; color: var(--muted); }
   .bc-header-actions { display: flex; gap: 8px; align-items: center; }
-  .bc-search { padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: inherit; min-width: 200px; }
+  .bc-search { padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 8px); background: var(--panel); color: inherit; min-width: 200px; }
 
   .bc-topbar { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 14px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
   .bc-master { display: flex; align-items: center; gap: 8px; font-weight: 600; }
@@ -1196,7 +1289,7 @@
   .bc-tab {
     display: flex; align-items: center; gap: 10px;
     padding: 8px 10px; border: 0; background: transparent; color: inherit;
-    text-align: left; cursor: pointer; border-radius: 8px; font: inherit;
+    text-align: left; cursor: pointer; border-radius: var(--bc-radius-md, 8px); font: inherit;
   }
   /* One mode-aware wash replaces each light rule plus its html.bc-dark twin. */
   .bc-tab:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
@@ -1221,29 +1314,29 @@
   .bc-row-warn  { color: var(--danger); font-size: 12px; margin-top: 2px; }
   .bc-row-control { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
 
-  .bc-switch { position: relative; width: 40px; height: 22px; display: inline-block; flex: none; border-radius: 999px; background: #cbd5e1; transition: background .15s ease; cursor: pointer; }
+  .bc-switch { position: relative; width: 40px; height: 22px; display: inline-block; flex: none; border-radius: 999px; background: var(--bc-border-strong, var(--border)); transition: background .15s ease; cursor: pointer; }
   .bc-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
   /* pointer-events:none is load-bearing: the thumb is a later positioned sibling,
      so without it the knob paints above the input and swallows the click. */
-  .bc-switch-thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transition: transform .15s ease; box-shadow: 0 1px 2px rgba(0,0,0,.15); pointer-events: none; }
+  .bc-switch-thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: var(--bc-surface-2, #fff); border-radius: 50%; transition: transform .15s ease; box-shadow: var(--bc-shadow-1, 0 1px 2px rgba(0,0,0,.15)); pointer-events: none; }
   .bc-switch input:checked + .bc-switch-thumb { transform: translateX(18px); }
   .bc-switch.bc-on, .bc-switch:has(input:checked) { background: var(--accent); }
   .bc-switch input:focus-visible + .bc-switch-thumb { box-shadow: 0 1px 2px rgba(0,0,0,.15), 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
 
   .bc-select, .bc-text, .bc-textarea, .bc-number, .bc-color-text, .bc-tags-inp {
-    padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: inherit; font: inherit;
+    padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px); background: var(--panel); color: inherit; font: inherit;
   }
   .bc-textarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .bc-number { width: 90px; }
   .bc-color { display: inline-flex; align-items: center; gap: 6px; }
-  .bc-color input[type=color] { width: 32px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: transparent; }
+  .bc-color input[type=color] { width: 32px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px); background: transparent; }
   .bc-color-text { width: 100px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .bc-slider { display: inline-flex; align-items: center; gap: 8px; }
   .bc-slider-val { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
   .bc-invalid input { border-color: var(--danger); }
   .bc-text-warn { color: var(--danger); font-size: 12px; }
 
-  .bc-btn { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: inherit; cursor: pointer; font: inherit; }
+  .bc-btn { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px); background: var(--panel); color: inherit; cursor: pointer; font: inherit; }
   .bc-btn:hover { background: var(--bc-surface-4, rgba(0,0,0,.04)); }
   .bc-btn-danger { color: var(--danger); border-color: var(--bc-danger-border, rgba(185,28,28,.4)); }
   .bc-btn-ghost  { background: transparent; }
@@ -1252,7 +1345,7 @@
   .bc-sortable-item {
     display: grid; grid-template-columns: 20px 1fr;
     align-items: center; gap: 10px; padding: 6px 8px;
-    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px);
   }
   .bc-drag { cursor: grab; color: var(--muted); user-select: none; text-align: center; }
   .bc-sortable-item.bc-dragging { opacity: .5; }
@@ -1267,9 +1360,9 @@
   .bc-inline { display: inline-flex; gap: 6px; align-items: center; }
 
   .bc-theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-  .bc-theme-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px; cursor: pointer; text-align: left; color: inherit; }
+  .bc-theme-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--bc-radius-lg, 10px); padding: 10px; cursor: pointer; text-align: left; color: inherit; }
   .bc-theme-card:hover { border-color: var(--accent); }
-  .bc-theme-swatch { height: 60px; border-radius: 8px; border: 2px solid; position: relative; overflow: hidden; }
+  .bc-theme-swatch { height: 60px; border-radius: var(--bc-radius-md, 8px); border: 2px solid; position: relative; overflow: hidden; }
   .bc-theme-swatch span { position: absolute; right: 8px; bottom: 8px; width: 20px; height: 20px; border-radius: 50%; }
   .bc-theme-name { margin-top: 8px; font-weight: 600; font-size: 13px; }
   .bc-theme-actions { display: flex; gap: 4px; margin-top: 8px; }
@@ -1286,23 +1379,28 @@
   .bc-links { display: flex; flex-direction: column; gap: 6px; }
   .bc-link-row { display: grid; grid-template-columns: 1fr 2fr auto auto; gap: 6px; align-items: center; }
 
-  .bc-key { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; font-size: 13px; }
+  .bc-key { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px); background: var(--panel); color: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; font-size: 13px; }
 
   .bc-hint { color: var(--muted); font-size: 12px; }
+  .bc-notice {
+    padding: 10px 12px; border-radius: var(--radius); font-size: 13px;
+    background: var(--bc-warn-bg, #fffbeb); color: var(--bc-text, inherit);
+    border: 1px solid var(--bc-warn, #a16207);
+  }
   .bc-ins-total { font-weight: 700; margin-bottom: 8px; }
   .bc-ins-days { display: flex; gap: 4px; align-items: flex-end; height: 64px; margin: 8px 0 12px; }
   .bc-ins-day { flex: 1; height: 100%; display: flex; align-items: flex-end; background: var(--bc-surface-4, rgba(0,0,0,.04)); border-radius: var(--bc-radius-sm, 4px); overflow: hidden; }
-  .bc-ins-day-fill { width: 100%; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; }
+  .bc-ins-day-fill { width: 100%; background: var(--accent); border-radius: var(--bc-radius-sm, 4px) var(--bc-radius-sm, 4px) 0 0; min-height: 2px; }
   .bc-ins-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 5px 0; border-top: 1px solid var(--border); font-size: 13px; }
   .bc-ins-row:first-child { border-top: 0; }
   .bc-ins-val { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
   .bc-ins-spark { line-height: 0; }
-  .bc-rec-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+  .bc-rec-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 8px); }
   .bc-rec-title { font-weight: 600; }
   .bc-rec-meta { font-size: 12px; color: var(--muted); }
   .bc-rec-days { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0; }
   .bc-rec-form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
-  .bc-rec-form input[type=time], .bc-rec-form input[type=date] { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: inherit; font: inherit; }
+  .bc-rec-form input[type=time], .bc-rec-form input[type=date] { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px); background: var(--panel); color: inherit; font: inherit; }
 
   .bc-gpa { width: 100%; border-collapse: collapse; margin-top: 8px; }
   .bc-gpa th, .bc-gpa td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }

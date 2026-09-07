@@ -163,8 +163,18 @@
 
     clamp(n, min, max) { return Math.max(min, Math.min(max, n)); },
 
-    // Detect Mac for shortcut labels
-    isMac: /Mac|iPhone|iPad|iPod/.test(navigator.platform || ""),
+    // Detect Mac for shortcut labels. navigator.platform is deprecated and
+    // already frozen or absent in some engines, so prefer userAgentData and fall
+    // back through platform to the UA string rather than silently labelling
+    // every Mac shortcut "Ctrl".
+    isMac: (function () {
+      try {
+        const uaPlatform = navigator.userAgentData && navigator.userAgentData.platform;
+        if (uaPlatform) return /mac/i.test(uaPlatform);
+        if (navigator.platform) return /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+        return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent || "");
+      } catch (_) { return false; }
+    })(),
 
     modLabel() { return util.isMac ? "⌘" : "Ctrl"; },
   });

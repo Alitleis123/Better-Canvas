@@ -11,15 +11,20 @@
   const BC = (globalThis.BC = globalThis.BC || {});
   BC.features = BC.features || {};
 
+  // Item keys, estimates and schedule times reach HTML attributes below. They
+  // come from Canvas payloads and from bcLocal, which the settings Import button
+  // lets an arbitrary JSON file populate, so none of it is trusted.
+  const esc = (v) => BC.util.escapeHtml(v);
+
   const CLEAN_CSS = `
     .Sidebar__TodoListContainer, .ToDoSidebar {
       background: var(--bc-surface-2, #fff) !important;
-      border-radius: 12px; padding: 12px;
+      border-radius: var(--bc-radius-xl, 12px); padding: 12px;
       border: 1px solid var(--bc-border, #e5e7eb) !important;
     }
     .todo-list-header-container h2 { font-size: 14px !important; margin-bottom: 8px !important; }
     .to-do-list li { background: var(--bc-surface-3, #f7fafc) !important;
-      border-radius: 10px !important; padding: 8px 10px !important; margin-bottom: 6px !important; border: 0 !important; }
+      border-radius: var(--bc-radius-lg, 10px) !important; padding: 8px 10px !important; margin-bottom: 6px !important; border: 0 !important; }
     .to-do-list li a[title="Ignore"] {
       width: 22px !important; height: 22px !important; border: 2px solid var(--bc-accent, #0374b5) !important;
       border-radius: 50% !important; background: transparent !important; text-indent: -9999px; overflow: hidden;
@@ -30,7 +35,7 @@
     .bc-todo {
       background: var(--bc-surface-2, #fff);
       border: 1px solid var(--bc-border, #e5e7eb);
-      border-radius: 12px; padding: 14px;
+      border-radius: var(--bc-radius-lg, 10px); padding: var(--bc-space-6, 14px);
       color: var(--bc-text, inherit);
       font: var(--bc-text-md, 14px)/var(--bc-leading-body, 1.4) var(--bc-font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
     }
@@ -41,11 +46,11 @@
     .bc-todo-week button { background: transparent; border: 1px solid var(--bc-border, #e5e7eb); border-radius: 999px; padding: 2px 8px; cursor: pointer; color: inherit; }
     .bc-todo-week button:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
     .bc-todo-controls { display: flex; gap: 6px; margin-bottom: 10px; }
-    .bc-todo-controls select { padding: 4px 6px; border-radius: 6px; border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
+    .bc-todo-controls select { padding: 4px 6px; border-radius: var(--bc-radius-md, 6px); border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
     .bc-todo-day-header { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--bc-muted, #6b7280); margin: 10px 0 6px; }
     .bc-todo-item {
       display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center;
-      padding: 8px 10px; border-radius: 10px; background: var(--bc-surface-3, #f7fafc); margin-bottom: 6px;
+      padding: 8px 10px; border-radius: var(--bc-radius-lg, 10px); background: var(--bc-surface-3, #f7fafc); margin-bottom: 6px;
     }
     /* Tokens rather than opacity: fading already-AA text pushes it below AA. */
     .bc-todo-item.done .bc-todo-name { color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); text-decoration: line-through; }
@@ -61,10 +66,10 @@
     .bc-todo-course { font-size: 11px; color: var(--bc-muted, #6b7280); }
     .bc-todo-due { font-size: 11px; color: var(--bc-muted, #6b7280); }
     .bc-todo-actions { display: flex; gap: 4px; }
-    .bc-todo-btn { background: transparent; border: 1px solid var(--bc-border, #e5e7eb); border-radius: 6px; padding: 2px 6px; font-size: 11px; cursor: pointer; color: inherit; }
+    .bc-todo-btn { background: transparent; border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-md, 6px); padding: 2px 6px; font-size: 11px; cursor: pointer; color: inherit; }
     .bc-todo-btn:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
     .bc-todo-new { display: flex; gap: 6px; margin-top: 8px; }
-    .bc-todo-new input { flex: 1; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
+    .bc-todo-new input { flex: 1; padding: 6px 8px; border-radius: var(--bc-radius-md, 6px); border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
     .bc-todo-new button { padding: 6px 10px; border-radius: var(--bc-radius-md, 6px); background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); border: 0; cursor: pointer; font: inherit; }
     .bc-todo-empty { color: var(--bc-muted, #6b7280); font-size: 13px; padding: 6px 0; }
     .bc-todo-snoozed { margin-top: var(--bc-space-4, 10px); border-top: 1px solid var(--bc-border, #e5e7eb); padding-top: var(--bc-space-2, 6px); }
@@ -91,7 +96,10 @@
     .bc-todo-streak:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 1px; }
     .bc-todo-pom { margin-left: auto; }
     .bc-todo-kanban { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-    .bc-kan-col { background: var(--bc-surface-3, #f7fafc); border-radius: 8px; padding: 8px; min-height: 120px; }
+    .bc-kan-col {
+      background: var(--bc-surface-3, #f7fafc); border-radius: var(--bc-radius-md, 8px);
+      padding: var(--bc-space-3, 8px); min-height: 120px;
+    }
     .bc-kan-col h4 { margin: 0 0 6px; font-size: 12px; }
     .bc-kan-col.bc-drop { outline: 2px dashed var(--bc-accent, #0374b5); outline-offset: -2px; }
     .bc-todo-kanban .bc-todo-item { cursor: grab; grid-template-columns: 1fr; }
@@ -104,7 +112,7 @@
     .bc-todo-pop h5 { margin: 0 0 8px; font-size: 12px; }
     .bc-todo-pop label { display: block; margin: 6px 0 2px; color: var(--bc-muted, #6b7280); }
     .bc-todo-pop input, .bc-todo-pop select, .bc-todo-pop textarea {
-      width: 100%; box-sizing: border-box; padding: 4px 6px; border-radius: 6px;
+      width: 100%; box-sizing: border-box; padding: 4px 6px; border-radius: var(--bc-radius-md, 6px);
       border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; font-size: 12px;
     }
     .bc-todo-pop .bc-sub { display: flex; gap: 6px; align-items: center; margin: 3px 0; }
@@ -112,14 +120,14 @@
     .bc-todo-pop .bc-sub span.done { text-decoration: line-through; color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); }
     .bc-todo-pop .bc-pop-close { position: absolute; top: 6px; right: 8px; border: 0; background: transparent; cursor: pointer; color: inherit; }
     .bc-todo-tags { font-size: 10px; color: var(--bc-muted, #6b7280); }
-    .bc-todo-tags b { font-weight: 600; background: var(--bc-surface-3, #eef2f7); border-radius: 4px; padding: 0 4px; margin-right: 3px; }
-    .bc-tb-grid { position: relative; border: 1px solid var(--bc-border, #e5e7eb); border-radius: 8px; overflow: hidden; }
+    .bc-todo-tags b { font-weight: 600; background: var(--bc-surface-3, #eef2f7); border-radius: var(--bc-radius-sm, 4px); padding: 0 4px; margin-right: 3px; }
+    .bc-tb-grid { position: relative; border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-md, 8px); overflow: hidden; }
     .bc-tb-hour { display: flex; height: 34px; border-top: 1px solid var(--bc-border, #e5e7eb); }
     .bc-tb-hour:first-child { border-top: 0; }
     .bc-tb-hour em { flex: 0 0 46px; font-style: normal; font-size: 10px; color: var(--bc-muted, #6b7280); padding: 2px 4px; border-right: 1px solid var(--bc-border, #e5e7eb); }
     .bc-tb-hour.bc-drop { background: rgba(3,116,181,.12); }
     .bc-tb-block {
-      position: absolute; left: 50px; right: 4px; border-radius: 6px; padding: 2px 6px;
+      position: absolute; left: 50px; right: 4px; border-radius: var(--bc-radius-md, 6px); padding: 2px 6px;
       background: var(--bc-todo-accent, var(--bc-accent, #0374b5)); color: var(--bc-accent-contrast, #fff); font-size: var(--bc-text-2xs, 11px);
       overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: grab;
     }
@@ -147,7 +155,7 @@
     .bc-pom-stats {
       position: fixed; right: 18px; bottom: 64px; z-index: var(--bc-z-popover, 2147481500); width: 200px; padding: 10px;
       background: var(--bc-surface-2, #fff); color: var(--bc-text, #111);
-      border: 1px solid var(--bc-border, #e5e7eb); border-radius: 10px;
+      border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-lg, 10px);
       box-shadow: var(--bc-shadow-3, 0 8px 24px rgba(0,0,0,.22)); font-size: 12px;
     }
   `;
@@ -170,7 +178,16 @@
   // widget instead.
   function tlocal() { return (BC.storage.local && BC.storage.local.todo) || {}; }
   function writeTodoLocal(mutator) {
-    return BC.storage.updateLocal((d) => { mutator((d.todo = d.todo || {})); });
+    // Every star, snooze, drag and subtask tick lands here. updateLocal rejects
+    // when the storage quota is exceeded, and each call site chains .then()
+    // without a catch, so a failed write was both invisible to the user and an
+    // unhandled rejection. Report once and let the chain continue, so the UI
+    // still re-renders rather than freezing mid-interaction.
+    return BC.storage.updateLocal((d) => { mutator((d.todo = d.todo || {})); })
+      .catch((e) => {
+        BC.diag.push("todo:write", e);
+        BC.toast.error("Couldn't save that change");
+      });
   }
 
   function keyForItem(it) {
@@ -210,17 +227,6 @@
       }
     }
     return out;
-  }
-
-  function courseColorMap() {
-    const map = new Map();
-    document.querySelectorAll(".ic-DashboardCard").forEach((card) => {
-      const link = card.querySelector("a.ic-DashboardCard__link");
-      const cid = link && BC.util.courseIdFromHref(link.getAttribute("href"));
-      const bg = link ? (getComputedStyle(link).background || "").match(/rgb\([^)]+\)/) : null;
-      if (cid && bg) map.set(cid, bg[0]);
-    });
-    return map;
   }
 
   function ringSVG(pct, accent) {
@@ -447,7 +453,7 @@
       </div>` : ""}
       <div class="bc-todo-tools">
         ${t.streaks && t.streaks.enabled ? `<button type="button" class="bc-todo-streak" title="Daily task streak">🔥 <span data-streak>0</span> day streak</button>` : ""}
-        ${t.pomodoro && t.pomodoro.enabled ? `<button class="bc-todo-pom" data-pom>▶ Pomodoro</button>` : ""}
+        ${t.pomodoro && t.pomodoro.enabled ? `<button type="button" class="bc-todo-pom" data-pom aria-pressed="false"></button>` : ""}
       </div>
     `;
 
@@ -460,7 +466,7 @@
       if (cid && !courses.has(cid)) courses.set(cid, name);
     }
     filter.innerHTML = `<option value="all">All courses</option>` +
-      Array.from(courses.entries()).map(([id, n]) => `<option value="${id}">${BC.util.escapeHtml(n)}</option>`).join("");
+      Array.from(courses.entries()).map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join("");
     filter.value = state.filterCourse;
     filter.addEventListener("change", () => { state.filterCourse = filter.value; renderList(settings, container); });
 
@@ -523,8 +529,25 @@
     }
 
     // Pomodoro launcher
+    // startPomodoro toggles, so the label has to say which way it will go. It
+    // read "Pomodoro" in both states, so pressing it during a session looked
+    // like a no-op that had actually just stopped the timer.
     const pom = container.querySelector("[data-pom]");
-    if (pom) pom.addEventListener("click", () => startPomodoro(settings));
+    if (pom) {
+      const paintPom = () => {
+        const p = (BC.storage.local || {}).pomodoro;
+        const running = !!(p && p.phase);
+        const label = running ? "\u25a0 Stop pomodoro" : "\u25b6 Pomodoro";
+        if (pom.textContent !== label) pom.textContent = label;
+        pom.setAttribute("aria-pressed", running ? "true" : "false");
+      };
+      paintPom();
+      pom.addEventListener("click", () => {
+        startPomodoro(settings);
+        // The store write is async; repaint once it has landed.
+        setTimeout(paintPom, 0);
+      });
+    }
 
     // New task
     const newInp = container.querySelector(".bc-todo-new input");
@@ -718,7 +741,9 @@
     });
   }
 
-  const TB_START = 7, TB_END = 22, TB_ROW = 34; // 7am–10pm grid, px per hour
+  // TB_END is INCLUSIVE: the loop below is `h <= TB_END`, so the 10pm row the
+  // grid advertises actually renders. It was exclusive, silently dropping it.
+  const TB_START = 7, TB_END = 22, TB_ROW = 34; // 7am to 10pm grid, px per hour
 
   function renderTimeBlock(list, items, settings, container) {
     const winStart = new Date(state.windowStart || Date.now());
@@ -730,7 +755,7 @@
 
     const unscheduled = items.filter((it) => !isComplete(it) && !(sched[keyForItem(it)] && sched[keyForItem(it)].ymd === ymd));
     let hours = "";
-    for (let h = TB_START; h < TB_END; h++) {
+    for (let h = TB_START; h <= TB_END; h++) {
       const label = (h % 12 === 0 ? 12 : h % 12) + (h < 12 ? "a" : "p");
       hours += `<div class="bc-tb-hour" data-h="${h}"><em>${label}</em></div>`;
     }
@@ -743,9 +768,9 @@
       const top = ((hm.h * 60 + hm.m) - TB_START * 60) / 60 * TB_ROW;
       const height = Math.max(((s.dur || 60) / 60) * TB_ROW - 2, 16);
       const title = (it.plannable && it.plannable.title) || it.plannable_title || "Task";
-      blocks += `<div class="bc-tb-block" draggable="true" data-key="${key}" data-i="${state.items.indexOf(it)}"
-        style="top:${top}px;height:${height}px" title="${BC.util.escapeHtml(title)} · ${s.start}">
-        <button data-unsched="${key}" title="Unschedule">×</button>${BC.util.escapeHtml(title)}</div>`;
+      blocks += `<div class="bc-tb-block" draggable="true" data-key="${esc(key)}" data-i="${state.items.indexOf(it)}"
+        style="top:${top}px;height:${height}px" title="${esc(title)} · ${esc(s.start)}">
+        <button data-unsched="${esc(key)}" title="Unschedule">×</button>${esc(title)}</div>`;
     }
 
     list.innerHTML = `
@@ -804,7 +829,7 @@
       <label>Tags (comma-separated)</label>
       <input data-tags value="${BC.util.escapeHtml(tags.join(", "))}" placeholder="reading, exam…">
       <label>Time estimate (minutes)</label>
-      <input data-est type="number" min="5" step="5" value="${(local.estimates || {})[key] || ""}" placeholder="60">
+      <input data-est type="number" min="5" step="5" value="${esc((local.estimates || {})[key] || "")}" placeholder="60">
       <label>Subtasks</label>
       <div data-subs></div>
       <input data-newsub placeholder="Add subtask, press Enter">
@@ -812,6 +837,12 @@
       <textarea data-note rows="2">${BC.util.escapeHtml((local.notes || {})[key] || "")}</textarea>
       <button class="bc-todo-btn" data-pom-task-start style="margin-top:8px">🍅 Start pomodoro on this task</button>
     `;
+    // Dialog semantics: it was an unlabelled div that took no focus, so a screen
+    // reader user got no announcement and a keyboard user had to tab through the
+    // whole page to reach it.
+    pop.setAttribute("role", "dialog");
+    pop.setAttribute("aria-modal", "false");
+    pop.setAttribute("aria-label", "Task details");
     container.style.position = "relative";
     container.appendChild(pop);
     const r = anchor.getBoundingClientRect(), cr = container.getBoundingClientRect();
@@ -870,9 +901,26 @@
       startPomodoro(settings, title);
       close();
     });
-    const close = () => { pop.remove(); render(settings, container, true); };
+    // Clicking anywhere outside dismisses, which is what every other popover in
+    // the extension does; without it the only way out was the small close glyph,
+    // and a stale popover also blocked the widget from re-rendering.
+    const onDocDown = (e) => {
+      if (pop.contains(e.target) || e.target === anchor) return;
+      close();
+    };
+    const close = () => {
+      document.removeEventListener("mousedown", onDocDown, true);
+      pop.remove();
+      // Return focus to the control that opened it rather than dropping it to
+      // <body> and losing the user's place in the list.
+      BC.util.guard(() => anchor.focus(), "todo popover focus restore");
+      render(settings, container, true);
+    };
+    document.addEventListener("mousedown", onDocDown, true);
     pop.querySelector(".bc-pop-close").addEventListener("click", close);
-    pop.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+    pop.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } });
+    if (BC.ui && BC.ui.focusTrap) BC.ui.focusTrap(pop, { returnTo: anchor });
+    else BC.util.guard(() => pop.querySelector("[data-pri]").focus(), "todo popover focus");
   }
 
   function itemHtml(it, settings, compact) {
@@ -892,7 +940,7 @@
     if (tags.length) meta.push(tags.map((tg) => "<b>" + BC.util.escapeHtml(tg) + "</b>").join(""));
     if (subs.length) meta.push(`☑ ${subDone}/${subs.length}`);
     return `
-      <div class="bc-todo-item ${complete ? "done" : ""}" data-key="${key}" data-i="${idx}">
+      <div class="bc-todo-item ${complete ? "done" : ""}" data-key="${esc(key)}" data-i="${idx}">
         <button class="bc-todo-check ${complete ? "done" : ""}" data-i="${idx}" aria-label="Toggle complete"></button>
         <div>
           <a class="bc-todo-name" href="${BC.util.escapeHtml(url)}">${BC.util.escapeHtml(p)}</a>
@@ -900,9 +948,9 @@
           ${meta.length ? `<div class="bc-todo-tags">${meta.join(" · ")}</div>` : ""}
         </div>
         ${compact ? "" : `<div class="bc-todo-actions">
-          <button class="bc-todo-btn bc-todo-star" data-key="${key}" title="Star">${starred ? "★" : "☆"}</button>
-          <button class="bc-todo-btn bc-todo-snooze" data-key="${key}" title="Snooze until tomorrow">💤</button>
-          <button class="bc-todo-btn bc-todo-more" data-key="${key}" title="Details">⋯</button>
+          <button class="bc-todo-btn bc-todo-star" data-key="${esc(key)}" title="Star">${starred ? "★" : "☆"}</button>
+          <button class="bc-todo-btn bc-todo-snooze" data-key="${esc(key)}" title="Snooze until tomorrow">💤</button>
+          <button class="bc-todo-btn bc-todo-more" data-key="${esc(key)}" title="Details">⋯</button>
         </div>`}
       </div>
     `;
@@ -913,13 +961,27 @@
   // session survives reloads and navigation. Phases: work → short/long break.
   const PHASE_LABEL = { work: "Work", short: "Short break", long: "Long break" };
 
+  // One shared AudioContext, reused. Constructing a new one per beep leaked them:
+  // browsers cap a document at roughly six, so after six phase transitions the
+  // constructor threw and the timer went permanently silent for the rest of the
+  // session with no error surfaced anywhere.
+  let audioCtx = null;
   function pomBeep() {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.connect(g); g.connect(ctx.destination);
-      o.frequency.value = 880; g.gain.value = 0.08;
-      o.start(); o.stop(ctx.currentTime + 0.3);
+      const Ctor = window.AudioContext || window.webkitAudioContext;
+      if (!Ctor) return;
+      if (!audioCtx) audioCtx = new Ctor();
+      // A context created before any user gesture starts suspended.
+      if (audioCtx.state === "suspended" && audioCtx.resume) audioCtx.resume();
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      o.frequency.value = 880;
+      // Ramp out instead of cutting the oscillator dead, which clicks.
+      g.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.3);
+      o.start();
+      o.stop(audioCtx.currentTime + 0.3);
+      o.onended = () => { try { o.disconnect(); g.disconnect(); } catch (_) {} };
     } catch (_) {}
   }
 
@@ -990,13 +1052,29 @@
     if (pomTimer) { clearInterval(pomTimer); pomTimer = null; }
   }
 
+  // The dock and the toast stack both anchor bottom-right. Publishing the dock's
+  // footprint lets the toast host start above it instead of landing on top of it.
+  const POM_DOCK_CLEARANCE = "52px";
+  function setDockClearance(on) {
+    const root = document.documentElement;
+    if (on) {
+      if (root.style.getPropertyValue("--bc-dock-bottom") !== POM_DOCK_CLEARANCE) {
+        root.style.setProperty("--bc-dock-bottom", POM_DOCK_CLEARANCE);
+      }
+    } else if (root.style.getPropertyValue("--bc-dock-bottom")) {
+      root.style.removeProperty("--bc-dock-bottom");
+    }
+  }
+
   function ensurePomodoroDock(settings) {
     const p = (BC.storage.local || {}).pomodoro;
     if (!p || !p.phase || !settings || !settings.todo.pomodoro || settings.todo.pomodoro.enabled === false) {
       BC.injector.removeNode("bc-pom-dock");
+      setDockClearance(false);
       stopPomTick();
       return;
     }
+    setDockClearance(true);
     BC.injector.setStyle("bc-pom-css", POM_CSS);
     const dock = BC.injector.ensureNode("bc-pom-dock", document.body, () => {
       const d = document.createElement("div");
@@ -1082,6 +1160,7 @@
       // The bag clear already killed the interval; null the handle so a re-enable
       // starts a fresh one instead of assuming one is still live.
       pomTimer = null;
+      setDockClearance(false);
       state.lastFetchKey = "";
       state.fetchedAt = 0;
       state.items = [];
