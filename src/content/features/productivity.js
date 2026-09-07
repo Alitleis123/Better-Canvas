@@ -54,7 +54,6 @@
     .bc-util-ic {
       flex: 0 0 30px; width: 30px; height: 30px;
       display: inline-flex; align-items: center; justify-content: center;
-      font-size: var(--bc-text-sm, 13px); line-height: 1;
     }
     /* Clipped rather than display:none, so it stays in the accessibility tree.
        max-width animates; width:auto would not. */
@@ -161,6 +160,23 @@
     progressEl = null;
   }
 
+  // Inline SVG rather than a unicode glyph: at rest the icon is the entire
+  // affordance, and U+2302/U+26AD both render as tofu in fonts that lack them
+  // and mean the wrong thing in fonts that don't (a house, a marriage symbol).
+  // Stroke weight and caps match the sparkline in core/ui.js.
+  function utilIcon(paths) {
+    const ic = BC.util.el("span", { class: "bc-util-ic", "aria-hidden": "true" });
+    ic.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" ' +
+      'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" ' +
+      'stroke-linejoin="round">' + paths + '</svg>';
+    return ic;
+  }
+  const IC_LINK = '<path d="M6.75 9.25a2.5 2.5 0 0 0 3.54 0l2-2a2.5 2.5 0 0 0-3.54-3.54l-.6.6"/>' +
+    '<path d="M9.25 6.75a2.5 2.5 0 0 0-3.54 0l-2 2a2.5 2.5 0 0 0 3.54 3.54l.6-.6"/>';
+  const IC_PRINTER = '<path d="M4.5 6V2.5h7V6"/>' +
+    '<path d="M4.5 12H3.25A1.25 1.25 0 0 1 2 10.75v-3A1.25 1.25 0 0 1 3.25 6.5h9.5A1.25 1.25 0 0 1 14 7.75v3A1.25 1.25 0 0 1 12.75 12H11.5"/>' +
+    '<rect x="4.5" y="9.75" width="7" height="3.75" rx=".75"/>';
+
   // ---- Copy URL / Print ----
   function installUrlButton() {
     if (document.querySelector('[data-bc-node="bc-copyurl-btn"]')) return;
@@ -171,7 +187,7 @@
     // aria-label as well as the clipped text: the name must not depend on a
     // visual state.
     b.setAttribute("aria-label", "Copy page URL");
-    b.appendChild(BC.util.el("span", { class: "bc-util-ic", "aria-hidden": "true", text: "\u26ad" }));
+    b.appendChild(utilIcon(IC_LINK));
     b.appendChild(BC.util.el("span", { class: "bc-util-label", text: "Copy URL" }));
     b.addEventListener("click", () => {
       // Clipboard writes reject on a denied permission or an unfocused document,
@@ -208,7 +224,7 @@
     b.type = "button";
     b.setAttribute("data-bc-node", "bc-print-btn");
     b.setAttribute("aria-label", "Print this page");
-    b.appendChild(BC.util.el("span", { class: "bc-util-ic", "aria-hidden": "true", text: "\u2302" }));
+    b.appendChild(utilIcon(IC_PRINTER));
     b.appendChild(BC.util.el("span", { class: "bc-util-label", text: "Print" }));
     b.addEventListener("click", () => window.print());
     document.body.appendChild(b);

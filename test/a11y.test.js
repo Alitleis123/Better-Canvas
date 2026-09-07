@@ -258,4 +258,15 @@ module.exports = {
     assert.match(src, /data-bc-motion="0"\] \.bc-util-label \{ transition: none/);
     assert.match(src, /prefers-reduced-motion: reduce\) \{ \.bc-util-label \{ transition: none/);
   },
+
+  "the utility icons are drawn, not typed"() {
+    // At rest the icon is the entire affordance. A unicode glyph is at the mercy
+    // of the host page's font: U+2302 and U+26AD are tofu where the font lacks
+    // them, and a house and a marriage symbol where it has them.
+    const src = read("src/content/features/productivity.js");
+    assert.noMatch(src, /class: "bc-util-ic"[^}]*text:/,
+      "a utility icon must not be a text glyph");
+    assert.match(src, /<svg width="16" height="16"[^>]*stroke="currentColor"/,
+      "a utility icon must be an SVG that inherits the button's colour");
+  },
 };
