@@ -78,6 +78,11 @@
     /* Nothing to animate when motion is reduced: the label simply appears. */
     :root[data-bc-motion="0"] .bc-util-label { transition: none; }
     @media (prefers-reduced-motion: reduce) { .bc-util-label { transition: none; } }
+    /* A touch device never hovers, so the label would otherwise be unreachable
+       and the icon alone would have to carry it. Show it outright instead. */
+    @media (hover: none) {
+      .bc-util-label { max-width: 140px; opacity: 1; padding-right: var(--bc-space-4, 10px); }
+    }
     /* Stacked above whatever dock is mounted, and the toast host is told to
        clear both via --bc-utility-h. */
     .bc-copyurl-btn { bottom: calc(16px + var(--bc-dock-bottom, 0px)); }

@@ -259,6 +259,14 @@ module.exports = {
     assert.match(src, /prefers-reduced-motion: reduce\) \{ \.bc-util-label \{ transition: none/);
   },
 
+  "the utility label is shown outright where there is no hover"() {
+    // A touch device never fires hover, so a hover-only reveal would leave the
+    // icon alone to carry the button for the whole of that platform.
+    const src = read("src/content/features/productivity.js");
+    assert.match(src, /@media \(hover: none\) \{\s*\.bc-util-label \{[^}]*max-width: 140px/,
+      "the label must be visible outright on a device that cannot hover");
+  },
+
   "the utility icons are drawn, not typed"() {
     // At rest the icon is the entire affordance. A unicode glyph is at the mercy
     // of the host page's font: U+2302 and U+26AD are tofu where the font lacks
