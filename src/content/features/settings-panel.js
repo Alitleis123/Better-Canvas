@@ -74,7 +74,7 @@
     // the transform, so the host stayed pointer-events-active across the right edge
     // of every Canvas page and silently swallowed clicks there.
     drawerHost.style.cssText =
-      "position:fixed; top:0; right:0; bottom:0; width:min(720px, 96vw);" +
+      "position:fixed; top:0; right:0; bottom:0; width:min(600px, 48vw);" +
       "z-index:var(--bc-z-drawer, 2147482000); transform: translateX(100%); visibility: hidden;" +
       "box-shadow: var(--bc-shadow-4, -20px 0 60px rgba(0,0,0,.18));";
     document.body.appendChild(drawerHost);
@@ -172,6 +172,9 @@
   let previewHost = null;
   let previewUnsub = null;
   let previewTimer = 0;
+  // A multiplier on top of the fit scale, so "100%" means "fills the stage" and
+  // the control is about seeing detail rather than about absolute pixels.
+  let previewZoom = 1;
 
   function ensurePreview() {
     if (previewHost && previewHost.isConnected) return previewHost;
@@ -180,9 +183,10 @@
     // Inert and unreadable: it is a picture of the page, not a second copy of it.
     previewHost.setAttribute("aria-hidden", "true");
     previewHost.style.cssText =
-      "position:fixed; top:0; bottom:0; left:0; right:min(720px, 96vw);" +
+      "position:fixed; top:0; bottom:0; left:0; right:min(600px, 48vw);" +
       "z-index:calc(var(--bc-z-drawer, 2147482000) - 1);" +
-      "display:flex; align-items:center; justify-content:center; padding:24px;" +
+      "display:flex; flex-direction:column; align-items:center; justify-content:center;" +
+      "gap:14px; padding:24px; background: var(--bc-surface-1, #f6f7fb);" +
       "pointer-events:none; opacity:0;" +
       "transition:opacity var(--bc-dur-3, 220ms) var(--bc-ease-out, ease);";
     document.body.appendChild(previewHost);
@@ -206,7 +210,9 @@
     const paneW = host.clientWidth - 48;
     const paneH = host.clientHeight - 48;
     if (paneW <= 0 || paneH <= 0) return;
-    const k = Math.min(paneW / vw, paneH / vh);
+    // Reserve the toolbar's own height so zooming to fit does not push it off.
+    const fit = Math.min(paneW / vw, (paneH - 44) / vh);
+    const k = Math.max(0.1, fit * previewZoom);
 
     const clone = src.cloneNode(true);
     // Our install guards all ask document for an existing [data-bc-node]. A clone
@@ -242,7 +248,53 @@
     box.appendChild(frame);
 
     host.textContent = "";
+    host.appendChild(buildToolbar(fit));
     host.appendChild(box);
+  }
+
+  // The stage swallows pointer events so the preview can never be mistaken for
+  // the real page; the toolbar is the one part that takes them back.
+  function buildToolbar(fit) {
+    const bar = document.createElement("div");
+    bar.style.cssText =
+      "display:inline-flex; align-items:center; gap:2px; pointer-events:auto;" +
+      "padding:4px; border-radius: var(--bc-radius-pill, 999px);" +
+      "background: var(--bc-surface-2, #fff);" +
+      "border:1px solid var(--bc-border-strong, var(--bc-border, #e5e7eb));" +
+      "box-shadow: var(--bc-shadow-1, 0 1px 3px rgba(0,0,0,.12));" +
+      "font: 12px/1 var(--bc-font-sans, system-ui); color: var(--bc-text, #1b2430);";
+
+    const step = (label, aria, delta) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.setAttribute("aria-label", aria);
+      b.textContent = label;
+      b.style.cssText =
+        "width:26px; height:26px; display:inline-flex; align-items:center; justify-content:center;" +
+        "border:0; border-radius:50%; background:transparent; color:inherit; cursor:pointer;" +
+        "font:inherit; font-size:15px; line-height:1;";
+      b.addEventListener("mouseenter", () => { b.style.background = "var(--bc-surface-4, rgba(0,0,0,.05))"; });
+      b.addEventListener("mouseleave", () => { b.style.background = "transparent"; });
+      b.addEventListener("click", () => {
+        previewZoom = Math.min(3, Math.max(0.4, Math.round((previewZoom + delta) * 20) / 20));
+        BC.util.guard(buildPreview, "drawer preview");
+      });
+      return b;
+    };
+
+    const pct = document.createElement("button");
+    pct.type = "button";
+    pct.setAttribute("aria-label", "Reset preview zoom to fit");
+    pct.textContent = Math.round(previewZoom * 100) + "%";
+    pct.style.cssText =
+      "min-width:52px; height:26px; padding:0 8px; border:0; border-radius: var(--bc-radius-pill, 999px);" +
+      "background:transparent; color:inherit; cursor:pointer; font:inherit; font-variant-numeric: tabular-nums;";
+    pct.addEventListener("click", () => { previewZoom = 1; BC.util.guard(buildPreview, "drawer preview"); });
+
+    bar.appendChild(step("\u2212", "Zoom out", -0.1));
+    bar.appendChild(pct);
+    bar.appendChild(step("+", "Zoom in", 0.1));
+    return bar;
   }
 
   function refreshPreview() {
