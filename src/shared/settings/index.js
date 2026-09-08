@@ -1311,7 +1311,8 @@
   .bc-header-actions { display: flex; gap: 8px; align-items: center; }
   .bc-search { padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 8px); background: var(--panel); color: inherit; min-width: 200px; }
 
-  .bc-topbar { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 14px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+  /* Room for the drawer's close button, which floats over this corner. */
+  .bc-topbar { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 14px; padding: 10px 46px 10px 12px; flex-wrap: wrap; gap: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
   .bc-master { display: flex; align-items: center; gap: 8px; font-weight: 600; }
   .bc-master input { width: 18px; height: 18px; }
   .bc-topbar-right { display: flex; gap: 6px; }
@@ -1322,9 +1323,27 @@
      which is exactly backwards. */
   .bc-shell-wrap { container-type: inline-size; }
   .bc-shell { display: grid; grid-template-columns: 210px 1fr; gap: 14px; }
-  @container (max-width: 620px) { .bc-shell { grid-template-columns: 1fr; } .bc-nav { display: flex; overflow-x: auto; padding: 8px; } .bc-tab { flex: none; } }
+  /* The rail only collapses when it genuinely cannot fit. It must also stop being
+     a sticky column when it does: keeping flex-direction:column and position:
+     sticky left a full-height list pinned over the body, and the body scrolled
+     underneath it. */
+  .bc-shell-collapsed { grid-template-columns: 1fr !important; }
+  .bc-shell-collapsed .bc-nav {
+    flex-direction: row; overflow-x: auto; overflow-y: hidden;
+    padding: 8px; position: static; top: auto;
+  }
+  .bc-shell-collapsed .bc-tab { flex: none; }
+  @container (max-width: 430px) {
+    .bc-shell { grid-template-columns: 1fr; }
+    .bc-nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 8px; position: static; top: auto; }
+    .bc-tab { flex: none; }
+  }
   @supports not (container-type: inline-size) {
-    @media (max-width: 720px) { .bc-shell { grid-template-columns: 1fr; } .bc-nav { display: flex; overflow-x: auto; padding: 8px; } .bc-tab { flex: none; } }
+    @media (max-width: 430px) {
+      .bc-shell { grid-template-columns: 1fr; }
+      .bc-nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 8px; position: static; top: auto; }
+      .bc-tab { flex: none; }
+    }
   }
 
   .bc-nav { display: flex; flex-direction: column; gap: 2px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; height: fit-content; position: sticky; top: 8px; }

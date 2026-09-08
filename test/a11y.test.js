@@ -279,6 +279,19 @@ module.exports = {
       "a floating control needs the strong border to be visible on the page");
   },
 
+  "the collapsed tab rail stops being a sticky column"() {
+    // The rail is a sticky flex column. The collapse rule changed the grid but
+    // left both, so a full-height list stayed pinned over the body and the body
+    // scrolled underneath it.
+    const src = read("src/shared/settings/index.js");
+    for (const m of src.matchAll(/\.bc-nav \{ flex-direction: row;[^}]*\}/g)) {
+      assert.match(m[0], /position: static/,
+        "a collapsed rail must not stay sticky over the body");
+    }
+    assert.match(src, /\.bc-nav \{ flex-direction: row/,
+      "the collapse rule must reset the column direction");
+  },
+
   "the settings tab icons are drawn, not typed"() {
     // Same failure as the utility buttons, in the surface the user actually
     // navigates: these were geometric glyphs, including a telephone for
