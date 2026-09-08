@@ -43,7 +43,7 @@
       display: inline-flex; align-items: center; justify-content: flex-start;
       height: 32px; padding: 0; overflow: hidden;
       background: var(--bc-surface-2, #fff); color: var(--bc-text, inherit);
-      border: 1px solid var(--bc-border, #e5e7eb);
+      border: 1px solid var(--bc-border-strong, var(--bc-border, #e5e7eb));
       border-radius: var(--bc-radius-pill, 999px); cursor: pointer;
       font-family: var(--bc-font-sans); font-size: var(--bc-text-xs, 12px);
       box-shadow: var(--bc-shadow-1, 0 1px 3px rgba(0,0,0,.12));
@@ -86,7 +86,7 @@
     /* Stacked above whatever dock is mounted, and the toast host is told to
        clear both via --bc-utility-h. */
     .bc-copyurl-btn { bottom: calc(16px + var(--bc-dock-bottom, 0px)); }
-    .bc-print-btn { bottom: calc(56px + var(--bc-dock-bottom, 0px)); }
+    .bc-print-btn { bottom: calc(60px + var(--bc-dock-bottom, 0px)); }
     /* Printing the page should not print our own floating chrome. */
     @media print {
       .bc-copyurl-btn, .bc-print-btn, .bc-ruler, .bc-progress-bar { display: none !important; }
@@ -208,9 +208,9 @@
   function uninstallUrlButton() { BC.injector.removeNode("bc-copyurl-btn"); }
 
   // Publish the footprint so the toast stack starts above these rather than on
-  // top of them. Two 32px discs at 16px and 56px, so the upper one reaches 88px;
+  // top of them. Two 32px discs at 16px and 60px, so the upper one reaches 92px;
   // the toast host already adds its own 16px base, leaving an 8px gap.
-  const UTILITY_CLEARANCE = "80px";
+  const UTILITY_CLEARANCE = "84px";
   function setUtilityClearance(on) {
     const root = document.documentElement;
     if (on) {

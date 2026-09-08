@@ -267,6 +267,18 @@ module.exports = {
       "the label must be visible outright on a device that cannot hover");
   },
 
+  "the utility buttons have an edge that reads against the page"() {
+    // These float directly on surface-1, and surface-2 against surface-1 is
+    // 1.14:1, so the fill cannot carry the shape. The boundary is the border,
+    // which has to clear 3:1 for a control (WCAG 1.4.11). Plain --bc-border is
+    // guarded against surface-2, not against the page, and came out at 1.6:1.
+    const src = read("src/content/features/productivity.js");
+    const rule = src.match(/\.bc-copyurl-btn, \.bc-print-btn \{[^}]*\}/);
+    assert.ok(rule, "the utility button rule is missing");
+    assert.match(rule[0], /border: 1px solid var\(--bc-border-strong/,
+      "a floating control needs the strong border to be visible on the page");
+  },
+
   "the utility icons are drawn, not typed"() {
     // At rest the icon is the entire affordance. A unicode glyph is at the mercy
     // of the host page's font: U+2302 and U+26AD are tofu where the font lacks
