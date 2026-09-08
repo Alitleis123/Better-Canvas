@@ -279,6 +279,19 @@ module.exports = {
       "a floating control needs the strong border to be visible on the page");
   },
 
+  "the settings tab icons are drawn, not typed"() {
+    // Same failure as the utility buttons, in the surface the user actually
+    // navigates: these were geometric glyphs, including a telephone for
+    // announcements and a shogi piece for notifications, and an emoji for
+    // accessibility that broke the monochrome set on every platform.
+    const src = read("src/shared/settings/index.js");
+    assert.noMatch(src, /\{ id: "\w+",\s*label: "[^"]*",\s*icon: "/,
+      "a settings tab must not carry a text glyph as its icon");
+    assert.match(src, /const TAB_ICONS = \{/, "the tab icon set is missing");
+    assert.match(src, /<svg width="16" height="16"[^>]*stroke="currentColor"/,
+      "tab icons must inherit the tab's colour");
+  },
+
   "the utility icons are drawn, not typed"() {
     // At rest the icon is the entire affordance. A unicode glyph is at the mercy
     // of the host page's font: U+2302 and U+26AD are tofu where the font lacks

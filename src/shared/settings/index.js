@@ -59,30 +59,64 @@
       ]);
       app.appendChild(bar);
 
+      const shellWrap = h("div.bc-shell-wrap", null);
       const shell = h("div.bc-shell", null);
       const nav   = h("nav.bc-nav", null);
       const body  = h("main.bc-body", null);
       shell.appendChild(nav); shell.appendChild(body);
-      app.appendChild(shell);
+      shellWrap.appendChild(shell);
+      app.appendChild(shellWrap);
+
+      const TAB_ICONS = {
+        dashboard: '<rect x="2.5" y="2.5" width="5" height="5" rx="1"/><rect x="8.5" y="2.5" width="5" height="5" rx="1"/><rect x="2.5" y="8.5" width="5" height="5" rx="1"/><rect x="8.5" y="8.5" width="5" height="5" rx="1"/>',
+        todo: '<circle cx="8" cy="8" r="5.75"/><path d="M5.5 8.25 7.25 10l3.25-3.5"/>',
+        theming: '<circle cx="8" cy="8" r="5.75"/><path d="M8 2.25a5.75 5.75 0 0 1 0 11.5z" fill="currentColor" stroke="none"/>',
+        themes: '<path d="M8 2.25a5.75 5.75 0 1 0 0 11.5c.7 0 1.1-.5 1.1-1.05 0-.5-.35-.8-.35-1.2 0-.4.35-.7.8-.7h1.15A3.55 3.55 0 0 0 13.75 6.9C13.75 4.3 11.2 2.25 8 2.25z"/><circle cx="5.4" cy="7.1" r=".8" fill="currentColor" stroke="none"/><circle cx="8" cy="5.3" r=".8" fill="currentColor" stroke="none"/><circle cx="10.6" cy="7.1" r=".8" fill="currentColor" stroke="none"/>',
+        cosmetics: '<rect x="2.25" y="3.25" width="11.5" height="9.5" rx="1.5"/><circle cx="6" cy="6.5" r="1.1"/><path d="m3 11.75 3-3 2.5 2.5L11 8.5l2.5 2.5"/>',
+        navigation: '<path d="M2.75 4.5h10.5M2.75 8h10.5M2.75 11.5h10.5"/>',
+        grades: '<path d="M3.25 13V7.5M8 13V3.25M12.75 13V9.25"/>',
+        notifications: '<path d="M4.5 6.75a3.5 3.5 0 0 1 7 0c0 3 1 4 1 4h-9s1-1 1-4z"/><path d="M6.75 12.75a1.5 1.5 0 0 0 2.5 0"/>',
+        files: '<path d="M2.5 5a1.5 1.5 0 0 1 1.5-1.5h2.2l1.3 1.5H12a1.5 1.5 0 0 1 1.5 1.5v5A1.5 1.5 0 0 1 12 13H4a1.5 1.5 0 0 1-1.5-1.5z"/>',
+        calendar: '<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2.25v2.5M10.5 2.25v2.5"/>',
+        announcements: '<path d="M3 6.5v3a1 1 0 0 0 1 1h1.5L10 13.25v-10.5L5.5 5.5H4a1 1 0 0 0-1 1z"/><path d="M12.25 6.25a3 3 0 0 1 0 3.5"/>',
+        productivity: '<circle cx="8" cy="9.25" r="4.5"/><path d="M8 7v2.25l1.6.9M6.25 2.5h3.5"/>',
+        accessibility: '<circle cx="8" cy="8" r="5.75"/><circle cx="8" cy="5.6" r=".8" fill="currentColor" stroke="none"/><path d="M5.6 7.4h4.8M8 7.6v2M8 9.6 6.7 11.9M8 9.6l1.3 2.3"/>',
+        insights: '<path d="M2.75 10.75 6 7.5l2.25 2.25 5-5"/><path d="M10.5 4.75h2.75V7.5"/>',
+        shortcuts: '<rect x="6" y="6" width="4" height="4" rx=".5"/><path d="M6 6H4.5a1.5 1.5 0 1 1 1.5-1.5zM10 6h1.5A1.5 1.5 0 1 0 10 4.5zM6 10H4.5A1.5 1.5 0 1 0 6 11.5zM10 10h1.5a1.5 1.5 0 1 1-1.5 1.5z"/>',
+        instructor: '<path d="M8 2.75 14 5.5 8 8.25 2 5.5z"/><path d="M4.5 6.9v3.35c0 1.1 1.6 2 3.5 2s3.5-.9 3.5-2V6.9"/>',
+        about: '<circle cx="8" cy="8" r="5.75"/><path d="M8 7.4v3.4"/><circle cx="8" cy="5.3" r=".75" fill="currentColor" stroke="none"/>',
+      };
+
+      // Drawn, not typed. These were geometric glyphs (a telephone for
+      // announcements, a shogi piece for notifications) which are at the mercy
+      // of the host font and, where the font had them, meant something else.
+      function tabIcon(id) {
+        const sp = h("span.bc-tab-ic", null);
+        sp.setAttribute("aria-hidden", "true");
+        sp.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" ' +
+          'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" ' +
+          'stroke-linejoin="round">' + (TAB_ICONS[id] || "") + '</svg>';
+        return sp;
+      }
 
       const TABS = [
-        { id: "dashboard",     label: "Dashboard",      icon: "◧", render: renderDashboard },
-        { id: "todo",          label: "To Do",          icon: "✓", render: renderTodo },
-        { id: "theming",       label: "Appearance",     icon: "◐", render: renderTheming },
-        { id: "themes",        label: "Themes",         icon: "❋", render: renderThemes },
-        { id: "cosmetics",     label: "Background & CSS", icon: "▦", render: renderCosmetics },
-        { id: "navigation",    label: "Navigation",     icon: "≡", render: renderNavigation },
-        { id: "grades",        label: "Grades & GPA",   icon: "%", render: renderGrades },
-        { id: "notifications", label: "Notifications",  icon: "☖", render: renderNotifications },
-        { id: "files",         label: "Files",          icon: "▤", render: renderFiles },
-        { id: "calendar",      label: "Calendar",       icon: "▩", render: renderCalendar },
-        { id: "announcements", label: "Announcements",  icon: "☎", render: renderAnnouncements },
-        { id: "productivity",  label: "Productivity",   icon: "⏱", render: renderProductivity },
-        { id: "accessibility", label: "Accessibility",  icon: "♿", render: renderA11y },
-        { id: "insights",      label: "Insights",       icon: "∿", render: renderInsights },
-        { id: "shortcuts",     label: "Shortcuts",      icon: "⌘", render: renderShortcuts },
-        { id: "instructor",    label: "Instructor",     icon: "⚑", render: renderInstructor },
-        { id: "about",         label: "About",          icon: "ⓘ", render: renderAbout },
+        { id: "dashboard",     label: "Dashboard", render: renderDashboard },
+        { id: "todo",          label: "To Do", render: renderTodo },
+        { id: "theming",       label: "Appearance", render: renderTheming },
+        { id: "themes",        label: "Themes", render: renderThemes },
+        { id: "cosmetics",     label: "Background & CSS", render: renderCosmetics },
+        { id: "navigation",    label: "Navigation", render: renderNavigation },
+        { id: "grades",        label: "Grades & GPA", render: renderGrades },
+        { id: "notifications", label: "Notifications", render: renderNotifications },
+        { id: "files",         label: "Files", render: renderFiles },
+        { id: "calendar",      label: "Calendar", render: renderCalendar },
+        { id: "announcements", label: "Announcements", render: renderAnnouncements },
+        { id: "productivity",  label: "Productivity", render: renderProductivity },
+        { id: "accessibility", label: "Accessibility", render: renderA11y },
+        { id: "insights",      label: "Insights", render: renderInsights },
+        { id: "shortcuts",     label: "Shortcuts", render: renderShortcuts },
+        { id: "instructor",    label: "Instructor", render: renderInstructor },
+        { id: "about",         label: "About", render: renderAbout },
       ];
 
       let active = "dashboard";
@@ -94,7 +128,7 @@
       const tabBtns = new Map();
       for (const t of TABS) {
         const btn = h("button.bc-tab", { type: "button", onclick: () => showTab(t.id) },
-          [h("span.bc-tab-ic", null, t.icon), t.label]);
+          [tabIcon(t.id), t.label]);
         tabBtns.set(t.id, btn);
         nav.appendChild(btn);
       }
@@ -1282,8 +1316,16 @@
   .bc-master input { width: 18px; height: 18px; }
   .bc-topbar-right { display: flex; gap: 6px; }
 
+  /* Container, not viewport. This UI is mounted in a shadow root inside a panel
+     whose width has nothing to do with the window's, so a media query here
+     collapsed the tab rail on a narrow screen and kept it on a narrow panel,
+     which is exactly backwards. */
+  .bc-shell-wrap { container-type: inline-size; }
   .bc-shell { display: grid; grid-template-columns: 210px 1fr; gap: 14px; }
-  @media (max-width: 720px) { .bc-shell { grid-template-columns: 1fr; } .bc-nav { display: flex; overflow-x: auto; padding: 8px; } .bc-tab { flex: none; } }
+  @container (max-width: 620px) { .bc-shell { grid-template-columns: 1fr; } .bc-nav { display: flex; overflow-x: auto; padding: 8px; } .bc-tab { flex: none; } }
+  @supports not (container-type: inline-size) {
+    @media (max-width: 720px) { .bc-shell { grid-template-columns: 1fr; } .bc-nav { display: flex; overflow-x: auto; padding: 8px; } .bc-tab { flex: none; } }
+  }
 
   .bc-nav { display: flex; flex-direction: column; gap: 2px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; height: fit-content; position: sticky; top: 8px; }
   .bc-tab {
@@ -1295,7 +1337,7 @@
   .bc-tab:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
   .bc-tab.active { background: var(--accent); color: var(--bc-accent-contrast, #fff); }
   .bc-tab.active:hover { background: var(--accent); }
-  .bc-tab-ic { display: inline-block; width: 18px; text-align: center; opacity: .9; }
+  .bc-tab-ic { display: inline-flex; align-items: center; justify-content: center; width: 18px; flex: 0 0 18px; opacity: .9; }
 
   .bc-body { min-width: 0; }
   .bc-tab-body { display: flex; flex-direction: column; gap: 14px; }
