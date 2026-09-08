@@ -199,12 +199,7 @@ window.__bcReady = (async () => {
     subscribe(cb) { _subs.push(cb); return () => { const i = _subs.indexOf(cb); if (i >= 0) _subs.splice(i, 1); }; },
     notify() { for (const cb of _subs.slice()) cb(BC.storage.current); },
     save: () => Promise.resolve(), adopt(s) { BC.storage.current = s; }, saveLocal: () => Promise.resolve() };
-  // Enough of the settings UI for the drawer to mount; the preview is what is
-  // under test here, not the form.
-  BC.SettingsUI = { render(root) {
-    root.innerHTML = '<div style="padding:24px; font:14px system-ui">Settings stub</div>';
-    return { destroy() {} };
-  } };
+  BC.cloneDefaults = BC.cloneDefaults || (() => BC.mergeDefaults({ version: BC.SETTINGS_VERSION }));
   BC.ui = {
     stat: () => document.createElement("div"), sparkline: () => null,
     skeleton: () => document.createElement("div"), empty: () => document.createElement("div"),
@@ -217,6 +212,11 @@ window.__bcReady = (async () => {
   await load("../../src/content/features/dashboard.js");
   await load("../../src/content/core/toast.js");
   await load("../../src/content/features/productivity.js");
+  // The real settings UI, not a stub: its shell layout is what the drawer width
+  // has to hold, so a stub would hide exactly the bug worth catching.
+  await load("../../src/shared/settings/components.js");
+  await load("../../src/shared/settings/state.js");
+  await load("../../src/shared/settings/index.js");
   await load("../../src/content/features/settings-panel.js");
   return true;
 })();

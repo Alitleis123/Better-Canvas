@@ -187,7 +187,8 @@
       "z-index:calc(var(--bc-z-drawer, 2147482000) - 1);" +
       "display:flex; flex-direction:column; align-items:center; justify-content:center;" +
       "gap:14px; padding:24px; background: var(--bc-surface-1, #f6f7fb);" +
-      "pointer-events:none; opacity:0;" +
+      "overflow:hidden;" +
+      "pointer-events:auto; opacity:0;" +
       "transition:opacity var(--bc-dur-3, 220ms) var(--bc-ease-out, ease);";
     document.body.appendChild(previewHost);
     return previewHost;
@@ -235,12 +236,13 @@
     const frame = document.createElement("div");
     frame.style.cssText =
       "width:" + vw + "px; height:" + vh + "px; transform:scale(" + k + ");" +
-      "transform-origin: top left; pointer-events:none;";
+      "transform-origin: top left; pointer-events:none; user-select:none;";
     frame.appendChild(clone);
 
     const box = document.createElement("div");
     box.style.cssText =
-      "width:" + Math.round(vw * k) + "px; height:" + Math.round(vh * k) + "px;" +
+      "width:" + Math.round(Math.min(vw * k, paneW)) + "px;" +
+      "height:" + Math.round(Math.min(vh * k, paneH - 44)) + "px;" +
       "overflow:hidden; border-radius: var(--bc-radius-xl, 12px);" +
       "border:1px solid var(--bc-border-strong, var(--bc-border, #e5e7eb));" +
       "box-shadow: var(--bc-shadow-4, 0 24px 64px rgba(0,0,0,.3));" +
@@ -291,6 +293,7 @@
       "background:transparent; color:inherit; cursor:pointer; font:inherit; font-variant-numeric: tabular-nums;";
     pct.addEventListener("click", () => { previewZoom = 1; BC.util.guard(buildPreview, "drawer preview"); });
 
+    bar.addEventListener("mousedown", (e) => e.stopPropagation());
     bar.appendChild(step("\u2212", "Zoom out", -0.1));
     bar.appendChild(pct);
     bar.appendChild(step("+", "Zoom in", 0.1));
@@ -302,6 +305,14 @@
     // Settings can land in bursts while a slider moves; rebuilding the shell on
     // every one of those would be the most expensive thing on the page.
     previewTimer = setTimeout(() => { BC.util.guard(buildPreview, "drawer preview"); }, 200);
+  }
+
+  // Off the opening frame entirely: the drawer is what the click asked for, the
+  // preview is what it can afford a moment later.
+  function schedulePreview() {
+    const go = () => { if (isOpen) showPreview(); };
+    if (typeof requestIdleCallback === "function") requestIdleCallback(go, { timeout: 200 });
+    else setTimeout(go, 0);
   }
 
   function showPreview() {
@@ -321,6 +332,34 @@
       const h = previewHost;
       setTimeout(() => { if (h && !isOpen) h.textContent = ""; }, 240);
     }
+  }
+
+  // A fixed overlay does not stop a wheel event: it keeps scrolling the document
+  // underneath, so the page drifted behind a preview that could not follow it.
+  // Locking the document is the only thing that actually holds it still. The
+  // padding compensates for the scrollbar the lock removes, which would
+  // otherwise shift the whole page sideways as the drawer opens.
+  let scrollLock = null;
+  function lockPageScroll() {
+    if (scrollLock) return;
+    const el = document.documentElement;
+    const bd = document.body;
+    const bar = window.innerWidth - el.clientWidth;
+    // Both, because which element actually scrolls depends on the page: locking
+    // only the one Canvas is not using leaves the page free to move.
+    scrollLock = { htmlOv: el.style.overflow, bodyOv: bd ? bd.style.overflow : "", padRight: el.style.paddingRight };
+    el.style.overflow = "hidden";
+    if (bd) bd.style.overflow = "hidden";
+    if (bar > 0) el.style.paddingRight = bar + "px";
+  }
+  function unlockPageScroll() {
+    if (!scrollLock) return;
+    const el = document.documentElement;
+    const bd = document.body;
+    el.style.overflow = scrollLock.htmlOv;
+    if (bd) bd.style.overflow = scrollLock.bodyOv;
+    el.style.paddingRight = scrollLock.padRight;
+    scrollLock = null;
   }
 
   function setExpanded(v) {
@@ -343,7 +382,8 @@
       scrim.style.opacity = "1";
     });
     setExpanded(true);
-    showPreview();
+    lockPageScroll();
+    schedulePreview();
     if (BC.ui && BC.ui.focusTrap) trap = BC.ui.focusTrap(shadow, { returnTo: document.getElementById("bc-open-settings") });
   }
 
@@ -352,6 +392,7 @@
     isOpen = false;
     if (trap) { BC.util.guard(() => trap.release(), "drawer focus"); trap = null; }
     hidePreview();
+    unlockPageScroll();
     const scrim = document.querySelector('[data-bc-node="bc-drawer-scrim"]');
     if (scrim) { scrim.style.opacity = "0"; scrim.style.pointerEvents = "none"; }
     if (drawerHost) {
@@ -372,8 +413,17 @@
     isOpen ? close() : open();
   }
 
+  // The first click used to pay for the whole settings form being built. Build it
+  // while the page is idle instead, so the panel is already there when asked for.
+  function prewarm() {
+    const go = () => { if (!drawerHost) BC.util.guard(ensureDrawer, "drawer prewarm"); };
+    if (typeof requestIdleCallback === "function") requestIdleCallback(go, { timeout: 3000 });
+    else setTimeout(go, 1200);
+  }
+
   function apply(settings, ctx) {
     installNavItem();
+    prewarm();
     // Always accessible so the user can re-enable if disabled.
   }
 

@@ -99,6 +99,45 @@ module.exports = {
       "the clone must not re-run or re-fetch anything");
   },
 
+  "the drawer locks the page it is covering"() {
+    // A fixed overlay does not stop a wheel event, so without this the page
+    // scrolled underneath a preview that could not follow it. Both elements are
+    // locked because which one scrolls depends on the page.
+    const src = read("src/content/features/settings-panel.js");
+    assert.match(src, /function lockPageScroll/, "the drawer must lock page scroll");
+    const i = src.indexOf("function lockPageScroll");
+    const body = src.slice(i, src.indexOf("function unlockPageScroll"));
+    assert.match(body, /el\.style\.overflow = "hidden"/);
+    assert.match(body, /bd\.style\.overflow = "hidden"/);
+    assert.match(body, /paddingRight/, "the removed scrollbar must be compensated or the page shifts");
+    const u = src.slice(src.indexOf("function unlockPageScroll"));
+    assert.match(u.slice(0, 400), /scrollLock\.htmlOv/, "the original value must be restored, not assumed empty");
+    assert.match(u.slice(0, 400), /scrollLock\.bodyOv/);
+  },
+
+  "the preview stage does not punch a hole in the modal"() {
+    // The stage sits above the scrim. With pointer-events:none it let clicks and
+    // wheel through to the page; the clone inside stays inert instead.
+    const src = read("src/content/features/settings-panel.js");
+    const i = src.indexOf("previewHost.style.cssText");
+    const css = src.slice(i, i + 700);
+    assert.match(css, /pointer-events:auto/, "the stage must take events, not pass them on");
+    assert.match(css, /overflow:hidden/, "the stage must clip a zoomed preview");
+    assert.match(src, /transform-origin: top left; pointer-events:none/,
+      "the cloned page itself must stay inert");
+  },
+
+  "opening the drawer does not wait for the preview"() {
+    // Cloning the shell is the expensive part and nothing about it needs to
+    // happen in the frame that shows the panel.
+    const src = read("src/content/features/settings-panel.js");
+    assert.match(src, /schedulePreview\(\);/, "open must schedule the preview, not build it");
+    assert.match(src, /function schedulePreview[\s\S]{0,240}requestIdleCallback/,
+      "the preview build must be deferred to idle");
+    assert.match(src, /function prewarm[\s\S]{0,240}requestIdleCallback/,
+      "the settings form must be built before the first click, not during it");
+  },
+
   "the drawer preview releases its subscription on close"() {
     // It rebuilds the whole shell on every settings change, so a subscription
     // left running after close is a rebuild of a hidden element for the rest of
