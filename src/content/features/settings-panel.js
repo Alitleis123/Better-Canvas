@@ -161,6 +161,116 @@
     return s;
   }
 
+  // ---- Live preview ----
+  // The drawer is a shadow root, so a clone mounted inside it would lose every
+  // Canvas rule and render as unstyled markup. In the light DOM it inherits the
+  // page's own stylesheets, and because our theming is global CSS on :root it
+  // also inherits every token change for free: a colour or radius edit repaints
+  // the preview with no wiring at all. Only structural features (a To Do mode
+  // that rebuilds the list) need the rebuild below.
+  const PREVIEW_NODE = "bc-drawer-preview";
+  let previewHost = null;
+  let previewUnsub = null;
+  let previewTimer = 0;
+
+  function ensurePreview() {
+    if (previewHost && previewHost.isConnected) return previewHost;
+    previewHost = document.createElement("div");
+    previewHost.setAttribute("data-bc-node", PREVIEW_NODE);
+    // Inert and unreadable: it is a picture of the page, not a second copy of it.
+    previewHost.setAttribute("aria-hidden", "true");
+    previewHost.style.cssText =
+      "position:fixed; top:0; bottom:0; left:0; right:min(720px, 96vw);" +
+      "z-index:calc(var(--bc-z-drawer, 2147482000) - 1);" +
+      "display:flex; align-items:center; justify-content:center; padding:24px;" +
+      "pointer-events:none; opacity:0;" +
+      "transition:opacity var(--bc-dur-3, 220ms) var(--bc-ease-out, ease);";
+    document.body.appendChild(previewHost);
+    return previewHost;
+  }
+
+  // The source is the app shell rather than just the content column, so the left
+  // nav is in frame and the nav hide/reorder settings are previewable too.
+  function previewSource() {
+    return document.querySelector("#application") ||
+           document.querySelector("#wrapper") ||
+           document.querySelector("#content");
+  }
+
+  function buildPreview() {
+    const host = ensurePreview();
+    const src = previewSource();
+    if (!src) return;
+    const vw = Math.max(320, window.innerWidth);
+    const vh = Math.max(240, window.innerHeight);
+    const paneW = host.clientWidth - 48;
+    const paneH = host.clientHeight - 48;
+    if (paneW <= 0 || paneH <= 0) return;
+    const k = Math.min(paneW / vw, paneH / vh);
+
+    const clone = src.cloneNode(true);
+    // Our install guards all ask document for an existing [data-bc-node]. A clone
+    // carrying those markers would answer for a component that is no longer on
+    // the real page, so a feature could skip reinstalling itself. Classes stay,
+    // which is what our own styling actually targets.
+    clone.querySelectorAll("[data-bc-node]").forEach((n) => n.removeAttribute("data-bc-node"));
+    clone.querySelectorAll("script,iframe,object,embed").forEach((n) => n.remove());
+    // Every id in a clone is a duplicate id, and document.querySelectorAll("#x ...")
+    // then reports the page twice for as long as the drawer is open. The nav is the
+    // one place we cannot strip: hiding a nav item is a rule on that item's id, so
+    // the menu keeps its ids and the rest of the shell loses them.
+    const navScope = clone.querySelector("#menu");
+    if (clone.id) clone.removeAttribute("id");
+    clone.querySelectorAll("[id]").forEach((n) => {
+      if (navScope && (n === navScope || navScope.contains(n))) return;
+      n.removeAttribute("id");
+    });
+
+    const frame = document.createElement("div");
+    frame.style.cssText =
+      "width:" + vw + "px; height:" + vh + "px; transform:scale(" + k + ");" +
+      "transform-origin: top left; pointer-events:none;";
+    frame.appendChild(clone);
+
+    const box = document.createElement("div");
+    box.style.cssText =
+      "width:" + Math.round(vw * k) + "px; height:" + Math.round(vh * k) + "px;" +
+      "overflow:hidden; border-radius: var(--bc-radius-xl, 12px);" +
+      "border:1px solid var(--bc-border-strong, var(--bc-border, #e5e7eb));" +
+      "box-shadow: var(--bc-shadow-4, 0 24px 64px rgba(0,0,0,.3));" +
+      "background: var(--bc-surface-1, #f6f7fb);";
+    box.appendChild(frame);
+
+    host.textContent = "";
+    host.appendChild(box);
+  }
+
+  function refreshPreview() {
+    clearTimeout(previewTimer);
+    // Settings can land in bursts while a slider moves; rebuilding the shell on
+    // every one of those would be the most expensive thing on the page.
+    previewTimer = setTimeout(() => { BC.util.guard(buildPreview, "drawer preview"); }, 200);
+  }
+
+  function showPreview() {
+    BC.util.guard(buildPreview, "drawer preview");
+    if (previewHost) requestAnimationFrame(() => { if (previewHost) previewHost.style.opacity = "1"; });
+    if (!previewUnsub && BC.storage && BC.storage.subscribe) {
+      previewUnsub = BC.storage.subscribe(refreshPreview);
+    }
+  }
+
+  function hidePreview() {
+    clearTimeout(previewTimer);
+    if (previewUnsub) { BC.util.guard(() => previewUnsub(), "drawer preview"); previewUnsub = null; }
+    if (previewHost) {
+      previewHost.style.opacity = "0";
+      // Drop the clone rather than leave a stale copy of the page in the DOM.
+      const h = previewHost;
+      setTimeout(() => { if (h && !isOpen) h.textContent = ""; }, 240);
+    }
+  }
+
   function setExpanded(v) {
     const trigger = document.getElementById("bc-open-settings");
     if (trigger) trigger.setAttribute("aria-expanded", v ? "true" : "false");
@@ -181,6 +291,7 @@
       scrim.style.opacity = "1";
     });
     setExpanded(true);
+    showPreview();
     if (BC.ui && BC.ui.focusTrap) trap = BC.ui.focusTrap(shadow, { returnTo: document.getElementById("bc-open-settings") });
   }
 
@@ -188,6 +299,7 @@
     if (!isOpen) return;
     isOpen = false;
     if (trap) { BC.util.guard(() => trap.release(), "drawer focus"); trap = null; }
+    hidePreview();
     const scrim = document.querySelector('[data-bc-node="bc-drawer-scrim"]');
     if (scrim) { scrim.style.opacity = "0"; scrim.style.pointerEvents = "none"; }
     if (drawerHost) {

@@ -81,4 +81,33 @@ module.exports = {
     const src = read("src/content/core/util.js");
     assert.match(src, /BC\.diag\.push/);
   },
+
+  "the drawer preview clone cannot answer for the real page"() {
+    // The preview is a live copy of the shell sitting in the light DOM, so every
+    // marker it carries is a second answer to a document query. Install guards
+    // ask for [data-bc-node], and ids make querySelectorAll report the page
+    // twice, so both are stripped. The nav is the exception: hiding a nav item
+    // is a rule on that item's id.
+    const src = read("src/content/features/settings-panel.js");
+    assert.match(src, /clone\.querySelectorAll\("\[data-bc-node\]"\)\.forEach\(\(n\) => n\.removeAttribute\("data-bc-node"\)\)/,
+      "the clone must not carry our install markers");
+    assert.match(src, /clone\.querySelectorAll\("\[id\]"\)/,
+      "the clone must not carry duplicate ids");
+    assert.match(src, /clone\.querySelector\("#menu"\)/,
+      "the nav keeps its ids so nav hiding stays previewable");
+    assert.match(src, /clone\.querySelectorAll\("script,iframe,object,embed"\)\.forEach\(\(n\) => n\.remove\(\)\)/,
+      "the clone must not re-run or re-fetch anything");
+  },
+
+  "the drawer preview releases its subscription on close"() {
+    // It rebuilds the whole shell on every settings change, so a subscription
+    // left running after close is a rebuild of a hidden element for the rest of
+    // the page's life.
+    const src = read("src/content/features/settings-panel.js");
+    const i = src.indexOf("function hidePreview");
+    assert.ok(i > 0, "hidePreview is missing");
+    const body = src.slice(i, i + 420);
+    assert.match(body, /previewUnsub/, "hidePreview must release the store subscription");
+    assert.match(body, /clearTimeout\(previewTimer\)/, "a pending rebuild must be cancelled");
+  },
 };

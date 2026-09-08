@@ -184,7 +184,9 @@ window.__bcReady = (async () => {
     },
   };
   BC.registry = { register(def) { BC.features = BC.features || {}; BC.features[def.id] = def; } };
-  BC.lifecycle = { pageBag: () => ({ once(k, fn) { fn(); }, timeout(fn, ms) { setTimeout(fn, ms); } }) };
+  const _bag = () => ({ once(k, fn) { fn(); }, timeout(fn, ms) { setTimeout(fn, ms); },
+                        listen(t, e, h) { t.addEventListener(e, h); } });
+  BC.lifecycle = { pageBag: _bag, bag: _bag };
   BC.detect = { context: () => ({ page: "dashboard", courseId: null, path: "/" }) };
   BC.api = {
     coursesWithScores: () => Promise.resolve([]),
@@ -192,7 +194,17 @@ window.__bcReady = (async () => {
     plannerItems: () => Promise.resolve([]),
     dashboardCards: () => Promise.resolve([]),
   };
-  BC.storage = { current: null, local: {}, updateLocal: () => Promise.resolve(), loadLocal: () => Promise.resolve({}) };
+  const _subs = [];
+  BC.storage = { current: null, local: {}, updateLocal: () => Promise.resolve(), loadLocal: () => Promise.resolve({}),
+    subscribe(cb) { _subs.push(cb); return () => { const i = _subs.indexOf(cb); if (i >= 0) _subs.splice(i, 1); }; },
+    notify() { for (const cb of _subs.slice()) cb(BC.storage.current); },
+    save: () => Promise.resolve(), adopt(s) { BC.storage.current = s; }, saveLocal: () => Promise.resolve() };
+  // Enough of the settings UI for the drawer to mount; the preview is what is
+  // under test here, not the form.
+  BC.SettingsUI = { render(root) {
+    root.innerHTML = '<div style="padding:24px; font:14px system-ui">Settings stub</div>';
+    return { destroy() {} };
+  } };
   BC.ui = {
     stat: () => document.createElement("div"), sparkline: () => null,
     skeleton: () => document.createElement("div"), empty: () => document.createElement("div"),
@@ -205,6 +217,7 @@ window.__bcReady = (async () => {
   await load("../../src/content/features/dashboard.js");
   await load("../../src/content/core/toast.js");
   await load("../../src/content/features/productivity.js");
+  await load("../../src/content/features/settings-panel.js");
   return true;
 })();
 
