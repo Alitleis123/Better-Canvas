@@ -161,6 +161,21 @@ module.exports = {
       "a select sized to its widest option will starve the label again");
   },
 
+ "the build runs without PowerShell"() {
+    // build.ps1 is the only documented build and there is no pwsh on macOS, so
+    // dist/ silently stayed weeks stale while src/ moved.
+    const sh = read("build.sh");
+    for (const step of ["node --check", "node test/run.js", "manifest.firefox.json"]) {
+      assert.ok(sh.includes(step), "build.sh skips " + step);
+    }
+    const ps = read("build.ps1");
+    // The two must stay in step; both build the same two targets from the same
+    // two manifests.
+    for (const m of ["manifest.json", "manifest.firefox.json"]) {
+      assert.ok(sh.includes(m) && ps.includes(m), m + " is missing from one build script");
+    }
+  },
+
   "the popup and the panel are the same product"() {
     const pop = read("src/popup/popup.css");
     for (const shared of ["bc-master", "bc-switch-thumb", "bc-pop-ic"]) {

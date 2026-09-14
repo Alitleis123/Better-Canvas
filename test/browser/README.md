@@ -80,6 +80,18 @@ CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 - **`_popup.html`** — the toolbar popup, light and dark side by side. It splices
   a `chrome.*` stub in ahead of the popup's own scripts; stubbing after load
   races them and silently leaves `render()` un-run.
+- **`_options.html`** — the standalone options page, which hosts the same shared
+  settings UI but in its own document: no shadow root, a 1080px container, and
+  the page itself as the scroller. Nothing was checking that layout.
+
+One caveat, learned the hard way. Under `--virtual-time-budget`, a tight
+synchronous loop of `.click()` calls leaves `getComputedStyle` reporting the
+*first* tab as the selected one for `color` and `background`, while
+`font-weight` and `::before` from the same rule follow the class correctly. It
+is not containment, not `var()` substitution, and not a competing rule: a
+single click, or the same loop paced with real `setTimeout`, renders correctly
+in the pixels. Drop `--virtual-time-budget` and read the screenshot before
+believing a computed-style mismatch you find this way.
 
 Chrome does not always exit after writing the file — poll for the PNG and kill
 the process rather than waiting on it.

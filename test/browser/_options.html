@@ -1,0 +1,27 @@
+<!doctype html>
+<!--
+  The standalone options page hosts the same shared settings UI as the in-page
+  drawer, but in its own document with its own container: no shadow root, a
+  1080px max-width, and the page itself as the scroller. That is a different
+  layout problem from the drawer's, and nothing was checking it.
+-->
+<meta charset=utf-8><title>options preview</title>
+<body style="margin:0;background:#c9c4bc;font:12px ui-monospace,Menlo,monospace">
+<iframe id=f style="width:100vw;height:100vh;border:0"></iframe>
+<script>
+const STUB = `<script>
+window.chrome = {
+  storage: { local: { get: (k, cb) => cb({}), set: (o, cb) => cb && cb() },
+             onChanged: { addListener(){}, removeListener(){} } },
+  tabs: { query: () => Promise.resolve([]), sendMessage: (i,m,cb)=>cb&&cb(null) },
+  permissions: { getAll: () => Promise.resolve({ origins: [] }) },
+  runtime: { lastError: null },
+};
+<\/script>`;
+(async () => {
+  const html = await (await fetch("/src/options/options.html?t=" + Date.now())).text();
+  document.getElementById('f').srcdoc =
+    html.replace("<head>", '<head><base href="/src/options/">' + STUB);
+  setTimeout(() => { document.title = "ready"; }, 1200);
+})();
+</script>

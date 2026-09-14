@@ -33,6 +33,12 @@ Rows with no bearing on your current choice go inert rather than sitting there
 live: pick "Canvas's own" for the planner and the planner's ten controls dim;
 set the page background to None and its eight follow-up controls dim with it.
 
+When the panel is too narrow for two columns, a row puts its control on the line
+below its label, left-aligned under it. Rows whose control is a single switch are
+exempt: a switch is 40px and fits beside a label at any width the panel reaches,
+and stacking those too cost a second line on most of the panel at a 1100px
+window.
+
 Numbers above are measured, not estimated — `test/browser/page.html` plus
 `__bcPanel(width)` and `__bcRowWidths()` report label widths and hint depth from
 the real engine, and `test/panel.test.js` holds them there.
@@ -172,10 +178,13 @@ In the Course tools tab.
 ## Install (from source)
 
 1. Build the unpacked extensions:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File build.ps1
+   ```sh
+   ./build.sh                                              # macOS, Linux
+   powershell -ExecutionPolicy Bypass -File build.ps1      # Windows
    ```
-   This populates `dist/chrome` and `dist/firefox` after syntax-checking every JS file.
+   Both run `node --check` over every JS file and the full test suite, then
+   populate `dist/chrome` and `dist/firefox`. They do the same thing; keep them
+   in step.
 
 2. Load it:
    - **Chrome**: `chrome://extensions` → Developer mode → **Load unpacked** → select `dist/chrome`.
@@ -285,14 +294,14 @@ src/
 5. Add controls to `src/shared/settings/index.js`. Every row takes an `icon:`
    from `BC.icons`, and a hint only where the label genuinely cannot say it —
    `test/panel.test.js` enforces both, plus a word budget for the whole panel.
-6. Run `npm test` (or `node test/run.js`) and rebuild with `build.ps1`.
+6. Run `npm test` (or `node test/run.js`) and rebuild with `./build.sh`.
 
 ---
 
 ## Development
 
-- After editing source, run `build.ps1` and reload the unpacked extension, then refresh Canvas.
-- `build.ps1` runs `node --check` on every `.js` file before copying.
+- After editing source, run `./build.sh` (or `build.ps1` on Windows) and reload the unpacked extension, then refresh Canvas.
+- Both build scripts run `node --check` on every `.js` file and the test suite before copying. A build is only a copy, so the only thing that can go wrong is copying something broken.
 
 ### Tests
 
