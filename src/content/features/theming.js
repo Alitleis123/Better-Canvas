@@ -45,8 +45,14 @@
       border-color: var(--bc-d-border) !important;
     }
     html.bc-dark a${NOT_OURS} { color: var(--bc-d-link) !important; }
+    /* .btn and .Button by CLASS as well as <button> by tag. Canvas's buttons are
+       very often anchors -- "View Grades" in the dashboard sidebar is
+       <a class="Button">, and the tag selector never saw it, so it kept a light
+       grey fill with pale blue link text sitting in a dark sidebar. The anchor
+       rule above only reaches its colour, not its background. */
     html.bc-dark input${NOT_OURS}, html.bc-dark select${NOT_OURS},
-    html.bc-dark textarea${NOT_OURS}, html.bc-dark button${NOT_OURS} {
+    html.bc-dark textarea${NOT_OURS}, html.bc-dark button${NOT_OURS},
+    html.bc-dark .btn${NOT_OURS}, html.bc-dark .Button${NOT_OURS} {
       background-color: var(--bc-d-bg3) !important; color: var(--bc-d-text) !important;
       border-color: var(--bc-d-border) !important;
     }

@@ -33,7 +33,14 @@ a { color: #0374b5; text-decoration: none; }
 /* The card body Canvas paints white. Our static rules do not name this element,
    so the sweep is what has to darken it. */
 .ic-DashboardCard__header-content { display: block; padding: 10px 12px; color: #2d3b45; background: #fff; }
-.ic-DashboardCard__header-title { font-weight: 700; margin-bottom: 2px; }
+/* Canvas does NOT let the course title wrap: it is one nowrap line, clipped.
+   The replica let it wrap, which is why a -webkit-line-clamp of 2 looked correct
+   here and produced titles chopped mid-word with no ellipsis on a real
+   dashboard -- clamp cannot clamp text that never wraps. */
+.ic-DashboardCard__header-title {
+  font-weight: 700; margin-bottom: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .ic-DashboardCard__header-subtitle, .ic-DashboardCard__header-term { font-size: 12px; color: #6b7780; }
 .ic-DashboardCard__action-container { padding: 6px 12px 10px; display: flex; gap: 10px; }
 
@@ -64,3 +71,8 @@ td { background: #fff; padding: 8px; border-bottom: 1px solid #eee; }
 .ig-row { background: #fff; padding: 8px 12px; border-bottom: 1px solid #eee; list-style: none; }
 .context_module { background: #fff; border: 1px solid #c7cdd1; margin-bottom: 12px; }
 .ig-list { margin: 0; padding: 0; }
+
+/* Canvas's sidebar button, as an anchor. Light fill, link-coloured text. */
+.Button, .btn { display: inline-block; padding: 8px 14px; border: 1px solid #c7cdd1;
+  border-radius: 3px; background: #f5f5f5; color: #0374b5; text-decoration: none; }
+.button-sidebar-wide { display: block; width: 100%; box-sizing: border-box; text-align: center; margin-top: 10px; }

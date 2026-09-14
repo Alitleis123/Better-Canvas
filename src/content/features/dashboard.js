@@ -74,19 +74,24 @@
         height: auto !important;
         aspect-ratio: 16 / 9 !important;
       }
-      /* Two lines, always. Card height jumped between 281px and 300px purely on
-         whether the title wrapped, so a row of cards was uneven for a reason
-         that has nothing to do with the course. Reserving two lines and clamping
-         to two makes every card the same height whatever it is called. */
-      .ic-DashboardCard__header-title, .ic-DashboardCard__header-title span {
+      /* Two lines, with an ellipsis. Canvas gives the title white-space: nowrap
+         and clips it, so a long course name is cut off mid-word; letting it wrap
+         to two lines shows far more of it.
+         The span is forced back to inline and is NOT given the clamp. Clamping
+         it too blockified it -- Chrome computes display: -webkit-box as
+         flow-root here -- and text-overflow cannot ellipsize an overflowing
+         BLOCK child, only inline content. That is what produced titles chopped
+         mid-word with no ellipsis at all: the span's content was 246px inside a
+         192px box with nothing to trim it. */
+      .ic-DashboardCard__header-title {
+        white-space: normal !important;
         display: -webkit-box !important;
         -webkit-box-orient: vertical !important;
         -webkit-line-clamp: 2 !important;
         overflow: hidden !important;
+        overflow-wrap: anywhere !important;
       }
-      .ic-DashboardCard__header-title {
-        min-height: calc(var(--bc-text-lg, 15px) * var(--bc-leading-tight, 1.25) * 2) !important;
-      }
+      .ic-DashboardCard__header-title span { display: inline !important; white-space: normal !important; }
       /* Canvas pads the body 10px 12px, which is thin against a 250px card and
          is the other half of what reads as bad spacing. On the scale, so the
          density setting reaches it. */
@@ -167,7 +172,22 @@
     // dead space to the right of each one.
     const fillCell = `${GRID} > [data-bc-carditem] { width: 100% !important; }
       ${GRID} > [data-bc-carditem] .ic-DashboardCard, ${GRID} > .ic-DashboardCard { width: 100% !important; }`;
-    if (d.layout === "grid") css += `${GRID} { display: grid !important; grid-template-columns: ${track} !important; gap: var(--bc-space-7, 16px) !important; align-items: start !important; }
+    if (d.layout === "grid") css += `${GRID} { display: grid !important; grid-template-columns: ${track} !important; gap: var(--bc-space-7, 16px) !important; align-items: stretch !important; }
+      /* stretch, not start: cards sharing a row share a height, and the slack
+         from a one-line title collects ABOVE THE ACTION ROW rather than between
+         the title and the course code.
+         NOT grid-auto-rows: 1fr, which was the obvious next step and is wrong:
+         1fr distributes the CONTAINER's height across the rows, and this
+         container is not content-sized, so a single row of cards stretched to
+         640px and left a huge empty band above them. Rows can differ by one
+         title line; that is invisible next to what 1fr did. Reserving a second line on the title put it
+         in the middle of the card, which read as a hole on every card whose
+         name fitted on one line -- which, with Canvas's nowrap, was all of them. */
+      ${GRID} > [data-bc-carditem] { display: flex !important; }
+      .ic-DashboardCard { display: flex !important; flex-direction: column !important; }
+      .ic-DashboardCard__header { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; }
+      .ic-DashboardCard__link { flex: 1 1 auto !important; }
+      .ic-DashboardCard__action-container { margin-top: auto !important; }
       ${spanRow}
       ${fillCell}
       ${spine}

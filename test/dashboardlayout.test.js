@@ -307,7 +307,9 @@ module.exports = {
   // After: 250x316, aspect 0.79, artwork 140px at 44% of the card, at every one
   // of those widths. Only the column count changes.
   "a course card is the same card at every viewport width"() {
-    const src = read("src/content/features/dashboard.js");
+    // Comments stripped: the notes in the source name the rules they warn
+    // against, and an unstripped scan reads those as the rules being present.
+    const src = read("src/content/features/dashboard.js").replace(/\/\*[\s\S]*?\*\//g, "");
 
     // The grid track must not hand the leftover space to the card.
     const track = src.match(/const track = `([^`]+)`/);
@@ -326,8 +328,28 @@ module.exports = {
       "the card artwork needs a ratio, or its proportions move with the viewport");
     assert.match(src, /-webkit-line-clamp: 2 !important/,
       "the title must clamp, or a long course name makes a taller card");
-    assert.match(src, /min-height: calc\(var\(--bc-text-lg[^)]*\)[^;]*\)/,
-      "the title must also RESERVE its two lines, or a short name makes a shorter card");
+    // Canvas sets white-space: nowrap on the title, so clamp has nothing to
+    // clamp until wrapping is allowed. Without this the title is one long line
+    // hard-clipped at the card edge.
+    assert.match(src, /\.ic-DashboardCard__header-title \{[^}]*white-space: normal !important/,
+      "the title cannot wrap to two lines while Canvas holds it at nowrap");
+    // And the span must stay INLINE. Clamping it blockifies it, and
+    // text-overflow cannot ellipsize an overflowing block child, which is how
+    // titles ended up chopped mid-word with no ellipsis.
+    assert.match(src, /\.ic-DashboardCard__header-title span \{[^}]*display: inline !important/,
+      "the title's span must stay inline or the ellipsis has nothing to trim");
+    // Equal heights come from stretching the row, not from reserving a line
+    // inside the title: that put the slack between the title and the course
+    // code, i.e. a hole in the middle of the card.
+    assert.match(src, /align-items: stretch !important/,
+      "cards in a row should share a height");
+    // 1fr spreads the CONTAINER's height over the rows, and this container is
+    // not content-sized, so one row of cards stretched to 640px with an empty
+    // band above them.
+    assert.ok(!/grid-auto-rows: 1fr/.test(src),
+      "grid-auto-rows: 1fr stretches a row to the container, not to its content");
+    assert.match(src, /\.ic-DashboardCard__action-container \{ margin-top: auto !important/,
+      "the slack must collect above the action row, not inside the text");
 
     // The gutter belongs to the spacing scale like everything else we ship.
     assert.ok(!/gap: 16px !important/.test(src),
