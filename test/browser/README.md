@@ -84,6 +84,30 @@ CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
   settings UI but in its own document: no shadow root, a 1080px container, and
   the page itself as the scroller. Nothing was checking that layout.
 
+## Check the other engine
+
+The extension ships a Firefox manifest, and every render above is Blink. The
+panel leans on container queries, `:has()`, `color-mix()`, `inert` and a
+rounded system face, so `_support.html` reports each one and then MEASURES a
+miniature of the real row: does the label keep its width, does the wide row
+stack, does the slim row stay inline, does `inert` actually block focus.
+
+It is synchronous on purpose. Gecko's `--screenshot` fires at load and will not
+wait for the harness to fetch the sources, so the full panel cannot be
+photographed there this way.
+
+```sh
+"/Applications/Zen.app/Contents/MacOS/zen" --headless --profile /tmp/p \
+  --window-size=640,560 --screenshot /tmp/gecko.png \
+  'http://localhost:8731/test/browser/_support.html'
+```
+
+Result as of Zen 1.21 (Gecko): everything passes and the row measures
+identically to Blink. The one difference is `text-wrap: pretty`, which Gecko
+does not support, so hints and section descriptions get ordinary ragging there.
+It is a progressive enhancement with no polyfill, so it degrades silently and is
+left alone.
+
 One caveat, learned the hard way. Under `--virtual-time-budget`, a tight
 synchronous loop of `.click()` calls leaves `getComputedStyle` reporting the
 *first* tab as the selected one for `color` and `background`, while
