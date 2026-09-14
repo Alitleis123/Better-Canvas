@@ -175,6 +175,20 @@ module.exports = {
       "the empty state must be re-attached when the tab changes");
   },
 
+  "the preview stage and the drawer agree on where the panel starts"() {
+    // They were two hardcoded widths for the same edge: the drawer took
+    // min(720px, 54vw) and the stage reserved min(600px, 48vw), so the drawer
+    // covered the stage's right ~120px. The preview box is centred and sized to
+    // fill the stage, so the covered part was the page preview's right edge.
+    const src = read("src/content/features/settings-panel.js");
+    assert.match(src, /const DRAWER_W = "min\([^"]+\)";/,
+      "the panel width must have one definition");
+    const uses = [...src.matchAll(/DRAWER_W \+ ";"/g)].length;
+    assert.ok(uses >= 2, "both the drawer and the preview stage must read it; found " + uses);
+    assert.doesNotMatch(src, /right:min\(\d+px/, "the stage must not hardcode its own width again");
+    assert.doesNotMatch(src, /width:min\(\d+px/, "the drawer must not hardcode its own width again");
+  },
+
   "opening the drawer focuses something the user can see"() {
     // The trap takes the first tabbable in DOM order, and that is now the master
     // switch's visually hidden checkbox: a 1x1 box, so the focus ring landed

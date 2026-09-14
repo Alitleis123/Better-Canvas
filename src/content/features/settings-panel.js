@@ -10,6 +10,13 @@
   BC.features = BC.features || {};
 
   const DRAWER_ID = "bc-drawer";
+  // ONE definition of how much of the window the panel occupies. The drawer was
+  // min(720px, 54vw) wide while the preview stage beside it reserved only
+  // min(600px, 48vw), so the drawer covered the rightmost ~120px of the stage.
+  // The preview box is centred in that stage and sized to fill it, so what got
+  // covered was the right-hand edge of the page preview -- at 1440px, 96px of a
+  // 792px picture, and the wider the window the more of it went under the panel.
+  const DRAWER_W = "min(720px, 54vw)";
   let drawerHost = null;
   let shadow = null;
   let store = null;
@@ -76,7 +83,7 @@
     drawerHost.style.cssText =
       // 600px minus a 210px tab rail left ~330px of body, which is less than the
     // widest control row needs and is what forced labels to wrap five lines deep.
-    "position:fixed; top:0; right:0; bottom:0; width:min(720px, 54vw);" +
+    "position:fixed; top:0; right:0; bottom:0; width:" + DRAWER_W + ";" +
       "z-index:var(--bc-z-drawer, 2147482000); transform: translateX(100%); visibility: hidden;" +
       "box-shadow: var(--bc-shadow-4, -20px 0 60px rgba(0,0,0,.18));";
     document.body.appendChild(drawerHost);
@@ -203,7 +210,7 @@
     // Inert and unreadable: it is a picture of the page, not a second copy of it.
     previewHost.setAttribute("aria-hidden", "true");
     previewHost.style.cssText =
-      "position:fixed; top:0; bottom:0; left:0; right:min(600px, 48vw);" +
+      "position:fixed; top:0; bottom:0; left:0; right:" + DRAWER_W + ";" +
       "z-index:calc(var(--bc-z-drawer, 2147482000) - 1);" +
       "display:flex; flex-direction:column; align-items:center; justify-content:center;" +
       // Deliberately NOT on the spacing scale: buildPreview subtracts this
@@ -234,9 +241,26 @@
     const paneW = host.clientWidth - PREVIEW_PAD * 2;
     const paneH = host.clientHeight - PREVIEW_PAD * 2;
     if (paneW <= 0 || paneH <= 0) return;
-    // Reserve the toolbar's own height so zooming to fit does not push it off.
-    const fit = Math.min(paneW / vw, (paneH - 44) / vh);
-    const k = Math.max(0.1, fit * previewZoom);
+
+    // The toolbar goes in first so its height can be MEASURED. It was a
+    // hardcoded 44 against an actual 36 plus a 14px gap, which is the kind of
+    // number that is wrong in one direction or the other forever.
+    host.textContent = "";
+    const bar = buildToolbar();
+    host.appendChild(bar);
+    const barH = Math.ceil(bar.getBoundingClientRect().height) + 14;
+    const availH = Math.max(120, paneH - barH);
+
+    // Scale from the WIDTH alone. Fitting both axes meant the stage's taller
+    // aspect went unused: at a 1280x900 window the picture came out 541x380
+    // inside 541x808 of space, so 47% of the stage was empty and the preview
+    // read as a small thumbnail floating in a panel.
+    const k = Math.max(0.1, (paneW / vw) * previewZoom);
+    // With the scale set by width, the spare height buys more PAGE instead of
+    // more blank stage: the frame is as tall as the stage can hold, capped at
+    // how tall the page actually is.
+    const pageH = Math.max(vh, src.scrollHeight || vh);
+    const frameH = Math.max(vh * 0.5, Math.min(pageH, availH / k));
 
     const clone = src.cloneNode(true);
     // Our install guards all ask document for an existing [data-bc-node]. A clone
@@ -258,28 +282,26 @@
 
     const frame = document.createElement("div");
     frame.style.cssText =
-      "width:" + vw + "px; height:" + vh + "px; transform:scale(" + k + ");" +
+      "width:" + vw + "px; height:" + Math.round(frameH) + "px; transform:scale(" + k + ");" +
       "transform-origin: top left; pointer-events:none; user-select:none;";
     frame.appendChild(clone);
 
     const box = document.createElement("div");
     box.style.cssText =
       "width:" + Math.round(Math.min(vw * k, paneW)) + "px;" +
-      "height:" + Math.round(Math.min(vh * k, paneH - 44)) + "px;" +
+      "height:" + Math.round(Math.min(frameH * k, availH)) + "px;" +
       "overflow:hidden; border-radius: var(--bc-radius-xl, 12px);" +
       "border:1px solid var(--bc-border-strong, var(--bc-border, #e5e7eb));" +
       "box-shadow: var(--bc-shadow-4, 0 24px 64px rgba(0,0,0,.3));" +
       "background: var(--bc-surface-1, #f6f7fb);";
     box.appendChild(frame);
 
-    host.textContent = "";
-    host.appendChild(buildToolbar(fit));
     host.appendChild(box);
   }
 
   // The stage swallows pointer events so the preview can never be mistaken for
   // the real page; the toolbar is the one part that takes them back.
-  function buildToolbar(fit) {
+  function buildToolbar() {
     const bar = document.createElement("div");
     bar.style.cssText =
       "display:inline-flex; align-items:center; gap:2px; pointer-events:auto;" +
