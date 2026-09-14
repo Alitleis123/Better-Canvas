@@ -22,6 +22,25 @@
     .row:not(.slim) > select { grid-column: 2 / -1; justify-self: start; }
   }
   .sw:has(input:checked) { outline: 2px solid green; }
+  /* A miniature of the dashboard card grid. The track the dashboard ships uses
+     min(), max() and a percentage INSIDE minmax(), under auto-fit -- the column
+     count depends on the engine resolving all of that the same way Blink does,
+     and if it does not, a Firefox user gets a different number of cards in a row
+     than the measurements were taken against. Measured, not claimed. */
+  /* 1100px, not 1000. At 1000 the four-column term resolves to 238px, under the
+     250px floor, so max() picks the floor and only three 250px tracks fit -- the
+     reduce-and-still-fill path. That is correct behaviour but it is not the case
+     worth pinning cross-engine, and asserting 4 there made this page cry wolf in
+     BOTH engines. At 1100 the term is 263px, over the floor, so the count should
+     come out at exactly four. */
+  #gridprobe { width: 1100px; display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, max(250px, calc((100% - 3 * 16px) / 4))), 1fr)); }
+  #gridprobe > h6 { grid-column: 1 / -1; margin: 0; }
+  #gridprobe > .c { height: 20px; background: #ddd; }
+  /* And the masonry heading, which has to lift out of the columns. */
+  #colprobe { width: 600px; columns: 250px 3; column-gap: 16px; }
+  #colprobe > h6 { column-span: all; margin: 0; }
+  #colprobe > .c { height: 30px; background: #ddd; margin-bottom: 8px; break-inside: avoid; }
 </style>
 <body>
 <div id=probe>
@@ -29,6 +48,8 @@
   <div class="row slim" id=r2><i>ic</i><b>Toggle</b><span class="sw"><input type=checkbox checked></span></div>
   <div class="row" id=r3><i>ic</i><b id=lab2>Inert test</b><span id=inertbox inert><button id=inertbtn>x</button></span></div>
 </div>
+<div id=gridprobe><h6>Published Courses</h6><div class=c></div><div class=c></div><div class=c></div><div class=c></div></div>
+<div id=colprobe><h6>Published Courses</h6><div class=c></div><div class=c></div><div class=c></div><div class=c></div></div>
 <pre id=out></pre>
 <script>
 const q = [
@@ -55,12 +76,39 @@ const r2b = document.getElementById("r2").querySelector("b");
 const stacked = sel.getBoundingClientRect().top >= lab.getBoundingClientRect().bottom;
 const slimInline = document.getElementById("r2").querySelector(".sw")
   .getBoundingClientRect().top < r2b.getBoundingClientRect().bottom;
+// The dashboard grid, measured. Four cards in a 1000px container must come out
+// as four columns that fill it, with nothing left over at the end of the row.
+const gp = document.getElementById("gridprobe");
+const gcells = [...gp.querySelectorAll(".c")];
+const gtracks = getComputedStyle(gp).gridTemplateColumns.split(" ").filter((t) => parseFloat(t) > 0);
+const gRight = Math.round(Math.max(...gcells.map((c) => c.getBoundingClientRect().right)));
+const gTrail = Math.round(gp.getBoundingClientRect().right - gRight);
+// And the same grid squeezed under the floor: the count must drop and the cards
+// must still fill the row rather than leaving a notch.
+gp.style.width = "1000px";
+const narrowTracks = getComputedStyle(gp).gridTemplateColumns.split(" ").filter((t) => parseFloat(t) > 0);
+const narrowTrail = Math.round(gp.getBoundingClientRect().right -
+  Math.max(...gcells.map((c) => c.getBoundingClientRect().right)));
+gp.style.width = "1100px";
+
+// The masonry heading must sit ABOVE every column, not inside the first one.
+const cp = document.getElementById("colprobe");
+const ch = cp.querySelector("h6");
+const ccells = [...cp.querySelectorAll(".c")];
+const headingSpans = ccells.every((c) => c.getBoundingClientRect().top >= ch.getBoundingClientRect().bottom);
+
 const btn = document.getElementById("inertbtn");
 lines.push("");
 lines.push("  label width          " + Math.round(lab.getBoundingClientRect().width) + "px  (starved below ~120)");
 lines.push("  wide row stacked     " + stacked);
 lines.push("  slim row inline      " + slimInline);
 lines.push("  inert blocks focus   " + (document.activeElement !== btn));
+lines.push("");
+lines.push("  card grid columns    " + gtracks.length + "  (want 4)");
+lines.push("  card track width     " + gtracks[0] + "  (want ~263px)");
+lines.push("  row trailing gap     " + gTrail + "px  (want 0)");
+lines.push("  narrow reduces to    " + narrowTracks.length + " cols, " + narrowTrail + "px left over  (want 3, 0)");
+lines.push("  masonry head spans   " + headingSpans + "  (want true)");
 document.getElementById("out").textContent = lines.join("\n");
 btn.focus();
 document.getElementById("out").textContent += "\n  inert after focus()  " + (document.activeElement !== btn);

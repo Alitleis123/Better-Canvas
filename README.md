@@ -59,12 +59,24 @@ the real engine, and `test/panel.test.js` holds them there.
 
 ### Skins
 Not a colour scheme — a whole look. A skin carries surface art, per-card art, nav treatment, type and palette, and drives the same `--bc-*` tokens everything else reads, so one click restyles the page, the drawer, the planner and the options page together.
-- **10 built-in skins** — Matcha Strawberry, Forest Study, Harvest, Bubblegum, Blueprint, Phosphor, Paper, Frost, Dusk, Meadow.
+- **44 built-in skins.** Ten illustrated ones drawn here (Matcha Strawberry,
+  Forest Study, Harvest, Bubblegum, Blueprint, Phosphor, Paper, Frost, Dusk,
+  Meadow) and **34 ports of open-source colour schemes** — Catppuccin (4
+  flavours), Tokyo Night (3), Rosé Pine (3), Gruvbox, Dracula, Solarized,
+  Everforest, Kanagawa, Monokai, One Dark/Light, GitHub, Ayu, Night Owl,
+  Material, Palenight, Synthwave, Zenburn, Horizon, Moonlight, Nightfox,
+  Oceanic Next, Sonokai and more. Each credits the project it came from.
+  There is no registry of Canvas themes to read, and reading one would mean an
+  outbound request on every page load; these are palettes, ported, with the art
+  still generated locally.
+- **Searchable gallery** — the tab search reaches individual cards, so a family
+  is one query ("catppuccin", "gruvbox", "retro"), split into illustrated, dark
+  and light.
 - **14 patterns generated at runtime** — gingham, lattice, plaid, stripes, grid, dots, polka, checks, floral, sprigs, waves, confetti, scallop, noise. Every one is a CSS gradient or an inline SVG built from two colours and a scale: **no image files ship**, a pattern recolours to any palette instead of needing one file per variant, it stays crisp at any zoom, and **nothing is fetched** — skins work offline and leak no request.
 - **Cards cycle through the skin's patterns**, so six cards read as six related faces rather than one texture smeared across the dashboard.
 - **Course colours: replace or tint.** A skin can own the card colour, or keep Canvas's course colour and let the pattern tint it — for people who navigate by colour.
 - **Import / export as JSON.** A built-in, a pasted file and an edited fork are the same kind of object on the same code path. Editing a built-in forks it rather than mutating shipped data.
-- **Every built-in clears AA** for body text, hint text, links and accent labels — enforced by the suite, because a pretty theme nobody can read their assignments in is not shippable.
+- **Every built-in clears AA** for body text, hint text, links and accent labels — enforced by the suite, because a pretty theme nobody can read their assignments in is not shippable. The suite checks the colour a skin *emits*, not the one it authors: a skin's ink used to bypass the readability guard every other palette goes through, which put the course code below AA on 9 of the 44 (down to 3.86:1) with the authored-value test green.
 
 ### Appearance (30+ knobs)
 - **One drawn icon set** — a single 16px grid at one stroke weight, shared by every settings row, the tab rail, the planner and every button. Nothing is a typed glyph, so nothing renders in the wrong colour or as a box when the host font lacks it.
@@ -83,6 +95,15 @@ Not a colour scheme — a whole look. A skin carries surface art, per-card art, 
 
 ### Dashboard
 - Card layouts: **Grid / List / Masonry / Compact**, with size and radius sliders.
+- **The same dashboard on every monitor.** Cards per row is capped (5 by default,
+  or lift it), so above about 1700px the layout stops being a function of the
+  viewport and becomes a function of how many courses you are taking — the same
+  number on your laptop and your 27". Measured at eight widths from 1280 to 3000:
+  identical from 1728 up, and **zero** space left over at the end of a row at any
+  of them. It used to be 146, 40, 14, 254, 42, 96, 4px, and a 27" laid out eight
+  columns for five courses.
+- **Card metadata lines up across a row** — the course code and term sit on one
+  line whether a title took one line or two.
 - Drag-reorder, rename, recolor, hide, background-image per card.
 - **Inline grade badge**, **progress bar**, **due-count badge**, **grade sparkline** from locally recorded history.
 - Course search bar, hover-lift animation.
@@ -237,7 +258,7 @@ src/
     skins.js                             the skin engine: 14 runtime-generated patterns,
                                          validation for untrusted skins, and the stylesheet
                                          emitter that drives the token layer
-    skin-catalog.js                      the 10 built-in skins. Pure data — adding one is
+    skin-catalog.js                      the 44 built-in skins. Pure data — adding one is
                                          adding an object, no code and no assets
     settings/
       state.js                           undo/redo store, subscribe, adapter

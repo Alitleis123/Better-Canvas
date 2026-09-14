@@ -102,7 +102,20 @@ CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 - **`_shot.html`** — the surface, ready to photograph.
   `m=panel|todo|skin|plain`, plus `t=<tab id>`, `w=<drawer px>`,
-  `p=<progress style>`, `s=<skin id>`, `dark=1`.
+  `p=<progress style>`, `s=<skin id>`, `layout=<grid|list|compact|masonry>`,
+  `n=<course count>`, `dark=1`.
+
+  `n=` clones the fixture's cards. The fixture ships four, which is the one count
+  that cannot show whether a row packs, wraps, or strands a card on a row of its
+  own — four courses in a five-column measure left a 266px notch that only turned
+  up at `n=4`, and seven were what showed the second row was right.
+
+- **`shoot.sh`** — the capture command above, as a script, because every one of
+  these findings needed the same shot at three widths.
+
+  ```sh
+  test/browser/shoot.sh /tmp/out.png 2560x1440 '_shot.html?m=plain&n=7'
+  ```
 - **`_eval.html?c=<expr>`** — run one expression and print the result into the
   page, because headless Chrome gives you no console to read. `__bcPanel`,
   `__bcRowWidths`, `__bcAudit` and `BC` are all in scope.
@@ -131,8 +144,23 @@ photographed there this way.
   'http://localhost:8731/test/browser/_support.html'
 ```
 
+It also measures the dashboard's card grid, whose track uses `min()`, `max()`
+and a percentage inside `minmax()` under `auto-fit`. The column count depends on
+the engine resolving all of that the same way, and if it does not, a Firefox
+user gets a different number of cards in a row than the measurements were taken
+against. Both the fill case and the reduce-and-still-fill case are pinned, plus
+`column-span: all`, which is what lifts the section heading out of masonry's
+first column.
+
 Result as of Zen 1.21 (Gecko): everything passes and the row measures
-identically to Blink. The one difference is `text-wrap: pretty`, which Gecko
+identically to Blink. The card grid agrees exactly — 4 columns at 263px with 0
+left over at 1100px, reducing to 3 with 0 left over at 1000px, in both engines.
+
+A caution learned here: the first version of that probe asserted 4 columns at a
+1000px container, where the four-column term resolves under the 250px floor and
+three is the correct answer. It reported a failure in BOTH engines and looked
+like a Gecko bug for as long as it took to do the arithmetic. Check the
+expectation before believing the engine disagrees. The one difference is `text-wrap: pretty`, which Gecko
 does not support, so hints and section descriptions get ordinary ragging there.
 It is a progressive enhancement with no polyfill, so it degrades silently and is
 left alone.
@@ -178,12 +206,32 @@ against a live Canvas instance is still a manual step.
 - the course colour is unchanged: `.ic-DashboardCard__header_hero`
 - an authored box keeps its own background and gains legible ink: `.user_content .callout`
 - cards lay out in columns: distinct `getBoundingClientRect().y` values across `.ic-DashboardCard`
+- the dashboard is the same at every width worth caring about: `_measure.html`
+  reports the card size, the occupied columns, the trailing gap and whether the
+  header, the grid and the page content share a right edge. Trailing should be 0
+  and the three right edges equal, at every width
 - `__bcApply({theming:{darkMode:"off"}})` leaves zero `[data-bc-lit]`,
   `[data-bc-paper]` and `[data-bc-dim]` marks
 
 ## Full sweep
 
 Paste this to run every tone against every layout in one go:
+
+Skins need the same sweep, and it is a different one: a skin replaces the whole
+token layer, so it can fail where a dark tone passes. This is what found 9 of
+the 44 drawing the course code below AA.
+
+```js
+await __bcReady;
+const bad = [];
+for (const k of BC.SKIN_CATALOG) {
+  __bcClear();
+  __bcApply({ theming: { skin: k.id } });
+  const f = __bcAudit().filter((a) => a.ratio < 4.5);
+  if (f.length) bad.push(k.id + ": " + f.map((b) => b.sel + " " + b.ratio).join(" | "));
+}
+bad;   // [] means clean
+```
 
 ```js
 await __bcReady;
