@@ -286,6 +286,35 @@ module.exports = {
     assert.deepEqual(fails, [], "skins whose hint text is unreadable:\n  " + fails.join("\n  "));
   },
 
+  // The node gate above checks the AUTHORED muted colour at 3:1, on the reading
+  // that muted is a hint. What the page actually puts in it is the course code
+  // and the term -- content, at 12px and 11px -- so what ships in --bc-muted has
+  // to clear 4.5:1. It did not: a skin's colours were emitted raw, skipping the
+  // readability guard every non-skin palette goes through, and an audit of the
+  // real page found 9 of the 44 below AA (Matcha Strawberry 3.86, Frost 4.05,
+  // Zenburn 4.08, Meadow 4.19, Ayu Light 4.27). This checks the EMITTED value.
+  "the ink a skin emits clears AA on every surface it lands on"() {
+    const fails = [];
+    const pick = (css, name) => {
+      const m = css.match(new RegExp("--bc-" + name + ": ([^;]+);"));
+      return m && m[1].trim();
+    };
+    for (const raw of BC.SKIN_CATALOG) {
+      const t = S.normalize(raw);
+      const css = S.tokenCss(t);
+      const s1 = pick(css, "surface-1"), s2 = pick(css, "surface-2"), s3 = pick(css, "surface-3");
+      for (const name of ["muted", "text-subtle"]) {
+        const ink = pick(css, name);
+        assert.ok(ink, t.id + " emits no --bc-" + name);
+        for (const [label, surf] of [["surface-1", s1], ["surface-2", s2], ["surface-3", s3]]) {
+          const r = BC.color.contrastRatio(ink, surf);
+          if (r < 4.5) fails.push(t.id + " " + name + " on " + label + " " + r.toFixed(2));
+        }
+      }
+    }
+    assert.deepEqual(fails, [], "skin ink below AA for small text:\n  " + fails.join("\n  "));
+  },
+
   "every catalog skin's accent can carry a label"() {
     const fails = [];
     for (const raw of BC.SKIN_CATALOG) {

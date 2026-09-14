@@ -410,15 +410,50 @@
   // is what makes one skin restyle the drawer, the planner and the
   // options page at once: they already read --bc-*, so they need no knowledge
   // that skins exist at all.
+  // Guard a skin's ink the way BC.tokens guards the built-in palettes'.
+  //
+  // A skin's colours were emitted RAW, which meant the readability guard every
+  // non-skin palette goes through was skipped for exactly the palettes most
+  // likely to need it. Audited on the real page across all 44 catalog skins, 9
+  // of them drew the course code and term below AA -- Matcha Strawberry at
+  // 3.86:1, Frost 4.05, Zenburn 4.08, Meadow 4.19, Ayu Light 4.27, and so on.
+  //
+  // The node gate did not see it because it checks muted at 3:1, on the reading
+  // that muted is "a hint, not a heading". On a Canvas card it is neither: it is
+  // the course code and the term, which is content, at 12px and 11px. Small text
+  // is 4.5:1, so that is what it is guarded to here.
+  //
+  // Guarded against all three surfaces it can land on, not just the panel:
+  // muted appears on the page, inside a card and on the recessed surface, and
+  // guarding one of those leaves the other two short.
+  const guardInk = (c, surfaces, min) => {
+    if (!(BC.color && BC.color.ensureContrast)) return c;
+    let out = c;
+    for (const s of surfaces) out = BC.color.ensureContrast(out, s, min);
+    return out;
+  };
+
   S.tokenCss = function (t) {
     if (!t) return "";
+    const s3 = mix(t.panel, t.text, 0.05);
+    const inkSurfaces = [t.panel, t.surface, s3];
+    const muted = guardInk(t.muted, inkSurfaces, 4.5);
     return [
       "--bc-surface-1: " + t.surface + ";",
       "--bc-surface-2: " + t.panel + ";",
-      "--bc-surface-3: " + mix(t.panel, t.text, 0.05) + ";",
+      "--bc-surface-3: " + s3 + ";",
       "--bc-surface-4: " + mix(t.panel, t.text, 0.09) + ";",
       "--bc-text: " + t.text + ";",
-      "--bc-muted: " + t.muted + ";",
+      "--bc-muted: " + muted + ";",
+      // The quietest ink in the system, and the one the dashboard's section
+      // eyebrow uses. Without this a skin left it at whatever the token layer
+      // last set, which is a colour from a different palette entirely.
+      // All three surfaces, like muted. Guarding this against the panel and the
+      // page but not the recessed surface left Gruvbox Light at 4.34:1 and
+      // Solarized Light at 4.32:1 there -- caught by the node gate rather than
+      // the page audit, because nothing on the fixture page happens to put this
+      // ink on surface-3.
+      "--bc-text-subtle: " + guardInk(mix(muted, t.panel, 0.2), inkSurfaces, 4.5) + ";",
       "--bc-border: " + t.border + ";",
       "--bc-accent: " + t.accent + ";",
       "--bc-accent-contrast: " + ink(t.accent) + ";",
