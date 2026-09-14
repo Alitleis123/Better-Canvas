@@ -280,16 +280,22 @@ module.exports = {
   },
 
   "the collapsed tab rail stops being a sticky column"() {
-    // The rail is a sticky flex column. The collapse rule changed the grid but
-    // left both, so a full-height list stayed pinned over the body and the body
-    // scrolled underneath it.
+    // The rail is a sticky column of grouped links. The collapse rule used to
+    // change the grid but leave both the column direction and position:sticky,
+    // so a full-height list stayed pinned over the body and the body scrolled
+    // underneath it. Two guarantees, checked at whichever selector now owns
+    // them: the rail stops being sticky, and its list runs horizontally.
     const src = read("src/shared/settings/index.js");
-    for (const m of src.matchAll(/\.bc-nav \{ flex-direction: row;[^}]*\}/g)) {
-      assert.match(m[0], /position: static/,
-        "a collapsed rail must not stay sticky over the body");
-    }
-    assert.match(src, /\.bc-nav \{ flex-direction: row/,
-      "the collapse rule must reset the column direction");
+    const collapses = [...src.matchAll(/\.bc-nav \{([^}]*)\}/g)]
+      .map((m) => m[1])
+      .filter((body) => /position: static/.test(body));
+    assert.ok(collapses.length >= 2,
+      "both the container-query and the JS-measured collapse must unstick the rail");
+    const rows = [...src.matchAll(/\.bc-nav-groups \{([^}]*)\}/g)]
+      .map((m) => m[1])
+      .filter((body) => /flex-direction: row/.test(body));
+    assert.ok(rows.length >= 2,
+      "a collapsed rail must lay its groups out horizontally, not as a column");
   },
 
   "the settings tab icons are drawn, not typed"() {
@@ -298,12 +304,17 @@ module.exports = {
     // announcements and a shogi piece for notifications, and an emoji for
     // accessibility that broke the monochrome set on every platform.
     const src = read("src/shared/settings/index.js");
-    assert.noMatch(src, /\{ id: "\w+",\s*label: "[^"]*",\s*icon: "/,
-      "a settings tab must not carry a text glyph as its icon");
-    // The geometry moved to BC.icons so the drawer, the planner and the popup
-    // share one set; this only checks the rail still draws from it.
-    assert.match(src, /const TAB_ICON = \{/, "the tab icon map is missing");
-    assert.match(src, /sp\.innerHTML = BC\.icons\.svg\(TAB_ICON\[id\]/,
+    // Each tab names an icon inline now that the rail is grouped, so the check
+    // is no longer "there is no icon key" -- it is that every name RESOLVES in
+    // the shared set. A typo silently rendered an empty box before, which is
+    // the same defect the glyphs had by a different route.
+    const named = [...src.matchAll(/\{ id: "\w+",\s*label: "[^"]*",\s*icon: "([^"]+)"/g)].map((m) => m[1]);
+    assert.ok(named.length >= 10, "the tab rail should name an icon per tab; found " + named.length);
+    const unknown = named.filter((n) => !BC.icons.has(n));
+    assert.deepEqual(unknown, [], "tab icons that are not in the shared set: " + unknown.join(", "));
+    const typed = named.filter((n) => !/^[a-z0-9-]+$/.test(n));
+    assert.deepEqual(typed, [], "a settings tab must not carry a text glyph as its icon");
+    assert.match(src, /sp\.innerHTML = BC\.icons\.svg\(name/,
       "the rail must render through the shared icon set");
     assert.match(read("src/shared/icons.js"), /stroke="currentColor"/,
       "icons must inherit the colour of what they sit in");

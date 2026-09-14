@@ -302,6 +302,14 @@
   --bc-space-7: calc(var(--bc-space-unit) * 4);
   --bc-space-8: calc(var(--bc-space-unit) * 5);
   --bc-space-9: calc(var(--bc-space-unit) * 6);
+  --bc-space-10: calc(var(--bc-space-unit) * 7);
+  /* Panel rhythm. The settings surfaces were built out of --bc-space-6/8 (14px
+     and 20px), which is the bottom of the scale; every "the spacing is off"
+     report was about this. These are the two measurements that set the feel of
+     a panel, so they get names rather than being picked per rule. */
+  --bc-pad-card: calc(var(--bc-space-unit) * 6);    /* 24px */
+  --bc-pad-row:  calc(var(--bc-space-unit) * 3.5);  /* 14px */
+  --bc-gap-card: calc(var(--bc-space-unit) * 4);    /* 16px */
 
   /* The spectrum. A fixed set of hues rather than theme colours, because the
      only thing that reads it maps hue to a VALUE — the rainbow progress style,
@@ -346,11 +354,6 @@
   --bc-text-xl:  calc(17px * var(--bc-font-scale));
   --bc-text-2xl: calc(20px * var(--bc-font-scale));
   --bc-text-figure: calc(24px * var(--bc-font-scale));
-  /* The width a settings row's label is guaranteed before its control is sent
-     to a line of its own. It belongs to the type scale rather than the spacing
-     scale: when a sentence wraps is a function of how big the text is, not of
-     how much air the density setting is buying. */
-  --bc-row-label-min: calc(var(--bc-text-md) * 17);
   --bc-line-height: 1.5;
   --bc-leading-tight: 1.25;
   --bc-leading-body: var(--bc-line-height);

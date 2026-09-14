@@ -26,111 +26,187 @@
       root.appendChild(app);
       app.appendChild(el("style", null, CSS));
 
-      const undoBtn = S.button({ label: "Undo", icon: "chevron-left", onClick: () => store.undo() });
-      const redoBtn = S.button({ label: "Redo", icon: "chevron-right", onClick: () => store.redo() });
+      const iconBtn = (name, label, onClick) => {
+        const b = el("button", { class: "bc-icon-btn", type: "button", title: label, "aria-label": label });
+        b.innerHTML = BC.icons.svg(name, { size: 16 });
+        b.addEventListener("click", onClick);
+        return b;
+      };
+
+      const undoBtn = iconBtn("chevron-left", "Undo", () => store.undo());
+      const redoBtn = iconBtn("chevron-right", "Redo", () => store.redo());
+
+      // Import / Export / Reset were three full-width buttons on a bar of their
+      // own. They are used once each, ever, and they were sharing a row with the
+      // one switch that turns the extension off -- so they move behind a mark and
+      // the bar goes away.
+      const menu = h("div.bc-menu", { role: "menu", hidden: true }, null);
+      const menuItem = (icon, label, onClick, danger) => {
+        const b = el("button", { class: "bc-menu-item" + (danger ? " bc-danger" : ""), type: "button", role: "menuitem" });
+        b.innerHTML = BC.icons.svg(icon, { size: 15 });
+        b.appendChild(document.createTextNode(label));
+        b.addEventListener("click", () => { closeMenu(); onClick(); });
+        return b;
+      };
+      const menuBtn = iconBtn("more", "More actions", (e) => { e.stopPropagation(); toggleMenu(); });
+      menuBtn.setAttribute("aria-haspopup", "menu");
+      menuBtn.setAttribute("aria-expanded", "false");
+      function closeMenu() { menu.hidden = true; menuBtn.setAttribute("aria-expanded", "false"); }
+      function toggleMenu() {
+        menu.hidden = !menu.hidden;
+        menuBtn.setAttribute("aria-expanded", String(!menu.hidden));
+        if (!menu.hidden) (menu.querySelector(".bc-menu-item") || menu).focus();
+      }
+      menu.appendChild(menuItem("folder", "Import settings…", () => importFlow(store)));
+      menu.appendChild(menuItem("external-link", "Export settings", () => exportFlow(store)));
+      menu.appendChild(h("div.bc-menu-sep", null));
+      menu.appendChild(menuItem("refresh", "Reset everything", () => { if (confirm("Reset all settings to defaults?")) store.reset(); }, true));
+      // The root, not document: in the drawer this tree lives in a shadow root,
+      // where a document listener never sees the click that should dismiss.
+      app.addEventListener("click", (e) => { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); });
+      app.addEventListener("keydown", (e) => { if (e.key === "Escape" && !menu.hidden) { closeMenu(); menuBtn.focus(); } });
+
+      // The master switch keeps its place on the one remaining bar -- it is the
+      // control that decides whether any of the rest does anything.
+      const masterInput = el("input", {
+        type: "checkbox", class: "bc-sr-only", checked: !!store.get().enabled,
+        onchange: (e) => { store.set((d) => { d.enabled = e.target.checked; }); paintMaster(); },
+      });
+      const masterLabel = h("span", null, "On");
+      const master = h("label.bc-master", { title: "Enable Better Canvas" }, [masterInput, masterLabel]);
+      function paintMaster() {
+        master.classList.toggle("bc-on", masterInput.checked);
+        masterLabel.textContent = masterInput.checked ? "On" : "Off";
+      }
+      paintMaster();
 
       const header = h("header.bc-header", null, [
         h("div.bc-brand", null, [
           h("span.bc-logo", null, "BC"),
           h("div", null, [h("div.bc-brand-name", null, "Better Canvas"), h("div.bc-brand-sub", null, "v" + (BC.VERSION || ""))]),
         ]),
+        master,
+        searchInput(store, (q) => applySearch(q)),
         h("div.bc-header-actions", null, [
-          searchInput(store, (q) => applySearch(q)),
-          undoBtn,
-          redoBtn,
+          undoBtn, redoBtn,
+          h("div.bc-menu-wrap", null, [menuBtn, menu]),
         ]),
       ]);
       app.appendChild(header);
 
-      const masterInput = el("input", {
-        type: "checkbox", checked: !!store.get().enabled,
-        onchange: (e) => store.set((d) => { d.enabled = e.target.checked; }),
-      });
-      const bar = h("div.bc-topbar", null, [
-        h("label.bc-master", null, [
-          masterInput,
-          h("span", null, "Enable Better Canvas"),
-        ]),
-        h("div.bc-topbar-right", null, [
-          S.button({ label: "Import", icon: "folder", onClick: () => importFlow(store) }),
-          S.button({ label: "Export", icon: "external-link", onClick: () => exportFlow(store) }),
-          S.button({ label: "Reset",  variant: "danger", icon: "refresh", onClick: () => { if (confirm("Reset all settings to defaults?")) store.reset(); } }),
-        ]),
-      ]);
-      app.appendChild(bar);
-
       const shellWrap = h("div.bc-shell-wrap", null);
       const shell = h("div.bc-shell", null);
-      const nav   = h("nav.bc-nav", null);
+      const nav   = h("nav.bc-nav", { "aria-label": "Settings sections" }, null);
+      const navGroups = h("div.bc-nav-groups", null);
+      nav.appendChild(navGroups);
       const body  = h("main.bc-body", null);
       shell.appendChild(nav); shell.appendChild(body);
       shellWrap.appendChild(shell);
       app.appendChild(shellWrap);
 
-      // Which shared icon stands for each tab. The geometry lives in BC.icons so
-      // the drawer, the planner widget and the popup cannot drift apart; this
-      // map is only the naming.
-      const TAB_ICON = {
-        dashboard: "grid",       todo: "check-circle",  theming: "contrast",
-        themes: "palette",       cosmetics: "image",    navigation: "menu",
-        grades: "bars",          notifications: "bell", files: "folder",
-        calendar: "calendar",    announcements: "megaphone",
-        productivity: "timer",   accessibility: "accessibility",
-        insights: "trend",       shortcuts: "command",  instructor: "mortarboard",
-        about: "info",
+      // Seventeen tabs listed flat, alphabetically by nothing, was the panel's
+      // biggest single source of "where is that setting". Five of them held two
+      // rows each -- Files, Calendar, Announcements, Instructor and the Modules
+      // and Discussions blocks -- so they fold into one "Course tools" tab, and
+      // Accessibility folds into Appearance beside the colour-blind and
+      // reduced-motion switches it already belonged with. Thirteen tabs in four
+      // named groups; nothing was removed, only put somewhere findable.
+      const GROUPS = [
+        { label: "Look", tabs: [
+          { id: "themes",        label: "Themes",       icon: "palette",  sub: "Full-page looks with their own art, type and palette." },
+          { id: "theming",       label: "Appearance",   icon: "contrast", sub: "Dark mode, colour, type, density and reading aids." },
+          { id: "cosmetics",     label: "Background",   icon: "image",    sub: "Page background, patterns and your own CSS." },
+        ] },
+        { label: "Pages", tabs: [
+          { id: "dashboard",     label: "Dashboard",    icon: "grid",         sub: "Course cards, widgets and the sidebar." },
+          { id: "todo",          label: "To Do",        icon: "check-circle", sub: "Which planner you get, and how a task is drawn." },
+          { id: "grades",        label: "Grades",       icon: "bars",         sub: "Grade tools, goals and the GPA calculator." },
+          { id: "coursetools",   label: "Course tools", icon: "folder",       sub: "Files, calendar, announcements, modules, discussions." },
+        ] },
+        { label: "Tools", tabs: [
+          { id: "productivity",  label: "Focus",        icon: "timer",   sub: "Focus mode, sticky notes, drafts and reading aids." },
+          { id: "notifications", label: "Reminders",    icon: "bell",    sub: "What you get told about, and when." },
+          { id: "navigation",    label: "Navigation",   icon: "menu",    sub: "Reorder or hide Canvas's own nav, and add your own links." },
+          { id: "shortcuts",     label: "Shortcuts",    icon: "command", sub: "Every action, rebindable." },
+        ] },
+        { label: "You", tabs: [
+          { id: "insights",      label: "Insights",     icon: "trend", sub: "Study time, grade history and Pomodoro sessions — all local." },
+          { id: "about",         label: "About",        icon: "info",  sub: "Version, privacy and diagnostics." },
+        ] },
+      ];
+
+      const RENDERERS = {
+        dashboard: renderDashboard, todo: renderTodo, theming: renderTheming,
+        themes: renderThemes, cosmetics: renderCosmetics, navigation: renderNavigation,
+        grades: renderGrades, notifications: renderNotifications,
+        coursetools: renderCourseTools, productivity: renderProductivity,
+        insights: renderInsights, shortcuts: renderShortcuts, about: renderAbout,
       };
+      const TABS = GROUPS.flatMap((g) => g.tabs.map((t) => ({ ...t, render: RENDERERS[t.id] })));
 
       // Drawn, not typed. These were geometric glyphs (a telephone for
       // announcements, a shogi piece for notifications) which are at the mercy
       // of the host font and, where the font had them, meant something else.
-      function tabIcon(id) {
+      function tabIcon(name) {
         const sp = h("span.bc-tab-ic", null);
         sp.setAttribute("aria-hidden", "true");
-        sp.innerHTML = BC.icons.svg(TAB_ICON[id] || "circle");
+        sp.innerHTML = BC.icons.svg(name || "circle");
         return sp;
       }
 
-      const TABS = [
-        { id: "dashboard",     label: "Dashboard", render: renderDashboard },
-        { id: "todo",          label: "To Do", render: renderTodo },
-        { id: "theming",       label: "Appearance", render: renderTheming },
-        { id: "themes",        label: "Themes", render: renderThemes },
-        { id: "cosmetics",     label: "Background & CSS", render: renderCosmetics },
-        { id: "navigation",    label: "Navigation", render: renderNavigation },
-        { id: "grades",        label: "Grades & GPA", render: renderGrades },
-        { id: "notifications", label: "Notifications", render: renderNotifications },
-        { id: "files",         label: "Files", render: renderFiles },
-        { id: "calendar",      label: "Calendar", render: renderCalendar },
-        { id: "announcements", label: "Announcements", render: renderAnnouncements },
-        { id: "productivity",  label: "Productivity", render: renderProductivity },
-        { id: "accessibility", label: "Accessibility", render: renderA11y },
-        { id: "insights",      label: "Insights", render: renderInsights },
-        { id: "shortcuts",     label: "Shortcuts", render: renderShortcuts },
-        { id: "instructor",    label: "Instructor", render: renderInstructor },
-        { id: "about",         label: "About", render: renderAbout },
-      ];
-
-      let active = "dashboard";
+      let active = "themes";
       let searchQuery = "";
 
       // The nav is built ONCE, outside showTab, so neither a tab switch nor a
       // state change rebuilds it (which is what kept resetting the responsive
       // horizontal nav's scroll position).
       const tabBtns = new Map();
-      for (const t of TABS) {
-        const btn = h("button.bc-tab", { type: "button", "data-tab": t.id, onclick: () => showTab(t.id) },
-          [tabIcon(t.id), t.label]);
-        tabBtns.set(t.id, btn);
-        nav.appendChild(btn);
+      for (const g of GROUPS) {
+        const group = h("div.bc-nav-group", null, [h("div.bc-nav-group-label", null, g.label)]);
+        for (const t of g.tabs) {
+          const btn = h("button.bc-tab", { type: "button", "data-tab": t.id, onclick: () => showTab(t.id) },
+            [tabIcon(t.icon), t.label]);
+          tabBtns.set(t.id, btn);
+          group.appendChild(btn);
+        }
+        navGroups.appendChild(group);
       }
 
       function showTab(id) {
         active = id;
-        for (const [tid, b] of tabBtns) b.classList.toggle("active", tid === active);
+        for (const [tid, b] of tabBtns) {
+          const on = tid === active;
+          b.classList.toggle("active", on);
+          b.setAttribute("aria-current", on ? "page" : "false");
+        }
         const tab = TABS.find((t) => t.id === active) || TABS[0];
+        // One line at the top of the tab, so the sections below it don't each
+        // need a sentence explaining themselves. That is where most of the
+        // panel's word count used to live.
+        const head = h("div.bc-tab-head", null, [
+          h("span.bc-tab-head-ic", { "aria-hidden": "true" }, null),
+          h("div", null, [
+            h("h2.bc-tab-title", null, tab.label),
+            tab.sub ? h("p.bc-tab-sub", null, tab.sub) : null,
+          ]),
+        ]);
+        head.firstChild.innerHTML = BC.icons.svg(tab.icon || "circle", { size: 20 });
+        // A renderer that throws used to leave the PREVIOUS tab's body mounted
+        // while the rail highlighted the new one -- so the panel silently showed
+        // the wrong page and nothing said so. Build first, and if it fails, say
+        // that instead of lying about which tab you are on.
+        let panel;
+        try {
+          panel = tab.render(store, adapter, { searchQuery });
+        } catch (e) {
+          BC.util.warn("settings: " + tab.id + " failed to render", e);
+          panel = h("div.bc-tab-body", null, [
+            h("div.bc-notice", null, "This section could not be loaded. Reload the Canvas tab; if it keeps happening, the About tab has the error log."),
+          ]);
+        }
         // Controls in the outgoing tab detach here; C.bindings.sync prunes them
         // lazily on its next pass via isConnected, so there's nothing to unwire.
-        body.replaceChildren(tab.render(store, adapter, { searchQuery }));
+        body.replaceChildren(head, panel);
         applySearch(searchQuery);
       }
 
@@ -153,7 +229,7 @@
         // differs, so the control the user is touching is never destroyed. This is
         // what lets the toggle animate, the caret survive, and a drag continue.
         S.bindings.sync(state);
-        if (masterInput.checked !== !!state.enabled) masterInput.checked = !!state.enabled;
+        if (masterInput.checked !== !!state.enabled) { masterInput.checked = !!state.enabled; paintMaster(); }
         undoBtn.disabled = !store.canUndo();
         redoBtn.disabled = !store.canRedo();
         // Wholesale replacement (reset / import / undo / redo / external change)
@@ -181,51 +257,57 @@
     const S = BC.SettingsComponents;
     const s = store.get();
     const d = s.dashboard;
+    const sw = (k) => S.switch({ get: () => d[k], set: (v) => store.set((x) => { x.dashboard[k] = v; }) });
+    const wsw = (k) => S.switch({ get: () => d.widgets[k], set: (v) => store.set((x) => { x.dashboard.widgets[k] = v; }) });
 
     const container = h("div.bc-tab-body", null);
     container.appendChild(S.section({
-      title: "General",
+      title: "Cards", icon: "grid",
       children: [
-        S.row({ label: "Customize dashboard", control: S.switch({ get: () => d.enabled, set: (v) => store.set((x) => { x.dashboard.enabled = v; }) }) }),
-        S.row({ label: "Hide concluded courses", hint: "Fetched from Canvas on demand.",
-          control: S.switch({ get: () => d.autoHideConcluded, set: (v) => store.set((x) => { x.dashboard.autoHideConcluded = v; }) }) }),
-        S.row({ label: "Layout",
+        S.row({ label: "Restyle the dashboard", icon: "image", control: sw("enabled") }),
+        S.row({ label: "Layout", icon: "columns",
           control: S.select({ get: () => d.layout, set: (v) => store.set((x) => { x.dashboard.layout = v; }),
             options: [{value:"grid",label:"Grid"},{value:"list",label:"List"},{value:"masonry",label:"Masonry"},{value:"compact",label:"Compact"}] }) }),
-        S.row({ label: "Card size",
+        S.row({ label: "Card size", icon: "grid",
           control: S.select({ get: () => d.cardSize, set: (v) => store.set((x) => { x.dashboard.cardSize = v; }),
             options: [{value:"s",label:"Small"},{value:"m",label:"Medium"},{value:"l",label:"Large"}] }) }),
-        S.row({ label: "Card corner radius",
+        S.row({ label: "Corner radius", icon: "circle",
           control: S.slider({ get: () => d.cardRadius, set: (v) => store.set((x) => { x.dashboard.cardRadius = v; }), min:0, max:24, format:(v)=>v+"px" }) }),
-        S.row({ label: "Hover lift animation", control: S.switch({ get: () => d.hoverLift, set: (v) => store.set((x) => { x.dashboard.hoverLift = v; }) }) }),
-        S.row({ label: "Show inline grade on card", hint:"Requires Canvas grade endpoint access.",
-          control: S.switch({ get: () => d.showInlineGrade, set: (v) => store.set((x) => { x.dashboard.showInlineGrade = v; }) }) }),
-        S.row({ label: "Show progress bar",  control: S.switch({ get: () => d.showProgressBar, set: (v) => store.set((x) => { x.dashboard.showProgressBar = v; }) }) }),
-        S.row({ label: "Show due-count badge", hint: "Items due in the next 24 hours.",
-          control: S.switch({ get: () => d.showBadges, set: (v) => store.set((x) => { x.dashboard.showBadges = v; }) }) }),
-        S.row({ label: "Show grade sparkline", hint: "Needs a few days of locally recorded grade history.",
-          control: S.switch({ get: () => d.showSparkline, set: (v) => store.set((x) => { x.dashboard.showSparkline = v; }) }) }),
-        S.row({ label: "Show course search bar", control: S.switch({ get: () => d.courseSearch, set: (v) => store.set((x) => { x.dashboard.courseSearch = v; }) }) }),
-        S.row({ label: "Semester progress bar", hint: "Week X of Y · days left, from your term dates.",
-          control: S.switch({ get: () => d.semesterProgress, set: (v) => store.set((x) => { x.dashboard.semesterProgress = v; }) }) }),
+        S.row({ label: "Lift on hover", icon: "trend", control: sw("hoverLift") }),
+        S.row({ label: "Hide concluded courses", icon: "archive", control: sw("autoHideConcluded") }),
+        S.row({ label: "Search bar above the cards", icon: "search", control: sw("courseSearch") }),
+      ],
+    }));
+
+    // Six switches that all answer "what else goes on the card". They were
+    // mixed into the layout list, so the one question was asked six times in
+    // six different places.
+    container.appendChild(S.section({
+      title: "On each card", icon: "tag",
+      children: [
+        S.row({ label: "Grade", icon: "bars", hint: "Needs grade access on your Canvas.", control: sw("showInlineGrade") }),
+        S.row({ label: "Progress bar", icon: "timeline", control: sw("showProgressBar") }),
+        S.row({ label: "Due-count badge", icon: "bell", hint: "Anything due in 24 hours.", control: sw("showBadges") }),
+        S.row({ label: "Grade sparkline", icon: "trend", hint: "Fills in after a few days of history.", control: sw("showSparkline") }),
       ],
     }));
 
     container.appendChild(S.section({
-      title: "Widgets",
+      title: "Sidebar", icon: "columns",
       children: [
-        S.row({ label: "To Do widget",        control: S.switch({ get: () => d.widgets.todo,           set: (v) => store.set((x) => { x.dashboard.widgets.todo = v; }) }) }),
-        S.row({ label: "Coming Up",           control: S.switch({ get: () => d.widgets.comingUp,       set: (v) => store.set((x) => { x.dashboard.widgets.comingUp = v; }) }) }),
-        S.row({ label: "Recent Feedback",     control: S.switch({ get: () => d.widgets.recentFeedback, set: (v) => store.set((x) => { x.dashboard.widgets.recentFeedback = v; }) }) }),
-        S.row({ label: "GPA card",            control: S.switch({ get: () => d.widgets.gpa,            set: (v) => store.set((x) => { x.dashboard.widgets.gpa = v; }) }) }),
-        S.row({ label: "Hide entire right sidebar", control: S.switch({ get: () => d.hideSidebar, set: (v) => store.set((x) => { x.dashboard.hideSidebar = v; }) }) }),
+        S.row({ label: "To Do", icon: "check-circle", control: wsw("todo") }),
+        S.row({ label: "Coming Up", icon: "clock", control: wsw("comingUp") }),
+        S.row({ label: "Recent Feedback", icon: "megaphone", control: wsw("recentFeedback") }),
+        S.row({ label: "GPA", icon: "mortarboard", control: wsw("gpa") }),
+        S.row({ label: "Semester progress", icon: "timeline", hint: "Week 9 of 15, from your term dates.", control: sw("semesterProgress") }),
+        S.row({ label: "Hide the sidebar entirely", icon: "close", control: sw("hideSidebar") }),
       ],
     }));
 
     // Course list section — pulls from Canvas via adapter.
     const coursesSection = S.section({
-      title: "Courses",
-      description: "Reorder by dragging. Rename, recolor, or hide each card. Changes apply live.",
+      title: "Your courses", icon: "mortarboard",
+      description: "Drag to reorder. Rename, recolour or hide any card.",
       children: [h("div.bc-course-list", { id: "bc-courses-mount" }, "Loading courses…")],
     });
     container.appendChild(coursesSection);
@@ -351,14 +433,21 @@
     const S = BC.SettingsComponents;
     const t = store.get().todo;
     const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Mode", children: [
-      S.row({ label: "To Do list style", hint: "Canvas default, a clean restyle, or the Better Canvas planner.",
+    const planner = (st) => st.todo.mode === "custom";
+
+    // "Mode" was a section holding one row called "To Do list style". The
+    // section heading and the row label said the same thing twice, and the
+    // section below it then had to explain in a sentence that it only applied
+    // when this one was set to a particular value -- which enabledWhen now
+    // shows rather than states.
+    c.appendChild(S.section({ title: "Which planner", icon: "check-circle", children: [
+      S.row({ label: "To Do list", icon: "list",
         control: S.select({ get: () => t.mode, set: (v) => store.set((x) => { x.todo.mode = v; }),
-          options: [{value:"default",label:"Canvas default"},{value:"clean",label:"Clean circles"},{value:"custom",label:"Planner widget"}] }) }),
+          options: [{value:"default",label:"Canvas's own"},{value:"clean",label:"Canvas, tidied"},{value:"custom",label:"Better Canvas planner"}] }) }),
     ]}));
 
-    c.appendChild(S.section({ title: "Planner widget", description: "Only applies when mode is Planner widget.", children: [
-      S.row({ label: "Layout", hint: "How each task is drawn. Applies to the list and kanban views.",
+    c.appendChild(S.section({ title: "How a task looks", icon: "timeline", children: [
+      S.row({ label: "Layout", icon: "columns", wide: true, enabledWhen: planner,
         control: S.choice({
           ariaLabel: "Planner layout",
           get: () => t.layout,
@@ -372,29 +461,9 @@
             { value: "timeline",    label: "Timeline" },
           ],
         }) }),
-      S.row({ label: "View",
-        control: S.select({ get: () => t.view, set: (v) => store.set((x) => { x.todo.view = v; }),
-          // "Day" and "Week" were selectable but todo.js only ever rendered
-          // list/kanban/timeblock, so picking them silently fell back to List.
-          options: [{value:"list",label:"List"},{value:"kanban",label:"Kanban"},{value:"timeblock",label:"Time-block"}] }) }),
-      S.row({ label: "Look-ahead window",
-        control: S.select({ get: () => String(t.rangeDays), set: (v) => store.set((x) => { x.todo.rangeDays = parseInt(v, 10); }),
-          options: [{value:"3",label:"3 days"},{value:"7",label:"1 week"},{value:"14",label:"2 weeks"},{value:"30",label:"1 month"}] }) }),
-      S.row({ label: "Group tasks by",
-        control: S.select({ get: () => t.groupBy, set: (v) => store.set((x) => { x.todo.groupBy = v; }),
-          options: [{value:"day",label:"Day"},{value:"course",label:"Course"},{value:"priority",label:"Priority"},{value:"tag",label:"Tag"},{value:"none",label:"None"}] }) }),
-      S.row({ label: "Show completed", control: S.switch({ get: () => t.showCompleted, set: (v) => store.set((x) => { x.todo.showCompleted = v; }) }) }),
-      S.row({ label: "Show New Task composer", control: S.switch({ get: () => t.allowNewTask, set: (v) => store.set((x) => { x.todo.allowNewTask = v; }) }) }),
-      S.row({ label: "Progress accent", hint: "Colours the indicator, the checkboxes and the time-block grid.",
-        control: S.color({ get: () => t.accent, set: (v) => store.set((x) => { x.todo.accent = v; }), allowEmpty: true }) }),
-    ]}));
-
-    // A whole section, because this is the widget's most visible element and the
-    // old control was a switch labelled "Show weekly progress ring": one style,
-    // take it or leave it. Each option draws itself at 60% progress, so the
-    // choice is made by looking rather than by reading adjectives.
-    c.appendChild(S.section({ title: "Progress indicator", children: [
-      S.row({ label: "Style",
+      // Each option draws itself at 60% progress, so the choice is made by
+      // looking rather than by reading six adjectives in a dropdown.
+      S.row({ label: "Progress", icon: "circle", wide: true, enabledWhen: planner,
         control: S.choice({
           ariaLabel: "Progress indicator style",
           get: () => t.progress,
@@ -409,31 +478,56 @@
             { value: "off",      label: "None" },
           ],
         }) }),
+      S.row({ label: "Accent", icon: "target", enabledWhen: planner,
+        control: S.color({ get: () => t.accent, set: (v) => store.set((x) => { x.todo.accent = v; }), allowEmpty: true }) }),
     ]}));
 
-    c.appendChild(S.section({ title: "Streaks", children: [
-      S.row({ label: "Track a daily streak", control: S.switch({ get: () => t.streaks.enabled, set: (v) => store.set((x) => { x.todo.streaks.enabled = v; }) }) }),
-      S.row({ label: "Grace days", hint: "Missed days you can skip without breaking your streak.",
-        control: S.number({ get: () => t.streaks.graceDays, set: (v) => store.set((x) => { x.todo.streaks.graceDays = Math.max(0, v|0); }), min:0, max:14 }) }),
-      S.row({ label: "Repairs per month", control: S.number({ get: () => t.streaks.repairsAvailable, set: (v) => store.set((x) => { x.todo.streaks.repairsAvailable = Math.max(0, v|0); }), min:0, max:31 }) }),
-    ]}));
-
-    c.appendChild(S.section({ title: "Pomodoro", children: [
-      S.row({ label: "Enable Pomodoro", control: S.switch({ get: () => t.pomodoro.enabled, set: (v) => store.set((x) => { x.todo.pomodoro.enabled = v; }) }) }),
-      S.row({ label: "Work minutes",       control: S.number({ get: () => t.pomodoro.workMin, set: (v) => store.set((x) => { x.todo.pomodoro.workMin = Math.max(1, v|0); }), min:1, max:180 }) }),
-      S.row({ label: "Short break",        control: S.number({ get: () => t.pomodoro.shortBreakMin, set: (v) => store.set((x) => { x.todo.pomodoro.shortBreakMin = Math.max(1, v|0); }), min:1, max:60 }) }),
-      S.row({ label: "Long break",         control: S.number({ get: () => t.pomodoro.longBreakMin,  set: (v) => store.set((x) => { x.todo.pomodoro.longBreakMin  = Math.max(1, v|0); }), min:1, max:120 }) }),
-      S.row({ label: "Long break every N pomodoros", control: S.number({ get: () => t.pomodoro.longEvery, set: (v) => store.set((x) => { x.todo.pomodoro.longEvery = Math.max(1, v|0); }), min:1, max:12 }) }),
-      S.row({ label: "Sound on finish",    control: S.switch({ get: () => t.pomodoro.sound, set: (v) => store.set((x) => { x.todo.pomodoro.sound = v; }) }) }),
-    ]}));
-
-    c.appendChild(renderRecurringEditor(store));
-
-    c.appendChild(S.section({ title: "Tags", children: [
-      S.row({ label: "Task tags", hint: "Attached to individual tasks via the planner.",
+    c.appendChild(S.section({ title: "What it shows", icon: "checklist", children: [
+      S.row({ label: "View", icon: "grid", enabledWhen: planner,
+        control: S.select({ get: () => t.view, set: (v) => store.set((x) => { x.todo.view = v; }),
+          // "Day" and "Week" were selectable but todo.js only ever rendered
+          // list/kanban/timeblock, so picking them silently fell back to List.
+          options: [{value:"list",label:"List"},{value:"kanban",label:"Kanban"},{value:"timeblock",label:"Time-block"}] }) }),
+      S.row({ label: "How far ahead", icon: "clock", enabledWhen: planner,
+        control: S.select({ get: () => String(t.rangeDays), set: (v) => store.set((x) => { x.todo.rangeDays = parseInt(v, 10); }),
+          options: [{value:"3",label:"3 days"},{value:"7",label:"1 week"},{value:"14",label:"2 weeks"},{value:"30",label:"1 month"}] }) }),
+      S.row({ label: "Group by", icon: "list", enabledWhen: planner,
+        control: S.select({ get: () => t.groupBy, set: (v) => store.set((x) => { x.todo.groupBy = v; }),
+          options: [{value:"day",label:"Day"},{value:"course",label:"Course"},{value:"priority",label:"Priority"},{value:"tag",label:"Tag"},{value:"none",label:"None"}] }) }),
+      S.row({ label: "Keep finished tasks visible", icon: "check", enabledWhen: planner,
+        control: S.switch({ get: () => t.showCompleted, set: (v) => store.set((x) => { x.todo.showCompleted = v; }) }) }),
+      S.row({ label: "Add-a-task box", icon: "plus", enabledWhen: planner,
+        control: S.switch({ get: () => t.allowNewTask, set: (v) => store.set((x) => { x.todo.allowNewTask = v; }) }) }),
+      S.row({ label: "Tags", icon: "tag", wide: true, enabledWhen: planner,
         control: S.tags({ get: () => t.tags, set: (v) => store.set((x) => { x.todo.tags = v; }) }) }),
     ]}));
 
+    c.appendChild(S.section({ title: "Streaks", icon: "flame", children: [
+      S.row({ label: "Count a daily streak", icon: "flame",
+        control: S.switch({ get: () => t.streaks.enabled, set: (v) => store.set((x) => { x.todo.streaks.enabled = v; }) }) }),
+      S.row({ label: "Grace days", icon: "calendar", hint: "Days you can miss without losing it.", enabledWhen: (st) => st.todo.streaks.enabled,
+        control: S.number({ get: () => t.streaks.graceDays, set: (v) => store.set((x) => { x.todo.streaks.graceDays = Math.max(0, v|0); }), min:0, max:14 }) }),
+      S.row({ label: "Repairs a month", icon: "refresh", enabledWhen: (st) => st.todo.streaks.enabled,
+        control: S.number({ get: () => t.streaks.repairsAvailable, set: (v) => store.set((x) => { x.todo.streaks.repairsAvailable = Math.max(0, v|0); }), min:0, max:31 }) }),
+    ]}));
+
+    const pom = (st) => st.todo.pomodoro.enabled;
+    c.appendChild(S.section({ title: "Pomodoro", icon: "timer", children: [
+      S.row({ label: "Pomodoro timer", icon: "timer",
+        control: S.switch({ get: () => t.pomodoro.enabled, set: (v) => store.set((x) => { x.todo.pomodoro.enabled = v; }) }) }),
+      S.row({ label: "Work", icon: "play", hint: "Minutes.", enabledWhen: pom,
+        control: S.number({ get: () => t.pomodoro.workMin, set: (v) => store.set((x) => { x.todo.pomodoro.workMin = Math.max(1, v|0); }), min:1, max:180 }) }),
+      S.row({ label: "Short break", icon: "pause", enabledWhen: pom,
+        control: S.number({ get: () => t.pomodoro.shortBreakMin, set: (v) => store.set((x) => { x.todo.pomodoro.shortBreakMin = Math.max(1, v|0); }), min:1, max:60 }) }),
+      S.row({ label: "Long break", icon: "stop", enabledWhen: pom,
+        control: S.number({ get: () => t.pomodoro.longBreakMin, set: (v) => store.set((x) => { x.todo.pomodoro.longBreakMin = Math.max(1, v|0); }), min:1, max:120 }) }),
+      S.row({ label: "Long break after", icon: "skip-forward", hint: "Pomodoros.", enabledWhen: pom,
+        control: S.number({ get: () => t.pomodoro.longEvery, set: (v) => store.set((x) => { x.todo.pomodoro.longEvery = Math.max(1, v|0); }), min:1, max:12 }) }),
+      S.row({ label: "Chime when it ends", icon: "speaker", enabledWhen: pom,
+        control: S.switch({ get: () => t.pomodoro.sound, set: (v) => store.set((x) => { x.todo.pomodoro.sound = v; }) }) }),
+    ]}));
+
+    c.appendChild(renderRecurringEditor(store));
     return c;
   }
 
@@ -497,7 +591,7 @@
 
     return S.section({
       title: "Recurring tasks",
-      description: "Repeat tasks daily, weekly, or monthly. Stored on this device; each day checks off independently.",
+      description: "Daily, weekly or monthly. Each occurrence is ticked off on its own.",
       children,
     });
   }
@@ -536,85 +630,90 @@
     const S = BC.SettingsComponents;
     const t = store.get().theming;
     const c = h("div.bc-tab-body", null);
+    const set = (fn) => (v) => store.set((x) => fn(x, v));
     c.appendChild(contrastNotice(store));
-    c.appendChild(S.section({ title: "Dark mode", children: [
-      S.row({ label: "Dark mode",
-        control: S.select({ get: () => t.darkMode, set: (v) => store.set((x) => { x.theming.darkMode = v; }),
-          options: [{value:"off",label:"Off"},{value:"on",label:"On"},{value:"auto",label:"Auto (system)"},{value:"scheduled",label:"Scheduled"}] }) }),
-      S.row({ label: "Schedule",
+
+    // "Dark mode" used to be a section whose first row was also called "Dark
+    // mode", and "Light theme" was a whole card holding one dropdown. Both
+    // choose what colour the page is, so they are one section and the rows are
+    // named for what they answer rather than repeating the heading.
+    c.appendChild(S.section({ title: "Colour", icon: "contrast", children: [
+      S.row({ label: "Dark mode", icon: "moon",
+        control: S.select({ get: () => t.darkMode, set: set((x, v) => { x.theming.darkMode = v; }),
+          options: [{value:"off",label:"Off"},{value:"on",label:"On"},{value:"auto",label:"Match system"},{value:"scheduled",label:"On a schedule"}] }) }),
+      S.row({ label: "Schedule", icon: "clock", wide: true, enabledWhen: (s) => s.theming.darkMode === "scheduled",
         control: h("div.bc-inline", null, [
-          el("input", { type: "time", value: t.darkSchedule.start, onchange: (e) => store.set((x) => { x.theming.darkSchedule.start = e.target.value; }) }),
-          h("span", null, " to "),
-          el("input", { type: "time", value: t.darkSchedule.end, onchange: (e) => store.set((x) => { x.theming.darkSchedule.end = e.target.value; }) }),
+          el("input", { type: "time", value: t.darkSchedule.start, "aria-label": "Dark mode starts", onchange: (e) => store.set((x) => { x.theming.darkSchedule.start = e.target.value; }) }),
+          h("span", null, "to"),
+          el("input", { type: "time", value: t.darkSchedule.end, "aria-label": "Dark mode ends", onchange: (e) => store.set((x) => { x.theming.darkSchedule.end = e.target.value; }) }),
         ]) }),
-      S.row({ label: "Dark tone",
-        control: S.select({ get: () => t.darkTone, set: (v) => store.set((x) => { x.theming.darkTone = v; }),
+      S.row({ label: "Dark palette", icon: "palette",
+        control: S.select({ get: () => t.darkTone, set: set((x, v) => { x.theming.darkTone = v; }),
           options: Object.entries(BC.DARK_TONES).map(([k, v]) => ({ value: k, label: v.label })) }) }),
-      S.row({ label: "Custom dark background", control: S.color({ get: () => t.darkBg, set: (v) => store.set((x) => { x.theming.darkBg = v; }), allowEmpty: true }) }),
-    ]}));
-
-    c.appendChild(S.section({ title: "Light theme", children: [
-      S.row({ label: "Light palette",
-        control: S.select({ get: () => t.lightPreset, set: (v) => store.set((x) => { x.theming.lightPreset = v; }),
+      S.row({ label: "Light palette", icon: "image",
+        control: S.select({ get: () => t.lightPreset, set: set((x, v) => { x.theming.lightPreset = v; }),
           options: Object.entries(BC.LIGHT_PRESETS).map(([k, v]) => ({ value: k, label: v.label })) }) }),
+      S.row({ label: "Accent", icon: "target",
+        control: S.color({ get: () => t.accentColor, set: set((x, v) => { x.theming.accentColor = v; }), allowEmpty: true }) }),
+      S.row({ label: "Custom dark background", icon: "contrast",
+        control: S.color({ get: () => t.darkBg, set: set((x, v) => { x.theming.darkBg = v; }), allowEmpty: true }) }),
     ]}));
 
-    c.appendChild(S.section({ title: "Accent & type", children: [
-      S.row({ label: "Accent color", hint:"Overrides Canvas's brand accent.",
-        control: S.color({ get: () => t.accentColor, set: (v) => store.set((x) => { x.theming.accentColor = v; }), allowEmpty: true }) }),
-      S.row({ label: "Font family", hint:"CSS font-family stack, or leave blank for default.",
-        control: S.text({ get: () => t.font, set: (v) => store.set((x) => { x.theming.font = v; }), placeholder: "e.g. Inter, system-ui, sans-serif" }) }),
-      S.row({ label: "Font size scale",
-        control: S.select({ get: () => t.fontSizeScale, set: (v) => store.set((x) => { x.theming.fontSizeScale = v; }),
+    c.appendChild(S.section({ title: "Type", icon: "file-text", children: [
+      // wide: a font stack is a sentence, and as a right-aligned control it was
+      // an orphaned box under a hint with nothing above it to align to.
+      S.row({ label: "Font", icon: "file-text", wide: true,
+        control: S.text({ get: () => t.font, set: set((x, v) => { x.theming.font = v; }), placeholder: "Leave blank for the Canvas default — or e.g. Inter, system-ui, sans-serif" }) }),
+      S.row({ label: "Size", icon: "bars",
+        control: S.select({ get: () => t.fontSizeScale, set: set((x, v) => { x.theming.fontSizeScale = v; }),
           options: [{value:"xs",label:"XS"},{value:"s",label:"S"},{value:"m",label:"M"},{value:"l",label:"L"},{value:"xl",label:"XL"}] }) }),
-      S.row({ label: "Line height", control: S.slider({ get: () => t.lineHeight, set: (v) => store.set((x) => { x.theming.lineHeight = v; }), min:1.1, max:2.0, step:0.05, format:(v)=>v.toFixed(2) }) }),
-      S.row({ label: "Letter spacing", control: S.slider({ get: () => t.letterSpacing, set: (v) => store.set((x) => { x.theming.letterSpacing = v; }), min:-1, max:3, step:0.1, format:(v)=>v.toFixed(1)+"px" }) }),
-      S.row({ label: "Density",
-        control: S.select({ get: () => t.density, set: (v) => store.set((x) => { x.theming.density = v; }),
+      S.row({ label: "Line height", icon: "list", control: S.slider({ get: () => t.lineHeight, set: set((x, v) => { x.theming.lineHeight = v; }), min:1.1, max:2.0, step:0.05, format:(v)=>v.toFixed(2) }) }),
+      S.row({ label: "Letter spacing", icon: "minus", control: S.slider({ get: () => t.letterSpacing, set: set((x, v) => { x.theming.letterSpacing = v; }), min:-1, max:3, step:0.1, format:(v)=>v.toFixed(1)+"px" }) }),
+    ]}));
+
+    c.appendChild(S.section({ title: "Shape", icon: "grid", children: [
+      S.row({ label: "Density", icon: "columns",
+        control: S.select({ get: () => t.density, set: set((x, v) => { x.theming.density = v; }),
           options: [{value:"compact",label:"Compact"},{value:"default",label:"Default"},{value:"spacious",label:"Spacious"},{value:"cozy",label:"Cozy"}] }) }),
-      S.row({ label: "Global corner radius", control: S.slider({ get: () => t.radius, set: (v) => store.set((x) => { x.theming.radius = v; }), min:0, max:24, format:(v)=>v+"px" }) }),
-      S.row({ label: "Rounded UI",  control: S.switch({ get: () => t.roundedUI, set: (v) => store.set((x) => { x.theming.roundedUI = v; }) }) }),
-      S.row({ label: "Sidebar width (px)", hint:"0 = default", control: S.number({ get: () => t.sidebarWidth, set: (v) => store.set((x) => { x.theming.sidebarWidth = Math.max(0, v|0); }), min:0, max:400 }) }),
+      S.row({ label: "Corner radius", icon: "circle", control: S.slider({ get: () => t.radius, set: set((x, v) => { x.theming.radius = v; }), min:0, max:24, format:(v)=>v+"px" }) }),
+      S.row({ label: "Round our own controls too", icon: "check-circle", control: S.switch({ get: () => t.roundedUI, set: set((x, v) => { x.theming.roundedUI = v; }) }) }),
+      S.row({ label: "Sidebar width", icon: "columns", hint: "0 keeps Canvas's own width.",
+        control: S.number({ get: () => t.sidebarWidth, set: set((x, v) => { x.theming.sidebarWidth = Math.max(0, v|0); }), min:0, max:400 }) }),
     ]}));
 
-    c.appendChild(S.section({ title: "Advanced", children: [
-      S.row({ label: "Cursor",
-        control: S.select({ get: () => t.cursor, set: (v) => store.set((x) => { x.theming.cursor = v; }),
-          options: [{value:"default",label:"Default"},{value:"large",label:"Large"},{value:"precise",label:"Precise crosshair"}] }) }),
-      S.row({ label: "Focus ring",
-        control: S.select({ get: () => t.focusRing, set: (v) => store.set((x) => { x.theming.focusRing = v; }),
-          options: [{value:"default",label:"Default"},{value:"bold",label:"Bold"},{value:"high-contrast",label:"High contrast"}] }) }),
-      S.row({ label: "Color-blind mode",
-        control: S.select({ get: () => t.colorBlind, set: (v) => store.set((x) => { x.theming.colorBlind = v; }),
+    // Accessibility was a tab of three switches, sitting one place away from the
+    // colour-blind, high-contrast and reduced-motion switches it belongs beside.
+    const a = store.get().accessibility;
+    c.appendChild(S.section({ title: "Reading & access", icon: "accessibility", children: [
+      S.row({ label: "Colour-blind mode", icon: "palette",
+        control: S.select({ get: () => t.colorBlind, set: set((x, v) => { x.theming.colorBlind = v; }),
           options: [{value:"off",label:"Off"},{value:"protanopia",label:"Protanopia"},{value:"deuteranopia",label:"Deuteranopia"},{value:"tritanopia",label:"Tritanopia"}] }) }),
-      S.row({ label: "High contrast",  control: S.switch({ get: () => t.highContrast, set: (v) => store.set((x) => { x.theming.highContrast = v; }) }) }),
-      S.row({ label: "Force reduced motion", control: S.switch({ get: () => t.reducedMotion, set: (v) => store.set((x) => { x.theming.reducedMotion = v; }) }) }),
-      S.row({ label: "Animation speed", control: S.slider({ get: () => t.animSpeed, set: (v) => store.set((x) => { x.theming.animSpeed = v; }), min:0.25, max:2, step:0.05, format:(v)=>v.toFixed(2)+"×" }) }),
+      S.row({ label: "High contrast", icon: "contrast", control: S.switch({ get: () => t.highContrast, set: set((x, v) => { x.theming.highContrast = v; }) }) }),
+      S.row({ label: "Reduce motion", icon: "pause", control: S.switch({ get: () => t.reducedMotion, set: set((x, v) => { x.theming.reducedMotion = v; }) }) }),
+      S.row({ label: "Animation speed", icon: "play", enabledWhen: (s) => !s.theming.reducedMotion,
+        control: S.slider({ get: () => t.animSpeed, set: set((x, v) => { x.theming.animSpeed = v; }), min:0.25, max:2, step:0.05, format:(v)=>v.toFixed(2)+"×" }) }),
+      S.row({ label: "Read aloud buttons", icon: "speaker", control: S.switch({ get: () => a.tts, set: set((x, v) => { x.accessibility.tts = v; }) }) }),
+      S.row({ label: "Larger click targets", icon: "target", control: S.switch({ get: () => a.largeTargets, set: set((x, v) => { x.accessibility.largeTargets = v; }) }) }),
+      S.row({ label: "Dyslexia-friendly font", icon: "file-text", control: S.switch({ get: () => a.dyslexiaFont, set: set((x, v) => { x.accessibility.dyslexiaFont = v; }) }) }),
+      S.row({ label: "Cursor", icon: "search",
+        control: S.select({ get: () => t.cursor, set: set((x, v) => { x.theming.cursor = v; }),
+          options: [{value:"default",label:"Default"},{value:"large",label:"Large"},{value:"precise",label:"Crosshair"}] }) }),
+      S.row({ label: "Focus ring", icon: "focus",
+        control: S.select({ get: () => t.focusRing, set: set((x, v) => { x.theming.focusRing = v; }),
+          options: [{value:"default",label:"Default"},{value:"bold",label:"Bold"},{value:"high-contrast",label:"High contrast"}] }) }),
     ]}));
 
-    c.appendChild(S.section({ title: "Institution logo", children: [
-      S.row({ label: "Logo",
-        control: S.select({ get: () => t.logo.mode, set: (v) => store.set((x) => { x.theming.logo.mode = v; }),
-          options: [{value:"default",label:"Default"},{value:"hide",label:"Hide"},{value:"replace",label:"Replace with image"},{value:"text",label:"Replace with text"}] }) }),
-      S.row({ label: "Replacement image URL", control: S.text({ get: () => t.logo.url, set: (v) => store.set((x) => { x.theming.logo.url = v; }) }) }),
-      S.row({ label: "Replacement text",      control: S.text({ get: () => t.logo.text, set: (v) => store.set((x) => { x.theming.logo.text = v; }) }) }),
+    c.appendChild(S.section({ title: "Institution logo", icon: "image", children: [
+      S.row({ label: "Show", icon: "image",
+        control: S.select({ get: () => t.logo.mode, set: set((x, v) => { x.theming.logo.mode = v; }),
+          options: [{value:"default",label:"As Canvas has it"},{value:"hide",label:"Hide it"},{value:"replace",label:"My image"},{value:"text",label:"My text"}] }) }),
+      S.row({ label: "Image URL", icon: "external-link", wide: true, enabledWhen: (s) => s.theming.logo.mode === "replace",
+        control: S.text({ get: () => t.logo.url, set: set((x, v) => { x.theming.logo.url = v; }), placeholder: "https://…" }) }),
+      S.row({ label: "Text", icon: "file-text", wide: true, enabledWhen: (s) => s.theming.logo.mode === "text",
+        control: S.text({ get: () => t.logo.text, set: set((x, v) => { x.theming.logo.text = v; }), placeholder: "e.g. Northeastern" }) }),
     ]}));
 
     return c;
-  }
-
-  function themeSnapshot(store, name) {
-    const cur = store.get();
-    const theming = JSON.parse(JSON.stringify(cur.theming));
-    delete theming.rotation; // rotation config isn't part of a theme's look
-    return {
-      id: BC.util.uuid(),
-      name,
-      settings: {
-        theming,
-        cosmetics: JSON.parse(JSON.stringify(cur.cosmetics)),
-      },
-    };
   }
 
   function downloadJson(filename, text) {
@@ -660,11 +759,20 @@
     return card;
   }
 
-  // ---- skin gallery -------------------------------------------------------
-  // A skin card previews itself with the real engine rather than a stored
-  // thumbnail. That is the point of generating the art: the row in this grid
-  // and the page it themes are produced by the same function, so they cannot
-  // drift apart the way a checked-in PNG does the moment a palette is tweaked.
+  function themeSnapshot(store, name) {
+    const cur = store.get();
+    const theming = JSON.parse(JSON.stringify(cur.theming));
+    delete theming.rotation; // rotation config isn't part of a theme's look
+    return {
+      id: BC.util.uuid(),
+      name,
+      settings: {
+        theming,
+        cosmetics: JSON.parse(JSON.stringify(cur.cosmetics)),
+      },
+    };
+  }
+
   function skinCard(store, raw, opts) {
     const S = BC.SettingsComponents;
     const t = BC.skins.normalize(raw);
@@ -742,7 +850,7 @@
 
     c.appendChild(S.section({
       title: "Skins",
-      description: "A skin restyles the whole page — surface art, card art, nav, type and palette — not just the colours. Every pattern is drawn at runtime, so nothing is downloaded and a skin works offline.",
+      description: "A whole look — surface art, card art, nav and type, not just colours. Every pattern is drawn here, so a skin works offline and downloads nothing.",
       children: [
         h("div.bc-skin-grid", null,
           [noneCard].concat(BC.SKIN_CATALOG.map((k) => skinCard(store, k, null)))),
@@ -751,18 +859,19 @@
 
     if (mine.length) {
       c.appendChild(S.section({
-        title: "My skins",
-        description: "Imported or edited skins. One of these with the same id as a built-in overrides it.",
+        title: "My skins", icon: "star",
+        description: "Yours. One with the same name as a built-in replaces it.",
         children: [h("div.bc-skin-grid", null, mine.map((k) => skinCard(store, k, { removable: true })))],
       }));
     }
 
     const active = BC.skins.active(store.get());
     c.appendChild(S.section({
-      title: "Skin options",
+      title: "Skin options", icon: "settings",
       children: [
         S.row({
           label: "Course card colour",
+          icon: "palette",
           hint: "Replace them, or let the pattern tint them.",
           enabledWhen: (st) => !!st.theming.skin,
           control: S.select({
@@ -819,12 +928,12 @@
 
     const nameInput = el("input", { type: "text", class: "bc-text", placeholder: "Theme name" });
     c.appendChild(S.section({
-      title: "My themes",
-      description: "Tune colors, fonts, and backgrounds live in the Appearance and Background tabs, then snapshot the look here as a reusable theme.",
+      title: "My themes", icon: "star",
+      description: "Set up a look in Appearance, then save it here.",
       children: [
         custom.length
           ? h("div.bc-theme-grid", null, custom.map((p) => themeCard(store, p, true)))
-          : h("p.bc-hint", null, "No saved themes yet. Set up a look you like, name it, and save it."),
+          : h("p.bc-hint", null, "Nothing saved yet."),
         h("div.bc-inline", { style: { marginTop: "10px" } }, [
           nameInput,
           S.button({ label: "Save current look", icon: "palette", onClick: () => {
@@ -838,19 +947,19 @@
     }));
 
     c.appendChild(S.section({
-      title: "Built-in themes",
-      description: "One click loads the theme's colors, accent, density, and radius over your current settings.",
+      title: "Built-in themes", icon: "palette",
+      description: "One click, over whatever you have now.",
       children: [h("div.bc-theme-grid", null, BC.PRESET_THEMES.map((p) => themeCard(store, p, false)))],
     }));
 
     const rot = store.get().theming.rotation || { enabled: false, mode: "daily", themeIds: [] };
     const pool = custom.concat(BC.PRESET_THEMES || []);
     c.appendChild(S.section({
-      title: "Theme rotation",
-      description: "Automatically cycle through selected themes every day or week.",
+      title: "Rotation", icon: "refresh",
       children: [
-        S.row({ label: "Rotate themes", control: S.switch({ get: () => rot.enabled, set: (v) => store.set((x) => { x.theming.rotation.enabled = v; }) }) }),
-        S.row({ label: "Rotate every",
+        S.row({ label: "Change theme on a timer", icon: "clock",
+          control: S.switch({ get: () => rot.enabled, set: (v) => store.set((x) => { x.theming.rotation.enabled = v; }) }) }),
+        S.row({ label: "Every", icon: "calendar", enabledWhen: (st) => !!(st.theming.rotation || {}).enabled,
           control: S.select({ get: () => rot.mode, set: (v) => store.set((x) => { x.theming.rotation.mode = v; }),
             options: [{ value: "daily", label: "Day" }, { value: "weekly", label: "Week" }] }) }),
         h("div.bc-rot-list", null, pool.map((t) => {
@@ -865,8 +974,8 @@
     }));
 
     c.appendChild(S.section({
-      title: "Import / export theme",
-      description: "Share themes as JSON files — no accounts, no cloud.",
+      title: "Share", icon: "external-link",
+      description: "A theme is a JSON file. No account, no cloud.",
       children: [
         h("div.bc-inline", null, [
           S.button({ label: "Export current theme", icon: "external-link", onClick: () => downloadTheme(themeSnapshot(store, "My theme")) }),
@@ -898,26 +1007,40 @@
     const S = BC.SettingsComponents;
     const b = store.get().cosmetics.background;
     const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Full-page background", children: [
-      S.row({ label: "Background",
+    // Nine rows used to show at once, of which at most three ever applied: the
+    // gradient stops were live while the mode was "Image", the image URL was
+    // live while the mode was "None". Each row is now tied to the mode that
+    // uses it, so choosing one reveals its own three controls and no others.
+    const mode = (...ms) => (st) => ms.includes(st.cosmetics.background.mode);
+    c.appendChild(S.section({ title: "Page background", icon: "image", children: [
+      S.row({ label: "Style", icon: "palette",
         control: S.select({ get: () => b.mode, set: (v) => store.set((x) => { x.cosmetics.background.mode = v; }),
-          options: [{value:"none",label:"None"},{value:"color",label:"Solid color"},{value:"gradient",label:"Gradient"},{value:"image",label:"Image"},{value:"pattern",label:"Pattern"}] }) }),
-      S.row({ label: "Color", control: S.color({ get: () => b.color, set: (v) => store.set((x) => { x.cosmetics.background.color = v; }) }) }),
-      S.row({ label: "Gradient from", control: S.color({ get: () => b.gradient.from, set: (v) => store.set((x) => { x.cosmetics.background.gradient.from = v; }) }) }),
-      S.row({ label: "Gradient to",   control: S.color({ get: () => b.gradient.to,   set: (v) => store.set((x) => { x.cosmetics.background.gradient.to   = v; }) }) }),
-      S.row({ label: "Gradient angle", control: S.slider({ get: () => b.gradient.angle, set: (v) => store.set((x) => { x.cosmetics.background.gradient.angle = v; }), min:0, max:360, format:(v)=>v+"°" }) }),
-      S.row({ label: "Image URL",     control: S.text({ get: () => b.image, set: (v) => store.set((x) => { x.cosmetics.background.image = v; }), placeholder:"https://…" }) }),
-      S.row({ label: "Pattern",
+          options: [{value:"none",label:"None"},{value:"color",label:"Solid"},{value:"gradient",label:"Gradient"},{value:"image",label:"Image"},{value:"pattern",label:"Pattern"}] }) }),
+      S.row({ label: "Colour", icon: "target", enabledWhen: mode("color", "pattern"),
+        control: S.color({ get: () => b.color, set: (v) => store.set((x) => { x.cosmetics.background.color = v; }) }) }),
+      S.row({ label: "From", icon: "chevron-right", enabledWhen: mode("gradient"),
+        control: S.color({ get: () => b.gradient.from, set: (v) => store.set((x) => { x.cosmetics.background.gradient.from = v; }) }) }),
+      S.row({ label: "To", icon: "chevron-left", enabledWhen: mode("gradient"),
+        control: S.color({ get: () => b.gradient.to, set: (v) => store.set((x) => { x.cosmetics.background.gradient.to = v; }) }) }),
+      S.row({ label: "Angle", icon: "refresh", enabledWhen: mode("gradient"),
+        control: S.slider({ get: () => b.gradient.angle, set: (v) => store.set((x) => { x.cosmetics.background.gradient.angle = v; }), min:0, max:360, format:(v)=>v+"°" }) }),
+      S.row({ label: "Image", icon: "external-link", wide: true, enabledWhen: mode("image"),
+        control: S.text({ get: () => b.image, set: (v) => store.set((x) => { x.cosmetics.background.image = v; }), placeholder:"https://…" }) }),
+      S.row({ label: "Pattern", icon: "grid", enabledWhen: mode("pattern"),
         control: S.select({ get: () => b.pattern, set: (v) => store.set((x) => { x.cosmetics.background.pattern = v; }),
           options: [{value:"none",label:"None"},{value:"dots",label:"Dots"},{value:"grid",label:"Grid"},{value:"diagonal",label:"Diagonal"},{value:"topography",label:"Topography"}] }) }),
-      S.row({ label: "Blur (px)",     control: S.slider({ get: () => b.blur, set: (v) => store.set((x) => { x.cosmetics.background.blur = v; }), min:0, max:40, format:(v)=>v+"px" }) }),
-      S.row({ label: "Opacity",       control: S.slider({ get: () => b.opacity, set: (v) => store.set((x) => { x.cosmetics.background.opacity = v; }), min:0, max:100, format:(v)=>v+"%" }) }),
+      S.row({ label: "Blur", icon: "contrast", enabledWhen: mode("color", "gradient", "image", "pattern"),
+        control: S.slider({ get: () => b.blur, set: (v) => store.set((x) => { x.cosmetics.background.blur = v; }), min:0, max:40, format:(v)=>v+"px" }) }),
+      S.row({ label: "Opacity", icon: "circle", enabledWhen: mode("color", "gradient", "image", "pattern"),
+        control: S.slider({ get: () => b.opacity, set: (v) => store.set((x) => { x.cosmetics.background.opacity = v; }), min:0, max:100, format:(v)=>v+"%" }) }),
     ]}));
-    c.appendChild(S.section({ title: "Custom CSS", description: "Injected on every Canvas page. Escape hatch — use with care.", children: [
-      h("div.bc-css-wrap", null, [
-        BC.SettingsComponents.textarea({ get: () => store.get().cosmetics.customCss, set: (v) => store.set((x) => { x.cosmetics.customCss = v; }), placeholder: "/* your CSS */", rows: 10 }),
-      ]),
-    ]}));
+    c.appendChild(S.section({ title: "Custom CSS", icon: "command",
+      description: "Injected on every Canvas page. An escape hatch — you can break the page with it.",
+      children: [
+        h("div.bc-css-wrap", null, [
+          S.textarea({ get: () => store.get().cosmetics.customCss, set: (v) => store.set((x) => { x.cosmetics.customCss = v; }), placeholder: "/* your CSS */", rows: 10 }),
+        ]),
+      ]}));
     return c;
   }
 
@@ -925,25 +1048,35 @@
     const S = BC.SettingsComponents;
     const s = store.get();
     const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Global (left) navigation", description: "Drag to reorder. Toggle to hide.", children: [
-      renderNavList(store, "global"),
-    ]}));
-    c.appendChild(S.section({ title: "Course navigation", description: "Hide / reorder tabs by label across all courses.", children: [
-      h("div.bc-nav-course-note", null, "Enter labels you want hidden or a preferred order below."),
-      S.row({ label: "Hidden labels (comma-separated)",
-        control: S.text({ get: () => (s.navigation.course.hidden || []).join(", "), set: (v) => store.set((x) => { x.navigation.course.hidden = v.split(",").map(s => s.trim().toLowerCase()).filter(Boolean); }) }) }),
-      S.row({ label: "Order (comma-separated)",
-        control: S.text({ get: () => (s.navigation.course.order || []).join(", "), set: (v) => store.set((x) => { x.navigation.course.order = v.split(",").map(s => s.trim().toLowerCase()).filter(Boolean); }) }) }),
-      S.row({ label: "Custom course links (appear on every course sidebar)",
-        control: S.links({ get: () => s.navigation.course.customLinks, set: (v) => store.set((x) => { x.navigation.course.customLinks = v; }) }) }),
-    ]}));
-    c.appendChild(S.section({ title: "Global extras", children: [
-      S.row({ label: "Custom global-nav links", control: S.links({ get: () => s.navigation.global.customLinks, set: (v) => store.set((x) => { x.navigation.global.customLinks = v; }) }) }),
-      S.row({ label: "Breadcrumbs style",
+    const csv = (get, set) => S.text({ get, set, placeholder: "e.g. grades, files, syllabus" });
+
+    c.appendChild(S.section({ title: "Canvas's left nav", icon: "menu",
+      description: "Drag to reorder, switch off to hide.",
+      children: [renderNavList(store, "global")] }));
+
+    c.appendChild(S.section({ title: "Course nav", icon: "columns",
+      description: "By label, applied to every course.",
+      children: [
+        S.row({ label: "Hide these", icon: "close", wide: true,
+          control: csv(() => (s.navigation.course.hidden || []).join(", "),
+            (v) => store.set((x) => { x.navigation.course.hidden = v.split(",").map(s => s.trim().toLowerCase()).filter(Boolean); })) }),
+        S.row({ label: "Put them in this order", icon: "list", wide: true,
+          control: csv(() => (s.navigation.course.order || []).join(", "),
+            (v) => store.set((x) => { x.navigation.course.order = v.split(",").map(s => s.trim().toLowerCase()).filter(Boolean); })) }),
+        S.row({ label: "Links of your own", icon: "paperclip", wide: true,
+          control: S.links({ get: () => s.navigation.course.customLinks, set: (v) => store.set((x) => { x.navigation.course.customLinks = v; }) }) }),
+      ]}));
+
+    c.appendChild(S.section({ title: "Getting around", icon: "arrow-right", children: [
+      S.row({ label: "Course quick-switch bar", icon: "columns",
+        control: S.switch({ get: () => s.navigation.courseTabs, set: (v) => store.set((x) => { x.navigation.courseTabs = v; }) }) }),
+      S.row({ label: "Command palette", icon: "command", hint: "⌘K, or Ctrl-K.",
+        control: S.switch({ get: () => s.navigation.quickSearch, set: (v) => store.set((x) => { x.navigation.quickSearch = v; }) }) }),
+      S.row({ label: "Breadcrumbs", icon: "chevron-right",
         control: S.select({ get: () => s.navigation.breadcrumbs, set: (v) => store.set((x) => { x.navigation.breadcrumbs = v; }),
           options: [{value:"default",label:"Default"},{value:"compact",label:"Compact"},{value:"hidden",label:"Hidden"}] }) }),
-      S.row({ label: "Course quick-switch tab bar", control: S.switch({ get: () => s.navigation.courseTabs, set: (v) => store.set((x) => { x.navigation.courseTabs = v; }) }) }),
-      S.row({ label: "Enable ⌘K quick search",     control: S.switch({ get: () => s.navigation.quickSearch, set: (v) => store.set((x) => { x.navigation.quickSearch = v; }) }) }),
+      S.row({ label: "Links of your own", icon: "external-link", wide: true,
+        control: S.links({ get: () => s.navigation.global.customLinks, set: (v) => store.set((x) => { x.navigation.global.customLinks = v; }) }) }),
     ]}));
     return c;
   }
@@ -978,20 +1111,26 @@
     const S = BC.SettingsComponents;
     const g = store.get().grades;
     const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Grade tools", children: [
-      S.row({ label: "Show Grade Tools panel", hint: "Adds the goal tracker, final-grade solver and what-if scores to the grades page.",
-        control: S.switch({ get: () => g.panelEnabled, set: (v) => store.set((x) => { x.grades.panelEnabled = v; }) }) }),
-      S.row({ label: "Auto-refresh grades page", control: S.switch({ get: () => g.autoRefresh, set: (v) => store.set((x) => { x.grades.autoRefresh = v; }) }) }),
-      S.row({ label: "Auto-refresh interval (minutes)", enabledWhen: (st) => st.grades.autoRefresh,
-        control: S.number({ get: () => g.autoRefreshMin, set: (v) => store.set((x) => { x.grades.autoRefreshMin = Math.max(1, v|0); }), min:1, max:60 }) }),
-      S.row({ label: "Rubric-aware prediction", control: S.switch({ get: () => g.rubricPredictor, set: (v) => store.set((x) => { x.grades.rubricPredictor = v; }) }) }),
-      S.row({ label: "Show grade trend chart", control: S.switch({ get: () => g.showTrendChart, set: (v) => store.set((x) => { x.grades.showTrendChart = v; }) }) }),
-      S.row({ label: "Show weight donut",      control: S.switch({ get: () => g.showWeightDonut, set: (v) => store.set((x) => { x.grades.showWeightDonut = v; }) }) }),
-      S.row({ label: "Warn on missing assignments", control: S.switch({ get: () => g.showMissingWarning, set: (v) => store.set((x) => { x.grades.showMissingWarning = v; }) }) }),
+    const sw = (k) => S.switch({ get: () => g[k], set: (v) => store.set((x) => { x.grades[k] = v; }) });
+
+    c.appendChild(S.section({ title: "On the grades page", icon: "bars", children: [
+      S.row({ label: "Grade tools panel", icon: "target", hint: "Goal tracker, what-if scores, and what you need on the final.",
+        control: sw("panelEnabled") }),
+      S.row({ label: "Trend chart", icon: "trend", control: sw("showTrendChart") }),
+      S.row({ label: "Weight donut", icon: "circle", control: sw("showWeightDonut") }),
+      S.row({ label: "Missing-work warning", icon: "alert", control: sw("showMissingWarning") }),
+      S.row({ label: "Rubric predictor", icon: "checklist", hint: "On an assignment, slide each criterion to see the projected score.",
+        control: sw("rubricPredictor") }),
     ]}));
 
-    c.appendChild(S.section({ title: "GPA calculator", children: [
-      S.row({ label: "GPA scale",
+    c.appendChild(S.section({ title: "Refresh", icon: "refresh", children: [
+      S.row({ label: "Reload grades while the page is open", icon: "refresh", control: sw("autoRefresh") }),
+      S.row({ label: "How often", icon: "clock", hint: "Minutes.", enabledWhen: (st) => st.grades.autoRefresh,
+        control: S.number({ get: () => g.autoRefreshMin, set: (v) => store.set((x) => { x.grades.autoRefreshMin = Math.max(1, v|0); }), min:1, max:60 }) }),
+    ]}));
+
+    c.appendChild(S.section({ title: "GPA", icon: "mortarboard", children: [
+      S.row({ label: "Scale", icon: "bars",
         control: S.select({ get: () => g.gpaScale, set: (v) => store.set((x) => { x.grades.gpaScale = v; }),
           options: Object.entries(BC.GPA_SCALES).map(([k, v]) => ({ value: k, label: v.label })) }) }),
       h("div", { id: "bc-gpa-mount" }, "Loading courses…"),
@@ -1043,29 +1182,37 @@
     const S = BC.SettingsComponents;
     const n = store.get().notifications;
     const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Reminders", children: [
-      S.row({ label: "Browser notifications", hint:"Requires permission; asked on first enable.",
+    const tsw = (k) => S.switch({ get: () => n.types[k], set: (v) => store.set((x) => { x.notifications.types[k] = v; }) });
+
+    c.appendChild(S.section({ title: "How you hear about it", icon: "bell", children: [
+      S.row({ label: "Browser notifications", icon: "bell", hint: "Asks permission the first time.",
         control: S.switch({ get: () => n.enabled, set: (v) => store.set((x) => { x.notifications.enabled = v; }) }) }),
-      S.row({ label: "In-page toast reminders", control: S.switch({ get: () => n.inPage, set: (v) => store.set((x) => { x.notifications.inPage = v; }) }) }),
-      S.row({ label: "Lead times (comma-separated minutes)",
-        control: S.text({ get: () => (n.leadMinutes || []).join(", "), set: (v) => store.set((x) => { x.notifications.leadMinutes = v.split(",").map(s => parseInt(s.trim(), 10)).filter(n => n > 0); }) }) }),
+      S.row({ label: "In-page toasts", icon: "megaphone",
+        control: S.switch({ get: () => n.inPage, set: (v) => store.set((x) => { x.notifications.inPage = v; }) }) }),
+      S.row({ label: "Toolbar badge", icon: "tag", hint: "Counts what is due in 24 hours.",
+        control: S.switch({ get: () => n.badgeCount, set: (v) => store.set((x) => { x.notifications.badgeCount = v; }) }) }),
     ]}));
-    c.appendChild(S.section({ title: "Types", children: [
-      S.row({ label: "Due soon",         control: S.switch({ get: () => n.types.dueSoon,         set: (v) => store.set((x) => { x.notifications.types.dueSoon = v; }) }) }),
-      S.row({ label: "New grade posted", control: S.switch({ get: () => n.types.newGrade,        set: (v) => store.set((x) => { x.notifications.types.newGrade = v; }) }) }),
-      S.row({ label: "New announcement", control: S.switch({ get: () => n.types.newAnnouncement, set: (v) => store.set((x) => { x.notifications.types.newAnnouncement = v; }) }) }),
-      S.row({ label: "Grade goal breach",control: S.switch({ get: () => n.types.goalBreach,      set: (v) => store.set((x) => { x.notifications.types.goalBreach = v; }) }) }),
-      S.row({ label: "Streak at risk",   control: S.switch({ get: () => n.types.streakAtRisk,    set: (v) => store.set((x) => { x.notifications.types.streakAtRisk = v; }) }) }),
+
+    c.appendChild(S.section({ title: "What you hear about", icon: "checklist", children: [
+      S.row({ label: "Something is due", icon: "clock", control: tsw("dueSoon") }),
+      S.row({ label: "A grade is posted", icon: "bars", control: tsw("newGrade") }),
+      S.row({ label: "A new announcement", icon: "megaphone", control: tsw("newAnnouncement") }),
+      S.row({ label: "A grade goal is missed", icon: "target", control: tsw("goalBreach") }),
+      S.row({ label: "A streak is at risk", icon: "flame", control: tsw("streakAtRisk") }),
     ]}));
-    c.appendChild(S.section({ title: "Quiet hours", children: [
-      S.row({ label: "Enable quiet hours", control: S.switch({ get: () => n.quietHours.enabled, set: (v) => store.set((x) => { x.notifications.quietHours.enabled = v; }) }) }),
-      S.row({ label: "Start / end",
+
+    c.appendChild(S.section({ title: "When", icon: "clock", children: [
+      S.row({ label: "Warn me this far ahead", icon: "timer", hint: "Minutes before it is due, separated by commas.", wide: true,
+        control: S.text({ get: () => (n.leadMinutes || []).join(", "), placeholder: "60, 240, 1440",
+          set: (v) => store.set((x) => { x.notifications.leadMinutes = v.split(",").map(s => parseInt(s.trim(), 10)).filter(n => n > 0); }) }) }),
+      S.row({ label: "Quiet hours", icon: "moon",
+        control: S.switch({ get: () => n.quietHours.enabled, set: (v) => store.set((x) => { x.notifications.quietHours.enabled = v; }) }) }),
+      S.row({ label: "Quiet from", icon: "pause", wide: true, enabledWhen: (s) => s.notifications.quietHours.enabled,
         control: h("div.bc-inline", null, [
-          el("input", { type: "time", value: n.quietHours.start, onchange: (e) => store.set((x) => { x.notifications.quietHours.start = e.target.value; }) }),
-          h("span", null, "–"),
-          el("input", { type: "time", value: n.quietHours.end, onchange: (e) => store.set((x) => { x.notifications.quietHours.end = e.target.value; }) }),
+          el("input", { type: "time", value: n.quietHours.start, "aria-label": "Quiet hours start", onchange: (e) => store.set((x) => { x.notifications.quietHours.start = e.target.value; }) }),
+          h("span", null, "to"),
+          el("input", { type: "time", value: n.quietHours.end, "aria-label": "Quiet hours end", onchange: (e) => store.set((x) => { x.notifications.quietHours.end = e.target.value; }) }),
         ]) }),
-      S.row({ label: "Toolbar badge for unread items", control: S.switch({ get: () => n.badgeCount, set: (v) => store.set((x) => { x.notifications.badgeCount = v; }) }) }),
     ]}));
 
     // Every notification already gets recorded to bcLocal.notifHistory and pruned
@@ -1107,7 +1254,7 @@
       }
       mount.replaceChildren(S.section({
         title: "Recent notifications",
-        description: "The last 100 reminders, kept on this device only.",
+        description: "The last 100, on this device only.",
         children,
       }));
     };
@@ -1117,43 +1264,66 @@
     else draw(null);
   }
 
-  function renderFiles(store) {
+  // Files, Calendar, Announcements, Modules, Discussions and the instructor
+  // helpers were six tabs holding sixteen rows between them -- four of them had
+  // one section with one switch in it. They are all "things Better Canvas adds
+  // to a course page", so they are one tab with six sections instead.
+  function renderCourseTools(store) {
     const S = BC.SettingsComponents;
-    const f = store.get().files;
+    const s = store.get();
     const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Files library", description: "Aggregates files across every course into one filterable panel.", children: [
-      S.row({ label: "Enable Files library", control: S.switch({ get: () => f.enabled, set: (v) => store.set((x) => { x.files.enabled = v; }) }) }),
-    ]}));
-    return c;
-  }
+    const sw = (path, get) => S.switch({ get, set: (v) => store.set((x) => { path(x, v); }) });
 
-  function renderCalendar(store) {
-    const S = BC.SettingsComponents;
-    const cal = store.get().calendar;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Calendar", children: [
-      S.row({ label: "Mini month view on dashboard", control: S.switch({ get: () => cal.miniOnDashboard, set: (v) => store.set((x) => { x.calendar.miniOnDashboard = v; }) }) }),
-      S.row({ label: "Syllabus date extraction", hint: "Finds dates in course syllabi and offers to add them to your planner.",
-        control: S.switch({ get: () => cal.syllabusExtract, set: (v) => store.set((x) => { x.calendar.syllabusExtract = v; }) }) }),
-      S.row({ label: ".ics export",
-        control: h("div.bc-inline", null, [
-          S.button({ label: "Export upcoming (.ics)", icon: "calendar", onClick: () => {
-            if (!BC.calendar || !BC.calendar.exportIcs) { BC.toast.warn("Open a Canvas tab to export"); return; }
-            BC.calendar.exportIcs();
-          } }),
-        ]) }),
+    c.appendChild(S.section({ title: "Files", icon: "folder", children: [
+      S.row({ label: "Cross-course file library", icon: "archive", hint: "One searchable panel for every course's files.",
+        control: sw((x, v) => { x.files.enabled = v; }, () => s.files.enabled) }),
     ]}));
-    return c;
-  }
 
-  function renderAnnouncements(store) {
-    const S = BC.SettingsComponents;
-    const a = store.get().announcements;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Announcements", children: [
-      S.row({ label: "Aggregator panel", hint:"Unified list across all courses.",
-        control: S.switch({ get: () => a.aggregator, set: (v) => store.set((x) => { x.announcements.aggregator = v; }) }) }),
+    c.appendChild(S.section({ title: "Calendar", icon: "calendar", children: [
+      S.row({ label: "Mini month on the dashboard", icon: "calendar",
+        control: sw((x, v) => { x.calendar.miniOnDashboard = v; }, () => s.calendar.miniOnDashboard) }),
+      S.row({ label: "Read dates out of the syllabus", icon: "file-text", hint: "Offers what it finds; adds nothing on its own.",
+        control: sw((x, v) => { x.calendar.syllabusExtract = v; }, () => s.calendar.syllabusExtract) }),
+      S.row({ label: "Export upcoming work", icon: "save",
+        control: S.button({ label: ".ics file", icon: "external-link", onClick: () => {
+          if (!BC.calendar || !BC.calendar.exportIcs) { BC.toast.warn("Open a Canvas tab to export"); return; }
+          BC.calendar.exportIcs();
+        } }) }),
     ]}));
+
+    c.appendChild(S.section({ title: "Announcements", icon: "megaphone", children: [
+      S.row({ label: "Aggregate every course into one list", icon: "list",
+        control: sw((x, v) => { x.announcements.aggregator = v; }, () => s.announcements.aggregator) }),
+    ]}));
+
+    c.appendChild(S.section({ title: "Modules", icon: "checklist", children: [
+      S.row({ label: "Completion bars", icon: "bars", hint: "Per module, plus a total for the course.",
+        control: sw((x, v) => { x.modules.progressBars = v; }, () => s.modules.progressBars) }),
+    ]}));
+
+    c.appendChild(S.section({ title: "Discussions", icon: "megaphone", children: [
+      S.row({ label: "Collapse all replies", icon: "minus",
+        control: sw((x, v) => { x.discussions.collapse = v; }, () => s.discussions.collapse) }),
+      S.row({ label: "Jump to next unread", icon: "arrow-right",
+        control: sw((x, v) => { x.discussions.jumpToUnread = v; }, () => s.discussions.jumpToUnread) }),
+      S.row({ label: "Reply and word counts", icon: "file-text",
+        control: sw((x, v) => { x.discussions.wordCount = v; }, () => s.discussions.wordCount) }),
+      S.row({ label: "Mark instructor posts", icon: "mortarboard",
+        control: sw((x, v) => { x.discussions.instructorHighlight = v; }, () => s.discussions.instructorHighlight) }),
+    ]}));
+
+    c.appendChild(S.section({
+      title: "Teaching", icon: "mortarboard",
+      description: "For teacher and TA roles. Nothing here ever writes back to Canvas.",
+      children: [
+        S.row({ label: "Roster CSV export", icon: "sheet",
+          control: sw((x, v) => { x.instructor.rosterExport = v; }, () => s.instructor.rosterExport) }),
+        S.row({ label: "Attendance quick-mark", icon: "check-circle", hint: "P/A buttons on People, stored on this device.",
+          control: sw((x, v) => { x.instructor.attendanceQuick = v; }, () => s.instructor.attendanceQuick) }),
+        S.row({ label: "Needs-grading badges", icon: "flag",
+          control: sw((x, v) => { x.instructor.bulkGradeHelpers = v; }, () => s.instructor.bulkGradeHelpers) }),
+      ],
+    }));
     return c;
   }
 
@@ -1161,43 +1331,24 @@
     const S = BC.SettingsComponents;
     const p = store.get().productivity;
     const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Productivity", children: [
-      S.row({ label: "Focus mode on assignment pages", control: S.switch({ get: () => p.focusMode, set: (v) => store.set((x) => { x.productivity.focusMode = v; }) }) }),
-      S.row({ label: "Reading ruler",       control: S.switch({ get: () => p.readingRuler, set: (v) => store.set((x) => { x.productivity.readingRuler = v; }) }) }),
-      S.row({ label: "Sticky notes on any page", control: S.switch({ get: () => p.stickyNotes, set: (v) => store.set((x) => { x.productivity.stickyNotes = v; }) }) }),
-      S.row({ label: "Auto-save text-editor drafts", control: S.switch({ get: () => p.autoSaveDrafts, set: (v) => store.set((x) => { x.productivity.autoSaveDrafts = v; }) }) }),
-      S.row({ label: "Quiz draft saver", hint: "Snapshots quiz answers locally while you take a quiz, so a crash or reload can't wipe them.",
-        control: S.switch({ get: () => p.quizDraftSaver, set: (v) => store.set((x) => { x.productivity.quizDraftSaver = v; }) }) }),
-      S.row({ label: "Word/char count",     control: S.switch({ get: () => p.wordCount, set: (v) => store.set((x) => { x.productivity.wordCount = v; }) }) }),
-      S.row({ label: "Print-friendly view", control: S.switch({ get: () => p.printFriendly, set: (v) => store.set((x) => { x.productivity.printFriendly = v; }) }) }),
-      S.row({ label: "Copy-URL button on pages", control: S.switch({ get: () => p.copyUrlButton, set: (v) => store.set((x) => { x.productivity.copyUrlButton = v; }) }) }),
-      S.row({ label: "Reading progress bar", control: S.switch({ get: () => p.readingProgress, set: (v) => store.set((x) => { x.productivity.readingProgress = v; }) }) }),
+    const sw = (k) => S.switch({ get: () => p[k], set: (v) => store.set((x) => { x.productivity[k] = v; }) });
+
+    c.appendChild(S.section({ title: "While you work", icon: "timer", children: [
+      S.row({ label: "Focus mode", icon: "target", hint: "Strips everything but the assignment you are on.", control: sw("focusMode") }),
+      S.row({ label: "Sticky notes", icon: "save", hint: "Pinned per page, kept on this device.", control: sw("stickyNotes") }),
+      S.row({ label: "Print-friendly view", icon: "file-text", control: sw("printFriendly") }),
+      S.row({ label: "Copy-link button", icon: "paperclip", control: sw("copyUrlButton") }),
     ]}));
 
-    const m = store.get().modules;
-    c.appendChild(S.section({ title: "Modules", children: [
-      S.row({ label: "Module progress bars", hint: "Completion bars per module plus a course-wide summary on the Modules page.",
-        control: S.switch({ get: () => m.progressBars, set: (v) => store.set((x) => { x.modules.progressBars = v; }) }) }),
+    c.appendChild(S.section({ title: "Reading", icon: "file-text", children: [
+      S.row({ label: "Reading ruler", icon: "minus", control: sw("readingRuler") }),
+      S.row({ label: "Reading progress bar", icon: "bars", control: sw("readingProgress") }),
     ]}));
 
-    const disc = store.get().discussions;
-    c.appendChild(S.section({ title: "Discussions", children: [
-      S.row({ label: "Collapse-replies button", control: S.switch({ get: () => disc.collapse, set: (v) => store.set((x) => { x.discussions.collapse = v; }) }) }),
-      S.row({ label: "Jump to next unread", control: S.switch({ get: () => disc.jumpToUnread, set: (v) => store.set((x) => { x.discussions.jumpToUnread = v; }) }) }),
-      S.row({ label: "Reply & word stats", control: S.switch({ get: () => disc.wordCount, set: (v) => store.set((x) => { x.discussions.wordCount = v; }) }) }),
-      S.row({ label: "Highlight instructor posts", control: S.switch({ get: () => disc.instructorHighlight, set: (v) => store.set((x) => { x.discussions.instructorHighlight = v; }) }) }),
-    ]}));
-    return c;
-  }
-
-  function renderA11y(store) {
-    const S = BC.SettingsComponents;
-    const a = store.get().accessibility;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Accessibility", children: [
-      S.row({ label: "Text-to-speech buttons", control: S.switch({ get: () => a.tts, set: (v) => store.set((x) => { x.accessibility.tts = v; }) }) }),
-      S.row({ label: "Larger click targets", control: S.switch({ get: () => a.largeTargets, set: (v) => store.set((x) => { x.accessibility.largeTargets = v; }) }) }),
-      S.row({ label: "Dyslexia-friendly font", control: S.switch({ get: () => a.dyslexiaFont, set: (v) => store.set((x) => { x.accessibility.dyslexiaFont = v; }) }) }),
+    c.appendChild(S.section({ title: "Writing", icon: "paperclip", children: [
+      S.row({ label: "Auto-save drafts", icon: "save", hint: "Every Canvas text box, restored next visit.", control: sw("autoSaveDrafts") }),
+      S.row({ label: "Word and character count", icon: "sheet", control: sw("wordCount") }),
+      S.row({ label: "Quiz draft saver", icon: "alert", hint: "Keeps your answers locally so a crash can't wipe them. It never answers or submits.", control: sw("quizDraftSaver") }),
     ]}));
     return c;
   }
@@ -1206,24 +1357,31 @@
     const S = BC.SettingsComponents;
     const sh = store.get().shortcuts;
     const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Shortcuts", description: "Click a binding to record a new one. Use Escape to cancel.", children: [
-      S.row({ label: "Enable shortcuts", control: S.switch({ get: () => sh.enabled, set: (v) => store.set((x) => { x.shortcuts.enabled = v; }) }) }),
+    c.appendChild(S.section({ title: "Keyboard", icon: "command", children: [
+      S.row({ label: "Shortcuts on", icon: "command",
+        control: S.switch({ get: () => sh.enabled, set: (v) => store.set((x) => { x.shortcuts.enabled = v; }) }) }),
     ]}));
-    const labels = {
-      commandPalette: "Command palette",
-      settings: "Open settings",
-      toggleDark: "Toggle dark mode",
-      quickTask: "Quick task",
-      quickNote: "Quick note",
-      gotoDashboard: "Go to dashboard",
-      gotoGrades: "Go to grades",
-      gotoInbox: "Go to inbox",
-      gotoCalendar: "Go to calendar",
-      focusMode: "Toggle focus mode",
-    };
-    c.appendChild(S.section({ title: "Bindings", children:
-      Object.keys(labels).map((id) => S.row({ label: labels[id],
-        control: S.keybind({ get: () => sh.bindings[id], set: (v) => store.set((x) => { x.shortcuts.bindings[id] = v; }) }) })),
+    // The mark is the action, so a rail of eleven monospace chips is scannable
+    // by what it does rather than by reading ten near-identical phrases.
+    const ACTIONS = [
+      ["commandPalette", "Command palette", "search"],
+      ["settings",       "Settings",        "settings"],
+      ["toggleDark",     "Dark mode",       "moon"],
+      ["focusMode",      "Focus mode",      "target"],
+      ["quickTask",      "New task",        "check-circle"],
+      ["quickNote",      "New note",        "save"],
+      ["gotoDashboard",  "Dashboard",       "grid"],
+      ["gotoGrades",     "Grades",          "bars"],
+      ["gotoInbox",      "Inbox",           "megaphone"],
+      ["gotoCalendar",   "Calendar",        "calendar"],
+    ];
+    c.appendChild(S.section({
+      title: "Bindings", icon: "checklist",
+      description: "Click one and press the keys. Escape cancels.",
+      children: ACTIONS.map(([id, label, icon]) => S.row({
+        label, icon, enabledWhen: (st) => st.shortcuts.enabled,
+        control: S.keybind({ get: () => sh.bindings[id], set: (v) => store.set((x) => { x.shortcuts.bindings[id] = v; }) }),
+      })),
     }));
     return c;
   }
@@ -1232,10 +1390,10 @@
     const S = BC.SettingsComponents;
     const c = h("div.bc-tab-body", null);
     c.appendChild(S.section({
-      title: "Tracking",
-      description: "All analytics are computed and stored on this device only — nothing is ever uploaded.",
+      title: "Tracking", icon: "trend",
+      description: "Computed and stored on this device. Nothing is ever uploaded.",
       children: [
-        S.row({ label: "Track time on Canvas", hint: "Counts minutes per course while a Canvas tab is visible.",
+        S.row({ label: "Time on Canvas", icon: "timer", hint: "Minutes per course, while a Canvas tab is in front.",
           control: S.switch({ get: () => store.get().insights.enabled, set: (v) => store.set((x) => { x.insights.enabled = v; }) }) }),
       ],
     }));
@@ -1342,45 +1500,30 @@
     }));
   }
 
-  function renderInstructor(store) {
-    const S = BC.SettingsComponents;
-    const i = store.get().instructor;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({
-      title: "Instructor tools",
-      description: "Helpers for teacher/TA roles. Everything stays local — nothing ever writes grades back to Canvas.",
-      children: [
-        S.row({ label: "Roster CSV export", hint: "Adds an export button on course People pages.",
-          control: S.switch({ get: () => i.rosterExport, set: (v) => store.set((x) => { x.instructor.rosterExport = v; }) }) }),
-        S.row({ label: "Attendance quick-mark", hint: "P/A buttons on the People list, with CSV export. Stored on this device only.",
-          control: S.switch({ get: () => i.attendanceQuick, set: (v) => store.set((x) => { x.instructor.attendanceQuick = v; }) }) }),
-        S.row({ label: "Needs-grading badges", hint: "Shows ungraded submission counts on the assignments index.",
-          control: S.switch({ get: () => i.bulkGradeHelpers, set: (v) => store.set((x) => { x.instructor.bulkGradeHelpers = v; }) }) }),
-      ],
-    }));
-    return c;
-  }
-
   function renderAbout(store) {
     const S = BC.SettingsComponents;
     const c = h("div.bc-tab-body", null);
+    // Two paragraphs restating the feature list, to a reader who is already
+    // inside the settings panel. What actually belongs here is the promise and
+    // the version.
     c.appendChild(S.section({
-      title: "Better Canvas " + (BC.VERSION || ""),
-      description: "Privacy-first Canvas customizer. Every setting stays on this device — no telemetry, no accounts, no servers.",
+      title: "Better Canvas " + (BC.VERSION || ""), icon: "info",
       children: [
-        h("p", null, "Better Canvas customizes the Instructure Canvas LMS with real dark mode, a redesigned dashboard, a planner-style To Do widget, grade tools, notifications, files browser, keyboard shortcuts, and a lot more — all configured from this panel."),
-        h("p", null, "Grade and planner features use your existing Canvas login session; nothing is ever sent off-domain."),
-        h("div.bc-inline", null, [
-          S.button({ label: "Reset all settings", icon: "refresh", variant: "danger", onClick: () => { if (confirm("Reset ALL settings?")) store.reset(); } }),
-        ]),
+        S.row({ label: "Everything stays here", icon: "save",
+          hint: "No account, no server, no telemetry. Settings live in this browser.",
+          control: h("span.bc-hint", null, "Local") }),
+        S.row({ label: "Canvas is read with your own session", icon: "mortarboard",
+          hint: "Same-origin requests only. Nothing is sent off-domain.",
+          control: h("span.bc-hint", null, "Same-origin") }),
+        S.row({ label: "Start over", icon: "refresh",
+          control: S.button({ label: "Reset everything", icon: "trash", variant: "danger",
+            onClick: () => { if (confirm("Reset ALL settings?")) store.reset(); } }) }),
       ],
     }));
     c.appendChild(renderDiagnostics(store));
     return c;
   }
 
-  // BC.diag was console-only, so a user hitting a problem had no way to report
-  // anything useful. Nothing here is uploaded — it's a local ring buffer.
   function renderDiagnostics(store) {
     const S = BC.SettingsComponents;
     const entries = (BC.diag && BC.diag.entries) ? BC.diag.entries.slice().reverse().slice(0, 15) : null;
@@ -1415,7 +1558,7 @@
 
     return S.section({
       title: "Diagnostics",
-      description: "Recent internal errors, kept locally so you can report a problem. Nothing here is uploaded.",
+      description: "Recent internal errors, kept locally so you can report one. Nothing is uploaded.",
       children,
     });
   }
@@ -1425,7 +1568,9 @@
   function searchInput(store, onChange) {
     const inp = el("input", { type: "search", class: "bc-search", placeholder: "Search this tab…", "aria-label": "Search settings in this tab" });
     inp.addEventListener("input", () => onChange && onChange(inp.value));
-    return inp;
+    const ic = h("span.bc-search-ic", { "aria-hidden": "true" }, null);
+    ic.innerHTML = BC.icons.svg("search", { size: 15 });
+    return h("div.bc-search-wrap", null, [ic, inp]);
   }
 
   // Planner metadata (stars, snoozes, subtasks, kanban status) used to live inside
@@ -1491,116 +1636,333 @@
 
   // ============ CSS ======================================================
   const CSS = `
-  /* Alias layer onto the real design tokens. This is what makes the settings UI
-     adopt your theme: previously it declared its own hardcoded --bg/--panel/--accent
-     and so never saw the accent, the palette, the custom font, or the radius slider.
-     ":host { all: initial }" does NOT block custom-property inheritance (the spec
-     exempts them from 'all'), so the drawer's shadow root already inherits every
-     --bc-* from :root and needs no plumbing at all. The fallbacks cover documents
-     that haven't emitted tokens yet.
-     Keeping the short alias names means the ~140 rules below didn't have to change
-     in the same edit; they get swept to canonical names separately. */
+  /* ============================================================================
+     The settings surface.
+
+     Direction: warm paper, not a control panel. Three things carry it and every
+     rule below serves one of them.
+
+     1. One mark per row. A tab of fourteen switches was fourteen identical
+        rectangles separated by hairlines -- a spreadsheet, findable only by
+        reading every label. Each row now leads with a drawn icon in a tile, and
+        the tile column is what gives the list a rhythm, so the hairlines could
+        go entirely.
+     2. Air on the panel scale, not the component scale. Cards were padded at
+        14px and rows at 6px, the bottom of the spacing ladder. --bc-pad-card
+        and --bc-pad-row exist so those two measurements are named and set once.
+     3. One bar of chrome. Brand, master switch, search, history and the
+        destructive actions were spread over two stacked bars that ate 130px
+        before any setting, and the second one overflowed its own right edge.
+     ========================================================================== */
   .bc-app {
-    --bg:     var(--bc-surface-1, #f6f7fb);
-    --panel:  var(--bc-surface-2, #ffffff);
-    --fg:     var(--bc-text, #1f2937);
-    --muted:  var(--bc-muted, #6b7280);
-    --border: var(--bc-border, #e5e7eb);
-    --accent: var(--bc-accent, #4f46e5);
-    --danger: var(--bc-danger, #dc2626);
+    --bg:     var(--bc-surface-1, #f5f1ea);
+    --panel:  var(--bc-surface-2, #fffdf9);
+    --fg:     var(--bc-text, #1d1a16);
+    --muted:  var(--bc-muted, #6b6155);
+    --border: var(--bc-border, #e3dacc);
+    --accent: var(--bc-accent, #a8452c);
+    --danger: var(--bc-danger, #b91c1c);
     --radius: var(--bc-radius-lg, 10px);
-    font-family: var(--bc-font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+    font-family: var(--bc-font-sans, ui-rounded, "SF Pro Rounded", system-ui, sans-serif);
     font-size: var(--bc-text-md, 14px);
     line-height: var(--bc-leading-body, 1.5);
     letter-spacing: var(--bc-tracking, 0px);
     color: var(--fg); background: var(--bg);
-    min-height: 100%; padding: var(--bc-space-6, 14px) var(--bc-space-6, 14px) var(--bc-space-9, 24px);
+    min-height: 100%;
     box-sizing: border-box;
   }
   .bc-app * { box-sizing: border-box; }
-  /* This file previously had ZERO focus-visible rules, and inside a shadow root
-     with 'all: initial' the UA ring often doesn't render at all. */
+  /* Inside a shadow root with 'all: initial' the UA ring often doesn't render. */
   .bc-app :focus-visible {
     outline: 2px solid var(--bc-focus-ring, var(--accent));
     outline-offset: 2px;
     box-shadow: 0 0 0 4px var(--bc-focus-halo, var(--panel));
   }
-  .bc-header { display: flex; align-items: center; justify-content: space-between; padding: var(--bc-space-3, 8px) var(--bc-space-1, 4px) var(--bc-space-5, 12px); }
-  .bc-brand { display: flex; align-items: center; gap: var(--bc-space-4, 10px); }
+  .bc-sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  /* ---- header: one bar ---------------------------------------------------
+     grid rather than flex with justify-content: the search is the only track
+     allowed to take the slack (minmax(0,1fr)) and the only one allowed to
+     shrink, which is what stopped Redo being clipped off the right edge and
+     landing under the drawer's close button. The 46px reserves that corner. */
+  .bc-header {
+    position: sticky; top: 0; z-index: 3;
+    display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto;
+    align-items: center; gap: var(--bc-space-4, 10px);
+    padding: var(--bc-space-5, 12px) 46px var(--bc-space-5, 12px) var(--bc-pad-card, 24px);
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  @supports not (backdrop-filter: blur(1px)) { .bc-header { background: var(--bg); } }
+  .bc-brand { display: flex; align-items: center; gap: var(--bc-space-3, 8px); min-width: 0; }
   .bc-logo {
-    width: 34px; height: 34px; border-radius: var(--bc-radius-md, 8px); background: var(--accent);
+    width: 30px; height: 30px; flex: none;
+    border-radius: var(--bc-radius-md, 8px); background: var(--accent);
     /* The accent is user-chosen, so the label has to be the derived contrast
        colour; a hardcoded white vanished on light accents. */
     color: var(--bc-accent-contrast, #fff);
-    display: inline-flex; align-items: center; justify-content: center; font-weight: 800;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: var(--bc-text-xs, 12px); letter-spacing: .02em;
   }
-  .bc-brand-name { font-weight: 700; }
-  .bc-brand-sub  { font-size: var(--bc-text-2xs, 11px); color: var(--muted); }
-  .bc-header-actions { display: flex; gap: var(--bc-space-3, 8px); align-items: center; }
-  .bc-search { padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px); border: 1px solid var(--border); border-radius: var(--bc-radius-md, 8px); background: var(--panel); color: inherit; min-width: 200px; }
+  .bc-brand-name { font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+  .bc-brand-sub  { font-size: var(--bc-text-3xs, 10px); color: var(--muted); font-variant-numeric: tabular-nums; }
 
-  /* Room for the drawer's close button, which floats over this corner. */
-  .bc-topbar { display: flex; justify-content: space-between; align-items: center; margin: var(--bc-space-1, 4px) 0 var(--bc-space-6, 14px); padding: var(--bc-space-4, 10px) 46px var(--bc-space-4, 10px) var(--bc-space-5, 12px); flex-wrap: wrap; gap: var(--bc-space-3, 8px); background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
-  .bc-master { display: flex; align-items: center; gap: var(--bc-space-3, 8px); font-weight: 600; }
-  .bc-master input { width: 18px; height: 18px; }
-  .bc-topbar-right { display: flex; gap: var(--bc-space-2, 6px); }
+  /* The master switch is the most consequential control in the panel, so it
+     stays on the one bar rather than going into the overflow menu -- but it is
+     a switch and a word, not a whole second bar with its own border. */
+  .bc-master {
+    display: inline-flex; align-items: center; gap: var(--bc-space-3, 8px);
+    padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px);
+    border-radius: var(--bc-radius-pill, 999px);
+    background: var(--bc-surface-3, rgba(0,0,0,.04));
+    font-size: var(--bc-text-xs, 12px); font-weight: 600; color: var(--muted);
+    cursor: pointer; white-space: nowrap;
+    transition: color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
+                background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
+  }
+  .bc-master.bc-on { color: var(--bc-accent-text, var(--accent)); background: var(--bc-accent-weak, rgba(168,69,44,.12)); }
 
-  /* Container, not viewport. This UI is mounted in a shadow root inside a panel
+  .bc-search-wrap { position: relative; display: flex; align-items: center; min-width: 0; }
+  .bc-search-ic { position: absolute; left: var(--bc-space-3, 8px); display: inline-flex; color: var(--muted); pointer-events: none; }
+  .bc-search {
+    width: 100%; min-width: 0;
+    padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px) var(--bc-space-3, 8px) 30px;
+    border: 1px solid var(--border); border-radius: var(--bc-radius-pill, 999px);
+    background: var(--panel); color: inherit; font: inherit;
+  }
+  .bc-search::placeholder { color: var(--muted); }
+  .bc-header-actions { display: flex; gap: var(--bc-space-1, 4px); align-items: center; }
+
+  /* Square icon buttons: Undo/Redo/overflow carried full words plus icons and
+     took 230px of a bar that had none to give. */
+  .bc-icon-btn {
+    width: 30px; height: 30px; flex: none; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid transparent; border-radius: var(--bc-radius-md, 8px);
+    background: transparent; color: var(--muted); cursor: pointer; font: inherit;
+    transition: background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
+                color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
+  }
+  .bc-icon-btn:hover:not(:disabled) { background: var(--bc-surface-3, rgba(0,0,0,.05)); color: var(--fg); }
+  .bc-icon-btn:disabled { opacity: .35; cursor: default; }
+
+  /* ---- overflow menu ---------------------------------------------------- */
+  .bc-menu-wrap { position: relative; }
+  .bc-menu {
+    position: absolute; top: calc(100% + 6px); right: 0; z-index: 5;
+    min-width: 180px; padding: var(--bc-space-2, 6px);
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--bc-radius-lg, 10px); box-shadow: var(--bc-shadow-3, 0 8px 24px rgba(0,0,0,.12));
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .bc-menu[hidden] { display: none; }
+  .bc-menu-item {
+    display: flex; align-items: center; gap: var(--bc-space-3, 8px);
+    padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px);
+    border: 0; border-radius: var(--bc-radius-md, 8px); background: transparent;
+    color: inherit; font: inherit; text-align: left; cursor: pointer; width: 100%;
+  }
+  .bc-menu-item:hover { background: var(--bc-surface-3, rgba(0,0,0,.05)); }
+  .bc-menu-item .bc-ic { color: var(--muted); flex: none; }
+  .bc-menu-item.bc-danger { color: var(--danger); }
+  .bc-menu-item.bc-danger .bc-ic { color: currentColor; }
+  .bc-menu-sep { height: 1px; margin: var(--bc-space-2, 6px) var(--bc-space-3, 8px); background: var(--border); }
+
+  /* ---- shell ------------------------------------------------------------
+     Container, not viewport: this UI is mounted in a shadow root inside a panel
      whose width has nothing to do with the window's, so a media query here
      collapsed the tab rail on a narrow screen and kept it on a narrow panel,
      which is exactly backwards. */
-  .bc-shell-wrap { container-type: inline-size; }
-  .bc-shell { display: grid; grid-template-columns: 210px 1fr; gap: var(--bc-space-6, 14px); }
-  /* The rail only collapses when it genuinely cannot fit. It must also stop being
-     a sticky column when it does: keeping flex-direction:column and position:
-     sticky left a full-height list pinned over the body, and the body scrolled
-     underneath it. */
-  .bc-shell-collapsed { grid-template-columns: 1fr !important; }
-  .bc-shell-collapsed .bc-nav {
-    flex-direction: row; overflow-x: auto; overflow-y: hidden;
-    padding: var(--bc-space-3, 8px); position: static; top: auto;
-  }
-  .bc-shell-collapsed .bc-tab { flex: none; }
-  @container (max-width: 430px) {
-    .bc-shell { grid-template-columns: 1fr; }
-    .bc-nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: var(--bc-space-3, 8px); position: static; top: auto; }
-    .bc-tab { flex: none; }
-  }
-  @supports not (container-type: inline-size) {
-    @media (max-width: 430px) {
-      .bc-shell { grid-template-columns: 1fr; }
-      .bc-nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: var(--bc-space-3, 8px); position: static; top: auto; }
-      .bc-tab { flex: none; }
-    }
+  .bc-shell-wrap { container-type: inline-size; container-name: bc-shell; padding: var(--bc-gap-card, 16px) var(--bc-pad-card, 24px) var(--bc-space-9, 24px); }
+  .bc-shell { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--bc-space-8, 20px); align-items: start; }
+  /* The rail only collapses when it genuinely cannot fit. It must also stop
+     being a sticky column when it does: keeping flex-direction:column and
+     position:sticky left a full-height list pinned over the body. */
+  .bc-shell-collapsed { grid-template-columns: minmax(0, 1fr) !important; }
+  .bc-shell-collapsed .bc-nav { position: static; top: auto; }
+  .bc-shell-collapsed .bc-nav-groups { flex-direction: row; overflow-x: auto; overflow-y: hidden; gap: var(--bc-space-5, 12px); padding-bottom: var(--bc-space-2, 6px); }
+  .bc-shell-collapsed .bc-nav-group { flex-direction: row; align-items: center; gap: 2px; }
+  .bc-shell-collapsed .bc-nav-group-label { display: none; }
+  .bc-shell-collapsed .bc-tab { flex: none; white-space: nowrap; }
+  @container bc-shell (max-width: 470px) {
+    .bc-shell { grid-template-columns: minmax(0, 1fr); }
+    .bc-nav { position: static; top: auto; }
+    .bc-nav-groups { flex-direction: row; overflow-x: auto; overflow-y: hidden; gap: var(--bc-space-5, 12px); padding-bottom: var(--bc-space-2, 6px); }
+    .bc-nav-group { flex-direction: row; align-items: center; gap: 2px; }
+    .bc-nav-group-label { display: none; }
+    .bc-tab { flex: none; white-space: nowrap; }
   }
 
-  .bc-nav { display: flex; flex-direction: column; gap: 2px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--bc-space-3, 8px); height: fit-content; position: sticky; top: 8px; }
+  /* ---- tab rail ---------------------------------------------------------
+     No card around it. Seventeen ungrouped tabs in a bordered box was the
+     single densest thing in the panel; five labelled groups on the bare page
+     reads as a contents page instead. */
+  .bc-nav { position: sticky; top: 64px; }
+  .bc-nav-groups { display: flex; flex-direction: column; gap: var(--bc-space-6, 14px); }
+  .bc-nav-group { display: flex; flex-direction: column; gap: 1px; }
+  .bc-nav-group-label {
+    font-size: var(--bc-text-3xs, 10px); font-weight: 700;
+    letter-spacing: var(--bc-tracking-caps, .04em); text-transform: uppercase;
+    color: var(--bc-text-subtle, var(--muted));
+    padding: 0 var(--bc-space-4, 10px) var(--bc-space-2, 6px);
+  }
   .bc-tab {
     display: flex; align-items: center; gap: var(--bc-space-4, 10px);
-    padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px); border: 0; background: transparent; color: inherit;
-    text-align: left; cursor: pointer; border-radius: var(--bc-radius-md, 8px); font: inherit;
+    padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px);
+    border: 0; background: transparent; color: var(--muted);
+    text-align: left; cursor: pointer; border-radius: var(--bc-radius-md, 8px);
+    font: inherit; font-size: var(--bc-text-sm, 13px); font-weight: 550;
+    position: relative;
+    transition: background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
+                color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
   }
-  /* One mode-aware wash replaces each light rule plus its html.bc-dark twin. */
-  .bc-tab:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
-  .bc-tab.active { background: var(--accent); color: var(--bc-accent-contrast, #fff); }
-  .bc-tab.active:hover { background: var(--accent); }
-  .bc-tab-ic { display: inline-flex; align-items: center; justify-content: center; width: 18px; flex: 0 0 18px; opacity: .9; }
+  .bc-tab:hover { background: var(--bc-surface-3, rgba(0,0,0,.05)); color: var(--fg); }
+  /* Tinted, not a solid accent block. At seventeen items a saturated fill is
+     the loudest thing on the page and it is only telling you where you are. */
+  /* Selected on the ATTRIBUTE as well as the class. aria-current is the real
+     state -- the class is a styling alias for it -- and the rail was observed
+     once painting the accent on a button whose class and aria both said it was
+     not selected, i.e. a stale recalc of a class-only selector. Matching both
+     means the paint has two independent invalidation triggers and the selector
+     describes the state rather than a private flag. */
+  .bc-tab.active, .bc-tab[aria-current="page"] { background: var(--bc-accent-weak, rgba(168,69,44,.12)); color: var(--bc-accent-text, var(--accent)); font-weight: 650; }
+  .bc-tab.active::before, .bc-tab[aria-current="page"]::before {
+    content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    width: 3px; height: 16px; border-radius: 0 var(--bc-radius-sm, 3px) var(--bc-radius-sm, 3px) 0; background: currentColor;
+  }
+  .bc-tab-ic { display: inline-flex; align-items: center; justify-content: center; width: 16px; flex: 0 0 16px; }
+
+  /* ---- tab head ---------------------------------------------------------
+     Replaces the per-section "description" paragraphs. One line at the top of
+     the tab says what the tab is for; the sections below it then don't each
+     need a sentence of their own, which is where most of the word count went. */
+  .bc-tab-head { display: flex; align-items: center; gap: var(--bc-space-5, 12px); margin-bottom: var(--bc-space-2, 6px); }
+  .bc-tab-head-ic {
+    width: 40px; height: 40px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--bc-radius-lg, 10px);
+    background: var(--bc-accent-weak, rgba(168,69,44,.12));
+    color: var(--bc-accent-text, var(--accent));
+  }
+  .bc-tab-title { margin: 0; font-size: var(--bc-text-2xl, 20px); font-weight: 700; letter-spacing: -.015em; }
+  .bc-tab-sub { margin: 2px 0 0; color: var(--muted); font-size: var(--bc-text-sm, 13px); text-wrap: pretty; }
+
+  /* ---- sections --------------------------------------------------------- */
+  .bc-body { min-width: 0; container-type: inline-size; container-name: bc-body; }
+  .bc-tab-body { display: flex; flex-direction: column; gap: var(--bc-gap-card, 16px); }
+  .bc-section {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--bc-radius-xl, 14px); padding: var(--bc-pad-card, 24px);
+  }
+  .bc-section-head { display: flex; align-items: flex-start; gap: var(--bc-space-4, 10px); margin-bottom: var(--bc-space-5, 12px); }
+  .bc-section-heading { min-width: 0; }
+  /* Was 14px uppercase muted, which reads as a fieldset legend rather than a
+     heading: all-caps costs ~12% legibility, and muted put the one word that
+     tells you where you are below its own body text in contrast. */
+  .bc-section-title { margin: 0; font-size: var(--bc-text-lg, 15px); font-weight: 650; letter-spacing: -.008em; color: var(--fg); }
+  .bc-section-desc { margin: var(--bc-space-1, 4px) 0 0; color: var(--muted); font-size: var(--bc-text-sm, 13px); text-wrap: pretty; }
+  .bc-section-body { display: flex; flex-direction: column; gap: 2px; }
+
+  /* ---- the icon tile ----------------------------------------------------
+     One definition for every mark in the panel. Rows, section heads and the
+     menu all draw from BC.icons at one size in one container, so nothing can
+     drift to a different optical weight. */
+  .bc-tile {
+    width: 28px; height: 28px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--bc-radius-md, 8px);
+    background: var(--bc-surface-3, rgba(0,0,0,.05));
+    color: var(--muted);
+    transition: background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
+                color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
+  }
+  .bc-tile-sm { width: 26px; height: 26px; background: var(--bc-accent-weak, rgba(168,69,44,.12)); color: var(--bc-accent-text, var(--accent)); }
+  /* A row with no icon still reserves the column, so labels stay on one
+     vertical line whether or not every row in the section has a mark. */
+  .bc-tile-blank { background: transparent; }
+
+  /* ---- rows -------------------------------------------------------------
+     Was a 1fr/auto grid, which handed the control max-content and gave the
+     label only what survived. In a ~360px drawer that crushed "Progress accent"
+     -- swatch + hex field + Clear -- into a 130px label column and wrapped its
+     hint over five lines. Three explicit tracks fix the priority: the mark is
+     fixed, the label takes the slack, the control takes what it needs. */
+  .bc-row {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--bc-space-4, 10px);
+    padding: var(--bc-pad-row, 14px) var(--bc-space-4, 10px);
+    margin: 0 calc(var(--bc-space-4, 10px) * -1);
+    border-radius: var(--bc-radius-md, 8px);
+    transition: background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
+  }
+  /* The hover wash is what replaced the hairlines: it ties a label to the
+     control four inches away from it, which a rule between rows never did. */
+  .bc-row:hover { background: var(--bc-surface-3, rgba(0,0,0,.035)); }
+  .bc-row:hover .bc-tile:not(.bc-tile-blank) { background: var(--bc-accent-weak, rgba(168,69,44,.12)); color: var(--bc-accent-text, var(--accent)); }
+  /* A control that needs the width -- a text field, a textarea, a row of
+     drawn choices -- takes the full line under the label and stays LEFT
+     aligned. Previously it wrapped and kept margin-left:auto, so it ended up
+     orphaned against the right edge with nothing above it. */
+  .bc-row-wide { grid-template-columns: 28px minmax(0, 1fr); row-gap: var(--bc-space-4, 10px); }
+  .bc-row-wide .bc-row-control { grid-column: 2 / -1; justify-content: flex-start; width: 100%; }
+  .bc-row-label { min-width: 0; }
+  .bc-hidden { display: none !important; }
+  .bc-row-off { opacity: .45; }
+  .bc-row-off .bc-row-control { pointer-events: none; }
+  .bc-row-title { font-weight: 600; letter-spacing: -.004em; }
+  .bc-row-hint  { color: var(--muted); font-size: var(--bc-text-sm, 13px); margin-top: 1px; text-wrap: pretty; }
+  .bc-row-warn  { color: var(--danger); font-size: var(--bc-text-sm, 13px); margin-top: var(--bc-space-1, 4px); }
+  .bc-row-control { display: flex; flex-wrap: wrap; align-items: center; gap: var(--bc-space-3, 8px); justify-content: flex-end; min-width: 0; }
+  /* A select sized to its widest option is a max-content control, and an auto
+     grid track hands it every pixel it asks for. Measured in the drawer at
+     360px: "Course card colour" got a 29px label column and wrapped its hint
+     over EIGHT lines -- the same starvation the old 1fr/auto grid caused, just
+     arriving through the control rather than through the template. Capping the
+     control and letting the field shrink puts the label first again. */
+  /* A PERCENTAGE cap cannot do this job: against an auto grid track the
+     percentage is indefinite while the track is being sized, so the browser
+     ignores it during intrinsic sizing and the select gets its full max-content
+     width anyway. Measured at a 600px drawer with that cap in place, the GPA
+     "Scale" row still came out with a 26px label and a seven-line hint. A fixed
+     ceiling is the only thing the track actually honours. */
+  .bc-select { max-width: 190px; }
+  .bc-number, .bc-color-text, .bc-key { max-width: 100%; }
+  .bc-row-wide .bc-select { max-width: 100%; }
+
+  /* Below this the two columns genuinely do not both fit, so every row becomes
+     a wide row: label on its own line, control under it and left-aligned with
+     it. Scoped to bc-body, NOT to the wrapper: the wrapper includes the 200px
+     tab rail, so at a 600px drawer it measured 552px and stayed in two-column
+     mode while the body it was speaking for was only 332px wide. */
+  @container bc-body (max-width: 380px) {
+    .bc-row { grid-template-columns: 28px minmax(0, 1fr); row-gap: var(--bc-space-3, 8px); }
+    .bc-row .bc-row-control { grid-column: 2 / -1; justify-content: flex-start; max-width: 100%; }
+    .bc-select { max-width: 100%; }
+  }
 
   /* ---- choice: options that draw themselves ---------------------------- */
-  .bc-choice { display: flex; flex-wrap: wrap; gap: var(--bc-space-2, 6px); justify-content: flex-end; }
+  .bc-choice { display: flex; flex-wrap: wrap; gap: var(--bc-space-3, 8px); }
   .bc-choice-opt {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: var(--bc-space-2, 6px); width: 74px; padding: var(--bc-space-3, 8px) var(--bc-space-2, 6px); cursor: pointer;
-    border: 1px solid var(--border); border-radius: var(--bc-radius-md, 8px);
+    gap: var(--bc-space-3, 8px); width: 78px; padding: var(--bc-space-4, 10px) var(--bc-space-2, 6px); cursor: pointer;
+    border: 1px solid var(--border); border-radius: var(--bc-radius-lg, 10px);
     background: var(--bc-surface-2, transparent); color: var(--muted);
     transition: border-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
-                background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
+                background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
+                color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
   }
-  .bc-choice-opt:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
+  .bc-choice-opt:hover { background: var(--bc-surface-3, rgba(0,0,0,.05)); color: var(--fg); }
   /* Two signals, not just colour: the selected card is also the only one with
      an accent rim, which survives a colour-blind mode and a mono print. */
   .bc-choice-opt.bc-on {
-    border-color: var(--accent); color: var(--text);
+    border-color: var(--accent); color: var(--bc-accent-text, var(--accent));
+    background: var(--bc-accent-weak, rgba(168,69,44,.10));
     box-shadow: inset 0 0 0 1px var(--accent);
   }
   .bc-choice-opt:focus-within { outline: 2px solid var(--bc-focus-ring, var(--accent)); outline-offset: 1px; }
@@ -1619,82 +1981,81 @@
   .bc-sw-seg { flex: 1 1 0; height: 6px; border-radius: var(--bc-radius-sm, 2px); background: var(--bc-surface-4, rgba(0,0,0,.12)); }
   .bc-sw-seg.on { background: var(--accent); }
   .bc-sw-text { font-size: var(--bc-text-2xs, 11px); font-variant-numeric: tabular-nums; }
-  .bc-sw-text b { color: var(--text); }
+  .bc-sw-text b { color: var(--fg); }
   .bc-sw-none { color: var(--muted); }
 
-  .bc-body { min-width: 0; }
-  .bc-tab-body { display: flex; flex-direction: column; gap: var(--bc-space-7, 16px); }
-  .bc-section { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--bc-space-8, 20px); }
-  /* Was 14px uppercase muted, which reads as a fieldset legend rather than a
-     heading: all-caps costs ~12% legibility, and muted put the one word that
-     tells you where you are below its own body text in contrast. */
-  .bc-section-title { margin: 0 0 var(--bc-space-1, 4px); font-size: var(--bc-text-lg, 15px); font-weight: 650; letter-spacing: -.006em; color: var(--text, inherit); }
-  .bc-section-desc { margin: 0 0 var(--bc-space-5, 12px); color: var(--muted); font-size: var(--bc-text-sm, 13px); }
-  .bc-section-body { display: flex; flex-direction: column; gap: var(--bc-space-3, 8px); }
-
-  /* Was a 1fr/auto grid, which handed the control max-content
-     and gave the label only what survived. In a ~360px drawer that crushed
-     "Progress accent" -- swatch + hex field + Clear -- into a 130px label column
-     and wrapped its hint over five lines. Flex with a real basis inverts the
-     priority: the label keeps --bc-row-label-min, and a control that no longer
-     fits beside it takes its own line instead of strangling the text. */
-  .bc-row {
-    display: flex; flex-wrap: wrap; align-items: center;
-    gap: var(--bc-space-3, 8px) var(--bc-space-6, 14px);
-    padding: var(--bc-space-4, 10px) 0; border-top: 1px solid var(--border);
-  }
-  .bc-row-label { flex: 1 1 var(--bc-row-label-min); min-width: 0; }
-  .bc-section-body > .bc-row:first-child { border-top: 0; padding-top: 0; }
-  .bc-hidden { display: none !important; }
-  .bc-row-off { opacity: .5; }
-  .bc-row-off .bc-row-control { pointer-events: none; }
-  .bc-row-title { font-weight: 600; }
-  .bc-row-hint  { color: var(--muted); font-size: var(--bc-text-sm, 13px); margin-top: var(--bc-space-1, 4px); text-wrap: pretty; }
-  .bc-row-warn  { color: var(--danger); font-size: var(--bc-text-sm, 13px); margin-top: var(--bc-space-1, 4px); }
-  /* margin-left:auto keeps the control right-aligned on a shared line AND on a
-     line of its own, so a wrapped row still reads as one column of controls.
-     max-width stops an over-wide control from escaping the card instead. */
-  .bc-row-control {
-    display: flex; flex-wrap: wrap; align-items: center; gap: var(--bc-space-3, 8px);
-    justify-content: flex-end; margin-left: auto; max-width: 100%; min-width: 0;
-  }
-
-  .bc-switch { position: relative; width: 40px; height: 22px; display: inline-block; flex: none; border-radius: 999px; background: var(--bc-border-strong, var(--border)); transition: background .15s ease; cursor: pointer; }
+  /* ---- controls ---------------------------------------------------------- */
+  .bc-switch { position: relative; width: 40px; height: 23px; display: inline-block; flex: none; border-radius: 999px; background: var(--bc-border-strong, var(--border)); transition: background var(--bc-dur-2, 160ms) var(--bc-ease-standard, ease); cursor: pointer; }
   .bc-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
   /* pointer-events:none is load-bearing: the thumb is a later positioned sibling,
      so without it the knob paints above the input and swallows the click. */
-  .bc-switch-thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: var(--bc-surface-2, #fff); border-radius: 50%; transition: transform .15s ease; box-shadow: var(--bc-shadow-1, 0 1px 2px rgba(0,0,0,.15)); pointer-events: none; }
-  .bc-switch input:checked + .bc-switch-thumb { transform: translateX(18px); }
+  .bc-switch-thumb { position: absolute; top: 2.5px; left: 2.5px; width: 18px; height: 18px; background: var(--bc-surface-2, #fff); border-radius: 50%; transition: transform var(--bc-dur-2, 160ms) var(--bc-ease-spring, ease); box-shadow: var(--bc-shadow-1, 0 1px 2px rgba(0,0,0,.15)); pointer-events: none; }
+  .bc-switch input:checked + .bc-switch-thumb { transform: translateX(17px); }
   .bc-switch.bc-on, .bc-switch:has(input:checked) { background: var(--accent); }
   .bc-switch input:focus-visible + .bc-switch-thumb { box-shadow: 0 1px 2px rgba(0,0,0,.15), 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
 
   .bc-select, .bc-text, .bc-textarea, .bc-number, .bc-color-text, .bc-tags-inp {
-    padding: var(--bc-space-2, 6px) var(--bc-space-3, 8px); border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px); background: var(--panel); color: inherit; font: inherit;
+    padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px); border: 1px solid var(--border);
+    border-radius: var(--bc-radius-md, 8px); background: var(--panel); color: inherit; font: inherit;
   }
-  .bc-textarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .bc-number { width: 90px; }
+  .bc-select { cursor: pointer; }
+  .bc-textarea { width: 100%; font-family: var(--bc-font-mono, ui-monospace, Menlo, monospace); font-size: var(--bc-text-sm, 13px); line-height: 1.6; }
+  .bc-number { width: 88px; }
+  .bc-row-wide .bc-row-control > * { flex: 1 1 auto; min-width: 0; }
+  .bc-text-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .bc-row-wide .bc-text-wrap, .bc-row-wide .bc-text, .bc-row-wide .bc-textarea { width: 100%; }
+
+  /* Swatch + hex + a mark for Clear. The old control was a colour input, a hex
+     field and a "Clear" BUTTON: ~230px, which is what pushed the label column
+     down to 130px in the drawer. */
   .bc-color { display: inline-flex; align-items: center; gap: var(--bc-space-2, 6px); }
-  .bc-color input[type=color] { width: 32px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px); background: transparent; }
-  .bc-color-text { width: 100px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  /* The swatch is ours; the input just sits on it, invisible, to open the
+     native picker. See the note in C.color for why the UA pseudo-element could
+     not carry the unset state. */
+  .bc-swatch {
+    position: relative; width: 30px; height: 30px; flex: none; cursor: pointer;
+    display: inline-block; overflow: hidden;
+    border: 1px solid var(--bc-border-strong, var(--border));
+    border-radius: var(--bc-radius-md, 8px);
+  }
+  .bc-swatch input[type=color] {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; padding: 0; border: 0; margin: 0; cursor: pointer;
+  }
+  /* A hatch, not black: "nothing chosen" without needing a word beside it. */
+  .bc-color-unset .bc-swatch {
+    background-color: var(--bc-surface-3, #eee7dc);
+    background-image: linear-gradient(135deg, transparent 44%, var(--bc-border-strong, #b9ab97) 44%,
+                      var(--bc-border-strong, #b9ab97) 56%, transparent 56%);
+  }
+  .bc-swatch:focus-within { outline: 2px solid var(--bc-focus-ring, var(--accent)); outline-offset: 2px; }
+  .bc-color-clear { width: 26px; height: 26px; }
+  .bc-color-text { width: 92px; font-family: var(--bc-font-mono, ui-monospace, Menlo, monospace); font-size: var(--bc-text-sm, 13px); }
   .bc-slider { display: inline-flex; align-items: center; gap: var(--bc-space-3, 8px); }
-  .bc-slider-val { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .bc-slider input[type=range] { accent-color: var(--accent); }
+  .bc-slider-val { min-width: 46px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: var(--bc-text-sm, 13px); }
   .bc-invalid input { border-color: var(--danger); }
   .bc-text-warn { color: var(--danger); font-size: var(--bc-text-xs, 12px); }
 
   .bc-btn {
     display: inline-flex; align-items: center; justify-content: center; gap: var(--bc-space-2, 6px);
-    padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px);
-    border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px);
+    padding: var(--bc-space-3, 8px) var(--bc-space-5, 12px);
+    border: 1px solid var(--border); border-radius: var(--bc-radius-md, 8px);
     background: var(--panel); color: inherit; cursor: pointer; font: inherit;
+    font-size: var(--bc-text-sm, 13px); font-weight: 600; white-space: nowrap;
+    transition: background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
+                border-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
   }
   /* Optically aligned with the label rather than parked on the text baseline,
      and dimmer than it: the word is the instruction, the icon is the hint. */
-  .bc-btn-ic { display: inline-flex; line-height: 0; flex: 0 0 auto; opacity: .75; }
+  .bc-btn-ic { display: inline-flex; line-height: 0; flex: 0 0 auto; opacity: .7; }
   .bc-btn:hover .bc-btn-ic { opacity: 1; }
-  .bc-btn:hover { background: var(--bc-surface-4, rgba(0,0,0,.04)); }
+  .bc-btn:hover { background: var(--bc-surface-3, rgba(0,0,0,.05)); border-color: var(--bc-border-strong, var(--border)); }
+  .bc-btn-primary { background: var(--accent); border-color: var(--accent); color: var(--bc-accent-contrast, #fff); }
+  .bc-btn-primary:hover { background: var(--bc-accent-hover, var(--accent)); border-color: var(--bc-accent-hover, var(--accent)); }
   .bc-btn-danger { color: var(--danger); border-color: var(--bc-danger-border, rgba(185,28,28,.4)); }
-  .bc-btn-ghost  { background: transparent; }
-
+  .bc-btn-ghost  { background: transparent; border-color: transparent; }
+  .bc-btn-ghost:hover { border-color: var(--border); }
   .bc-sortable { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--bc-space-2, 6px); }
   .bc-sortable-item {
     display: grid; grid-template-columns: 20px 1fr;

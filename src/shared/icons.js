@@ -137,6 +137,10 @@
     mortarboard:     '<path d="M8 2.75 14 5.5 8 8.25 2 5.5z"/>' +
                      '<path d="M4.5 6.9v3.35c0 1.1 1.6 2 3.5 2s3.5-.9 3.5-2V6.9"/>',
     info:            '<circle cx="8" cy="8" r="5.75"/><path d="M8 7.4v3.4"/>' + dot(8, 5.3, 0.75),
+    // The focus ring, as a ring around a mark. Corner ticks rather than a solid
+    // rect so it doesn't read as "square" in a row that also offers "Cursor".
+    focus:           '<path d="M2.75 5.5v-1.5a1.25 1.25 0 0 1 1.25-1.25h1.5M10.5 2.75H12a1.25 1.25 0 0 1 1.25 1.25v1.5' +
+                     'M13.25 10.5V12A1.25 1.25 0 0 1 12 13.25h-1.5M5.5 13.25H4A1.25 1.25 0 0 1 2.75 12v-1.5"/>' + dot(8, 8, 1.6),
 
     // ---- progress styles (settings preview affordances) --------------------
     bars:            '<path d="M3.25 12.75V9.5M6.75 12.75V5.5M10.25 12.75V7.75M13.75 12.75V3.25"/>',

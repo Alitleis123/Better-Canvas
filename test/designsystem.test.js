@@ -249,20 +249,30 @@ module.exports = {
   // -- swatch + hex field + Clear -- is ~230px, so in the drawer's body it left
   // a 130px label column and wrapped a one-line hint over five lines. Measured
   // in a real engine after the fix: narrowest label 250px, deepest hint 2 lines.
+  //
+  // The row is a three-track grid now (mark / label / control), so the check is
+  // on the SHAPE of the tracks rather than on the absence of a grid: the label
+  // track must be the one that takes the slack, and it must be allowed to shrink
+  // below its content rather than forcing the row wider than the panel.
   "a settings row guarantees its label a minimum width"() {
     const css = read("src/shared/settings/index.js");
     const row = css.match(/\.bc-row \{[^}]*\}/);
     assert.ok(row, ".bc-row rule not found");
-    assert.noMatch(row[0], /grid-template-columns/,
+    const tracks = row[0].match(/grid-template-columns:\s*([^;]+);/);
+    assert.ok(tracks, ".bc-row must declare its tracks explicitly");
+    assert.noMatch(tracks[1], /^\s*1fr\s+auto\s*$/,
       "a max-content control column starves the label; the row must not be that grid again");
-    assert.match(row[0], /flex-wrap:\s*wrap/,
-      "a control that no longer fits must take its own line rather than squeeze the label");
-    const label = css.match(/\.bc-row-label \{[^}]*\}/);
-    assert.ok(label, ".bc-row-label has no rule, so the label has no width floor");
-    assert.match(label[0], /flex:\s*1 1 var\(--bc-row-label-min\)/,
-      "the label's floor must come from the token, not from whatever is left over");
-    assert.match(BC.tokens.staticCss(), /--bc-row-label-min:\s*calc\(var\(--bc-text-md\)/,
-      "the floor scales with the type scale: when a sentence wraps is a type question");
+    assert.match(tracks[1], /minmax\(0,\s*1fr\)/,
+      "the label track takes the slack and may shrink; anything else starves it again");
+    // A control too wide to share the line gets the whole line UNDER the label,
+    // left-aligned. The old fallback let it wrap while keeping margin-left:auto,
+    // which parked it against the right edge with nothing above it to align to.
+    const wide = css.match(/\.bc-row-wide \.bc-row-control \{[^}]*\}/);
+    assert.ok(wide, "there is no wide-row rule, so a long control has nowhere to go");
+    assert.match(wide[0], /grid-column:\s*2 \/ -1/,
+      "a wide control must span from the label track to the end");
+    assert.match(wide[0], /justify-content:\s*flex-start/,
+      "a control on its own line aligns with the label above it, not the right edge");
   },
 
   "our own surfaces take their spacing and type from the scale"() {

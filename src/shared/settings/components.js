@@ -42,22 +42,41 @@
   };
   const bind = (node, fn) => C.bindings.add(node, fn);
 
-  // Section wrapper with title + optional description.
-  C.section = function ({ title, description, children }) {
+  // Section wrapper. `icon` is a name from the shared set: a section heading with
+  // a mark in front of it is findable by shape when you are scrolling past six of
+  // them, which a line of 15px text is not.
+  C.section = function ({ title, description, children, icon }) {
     const body = h("div.bc-section-body", null, children);
-    return h("section.bc-section", null, [
-      title ? h("h3.bc-section-title", null, title) : null,
-      description ? h("p.bc-section-desc", null, description) : null,
-      body,
-    ]);
+    const head = title ? h("div.bc-section-head", null, [
+      icon ? C.iconTile(icon, "sm") : null,
+      h("div.bc-section-heading", null, [
+        h("h3.bc-section-title", null, title),
+        description ? h("p.bc-section-desc", null, description) : null,
+      ]),
+    ]) : null;
+    return h("section.bc-section", null, [head, body]);
+  };
+
+  // The one place an icon gets its container. Every icon in the settings UI is
+  // in a tile of one of these two sizes, so they cannot drift to different
+  // paddings and optical weights across seventeen renderers.
+  C.iconTile = function (name, size) {
+    const tile = h("span.bc-tile" + (size === "sm" ? ".bc-tile-sm" : ""), null);
+    tile.setAttribute("aria-hidden", "true");
+    tile.innerHTML = BC.icons.svg(name, { size: size === "sm" ? 15 : 16 });
+    return tile;
   };
 
   // Row: label + control. `enabledWhen(state)` is optional and purely additive —
   // omit it and behaviour is identical to before. With it, the row greys out and
   // goes inert when its parent toggle is off, which nothing did previously.
-  C.row = function ({ label, hint, control, warn, enabledWhen }) {
+  C.row = function ({ label, hint, control, warn, enabledWhen, icon, wide }) {
     const ctl = h("div.bc-row-control", null, control);
-    const row = h("div.bc-row", null, [
+    // Three columns -- mark, label, control -- instead of two. The mark column is
+    // what gives a list of fourteen switches a rhythm; without it every row was
+    // the same rectangle and the only way to find one was to read all of them.
+    const row = h("div.bc-row" + (wide ? ".bc-row-wide" : ""), null, [
+      icon ? C.iconTile(icon) : h("span.bc-tile.bc-tile-blank", null),
       h("div.bc-row-label", null, [
         h("div.bc-row-title", null, label),
         hint ? h("div.bc-row-hint", null, hint) : null,
@@ -65,11 +84,20 @@
       ]),
       ctl,
     ]);
-    if (enabledWhen) bind(row, (s) => {
-      const on = !!enabledWhen(s);
-      if (row.classList.contains("bc-row-off") === on) row.classList.toggle("bc-row-off", !on);
-      ctl.toggleAttribute("inert", !on);
-    });
+    if (enabledWhen) {
+      const paint = (s) => {
+        const on = !!enabledWhen(s);
+        if (row.classList.contains("bc-row-off") === on) row.classList.toggle("bc-row-off", !on);
+        ctl.toggleAttribute("inert", !on);
+      };
+      bind(row, paint);
+      // Once at mount, not only on the next store change. Registering the
+      // binding alone left every dependent row painted as ENABLED until the
+      // user happened to change something -- so a planner-only control looked
+      // live while the planner was off, which is the exact confusion the
+      // feature exists to remove. C.state is set by the store on creation.
+      if (C.state) BC.util.guard(() => paint(C.state()), "bc-row-init");
+    }
     return row;
   };
 
@@ -211,29 +239,46 @@
     const wrap = h("div.bc-color", null);
     const cur = get() || "";
     const picker = el("input", { type: "color", value: cur || "#000000" });
-    const text   = el("input", { type: "text", class: "bc-color-text", value: cur, placeholder: "#rrggbb" });
+    // The visible swatch is a label we own, with the input invisible on top of
+    // it. Styling input[type=color] directly means styling ::-webkit-color-swatch,
+    // which ignores a transparent background -- so an UNSET colour still painted
+    // as solid black, i.e. as a deliberate choice of the one value it is not.
+    // Owning the surface also lets the swatch take the radius token, which the
+    // UA pseudo-element does not.
+    const swatch = h("label.bc-swatch", { title: "Pick a colour" }, [picker]);
+    const text   = el("input", { type: "text", class: "bc-color-text", value: cur, placeholder: "Default" });
+    const paintSwatch = () => {
+      const v = get() || "";
+      wrap.classList.toggle("bc-color-unset", !v);
+      swatch.style.background = v || "";
+    };
     // Dragging in the native picker fires input continuously — throttle the store
     // write and take the definitive value on change.
     const commit = BC.util.throttle((v) => set(v), 100);
-    picker.addEventListener("input", () => { text.value = picker.value; commit(picker.value); });
+    picker.addEventListener("input", () => { text.value = picker.value; swatch.style.background = picker.value; wrap.classList.remove("bc-color-unset"); commit(picker.value); });
     picker.addEventListener("change", () => set(picker.value));
     bind(wrap, () => {
       const v = get() || "";
       if (!focused(text) && text.value !== v) text.value = v;
       if (!focused(picker) && v && picker.value !== v) picker.value = v;
+      paintSwatch();
     });
     text.addEventListener("input", () => {
       const v = text.value.trim();
-      if (v === "" && allowEmpty) { set(""); return; }
-      if (BC.color.isHex(v)) { picker.value = v; set(v); wrap.classList.remove("bc-invalid"); }
+      if (v === "" && allowEmpty) { set(""); paintSwatch(); return; }
+      if (BC.color.isHex(v)) { picker.value = v; set(v); wrap.classList.remove("bc-invalid"); paintSwatch(); }
       else wrap.classList.add("bc-invalid");
     });
+    paintSwatch();
+    wrap.appendChild(swatch); wrap.appendChild(text);
+    // Clear is a mark, not the word "Clear": the old control was swatch + hex
+    // field + button at ~230px, which is what squeezed the label column to 130px
+    // in the drawer and wrapped its hint over five lines.
     if (allowEmpty) {
-      const clr = el("button", { class: "bc-btn bc-btn-ghost", type: "button" }, "Clear");
-      clr.addEventListener("click", () => { text.value = ""; set(""); });
-      wrap.appendChild(picker); wrap.appendChild(text); wrap.appendChild(clr);
-    } else {
-      wrap.appendChild(picker); wrap.appendChild(text);
+      const clr = el("button", { class: "bc-icon-btn bc-color-clear", type: "button", title: "Clear", "aria-label": "Clear colour" });
+      clr.innerHTML = BC.icons.svg("close", { size: 13 });
+      clr.addEventListener("click", () => { text.value = ""; set(""); paintSwatch(); });
+      wrap.appendChild(clr);
     }
     return wrap;
   };
