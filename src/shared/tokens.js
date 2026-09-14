@@ -28,8 +28,8 @@
   // we push the foreground — e.g. darkBg #e8e8e8 yields ~1.05:1, reachable in two
   // clicks today.
   const SAFE_NEUTRAL = {
-    light: { bg: "#f6f7fb", bg2: "#ffffff", bg3: "#f1f3f7", border: "#e2e5ea", text: "#16181d", muted: "#5b6472" },
-    dark:  { bg: "#0f1116", bg2: "#16181d", bg3: "#1e2128", border: "#2b2f38", text: "#eef1f5", muted: "#9aa4b2" },
+    light: { bg: "#f5f1ea", bg2: "#fffdf9", bg3: "#eee7dc", border: "#e3dacc", text: "#1d1a16", muted: "#6b6155" },
+    dark:  { bg: "#141210", bg2: "#1c1a17", bg3: "#252119", border: "#332e27", text: "#f3ede4", muted: "#a49a8c" },
   };
 
   // Semantic fills. These differ from the values previously hardcoded around the
@@ -329,7 +329,12 @@
   --bc-radius-circle: 50%;
 
   /* type */
-  --bc-font-sans: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  /* Rounded terminals, from fonts every platform already has. Nothing is
+     fetched, so this costs no request and works offline -- but it is the single
+     cheapest change that makes our own chrome stop reading as a control panel.
+     The grotesque stack is kept as the fallback, so a machine without a rounded
+     face is exactly where it was. */
+  --bc-font-sans: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   --bc-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --bc-font-scale: 1;
   --bc-text-3xs: calc(10px * var(--bc-font-scale));

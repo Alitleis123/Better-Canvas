@@ -4,7 +4,7 @@
   const BC = (globalThis.BC = globalThis.BC || {});
 
   BC.DARK_TONES = {
-    neutral:  { bg: "#1a1d24", label: "Neutral" },
+    neutral:  { bg: "#1b1917", label: "Warm" },
     slate:    { bg: "#1c2130", label: "Slate (cool)" },
     black:    { bg: "#0d0f14", label: "Midnight" },
     nord:     { bg: "#2e3440", label: "Nord" },
@@ -13,7 +13,7 @@
   };
 
   BC.LIGHT_PRESETS = {
-    default:   { bg: "#f6f7fb", accent: "",        label: "Default" },
+    default:   { bg: "#f5f1ea", accent: "",        label: "Paper" },
     rose:      { bg: "#fdf2f7", accent: "#c2185b", label: "Rose" },
     forest:    { bg: "#f0f7ee", accent: "#2e7d32", label: "Forest" },
     ocean:     { bg: "#eff7fb", accent: "#0277bd", label: "Ocean" },

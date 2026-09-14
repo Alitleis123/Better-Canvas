@@ -164,9 +164,12 @@
       const presets = BC.LIGHT_PRESETS || {};
       const darkBase = (t.darkBg && color.isHex(t.darkBg))
         ? t.darkBg
-        : (tones[t.darkTone] || tones.neutral || { bg: "#1a1d24" }).bg;
-      const lp = presets[t.lightPreset] || presets.default || { bg: "#f6f7fb", accent: "" };
-      const accent = color.normalizeHex(t.accentColor) || color.normalizeHex(lp.accent) || "#4f46e5";
+        : (tones[t.darkTone] || tones.neutral || { bg: "#1b1917" }).bg;
+      const lp = presets[t.lightPreset] || presets.default || { bg: "#f5f1ea", accent: "" };
+      // Warm clay, not the stock indigo every extension ships. It clears 4.9:1 on
+      // the lightest paper surface and 5.9:1 for its own label, so it can be the
+      // default without the guard having to rescue it.
+      const accent = color.normalizeHex(t.accentColor) || color.normalizeHex(lp.accent) || "#a8452c";
       return {
         dark:  { ...color.darkSurface(darkBase), accent, link: color.lighten(accent, 0.15) },
         light: { ...color.lightSurface(lp.bg),   accent, link: accent },
