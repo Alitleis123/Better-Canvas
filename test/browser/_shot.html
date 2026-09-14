@@ -14,6 +14,7 @@
     m=plain   the dashboard, no panel
     dark=1    apply dark mode to whichever of the above you chose
     y=<px>    scroll the drawer down, for a section below the fold
+    s=<text>  type into the tab search, to photograph a filtered or empty state
 -->
 <meta charset=utf-8><title>shot</title>
 <body style="margin:0;background:#e8e9ea">
@@ -27,6 +28,11 @@ document.getElementById('f').onload = async function () {
   if (mode === 'panel') {
     w.__bcPanel(q.get('w') ? +q.get('w') : null, dark);
     if (q.get('t')) w.__bcTab(q.get('t'));
+    if (q.get('s')) {
+      const host = w.document.querySelector('[data-bc-node="bc-drawer"]');
+      const si = host && host.shadowRoot.querySelector('.bc-search');
+      if (si) { si.value = q.get('s'); si.dispatchEvent(new Event('input', { bubbles: true })); }
+    }
     // Scroll LAST and late. The course editor and the GPA table mount from a
     // promise, so scrolling immediately clamps against a document that is still
     // short and the shot lands well above where it was aimed.
