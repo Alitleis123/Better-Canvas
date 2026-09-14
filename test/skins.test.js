@@ -470,7 +470,14 @@ module.exports = {
     // moment anyone tweaks a colour, and then the gallery is lying.
     const src = read("src/shared/settings/index.js");
     assert.match(src, /BC\.skins\.swatchStyles/, "skin cards must render from the engine");
-    assert.match(src, /BC\.SKIN_CATALOG\.map/, "the gallery must list the catalog");
+    // The gallery reads the catalog, then splits it: forty-four cards under one
+    // heading is a wall rather than a catalog, so it is filtered into the
+    // illustrated skins and the ported palettes, dark and light.
+    assert.match(src, /BC\.SKIN_CATALOG\.filter/, "the gallery must list the catalog");
+    for (const group of ["own", "darkPorts", "lightPorts"]) {
+      assert.ok(src.includes(group + ".map((k) => skinCard"),
+        `the gallery should render the ${group} group`);
+    }
   },
 
   "the gallery can clear the applied skin"() {

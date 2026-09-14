@@ -219,6 +219,17 @@
         for (const row of body.querySelectorAll(".bc-row")) {
           row.classList.toggle("bc-hidden", !!query && !(row.textContent || "").toLowerCase().includes(query));
         }
+        // Cards, as well as rows. A gallery item is not a .bc-row, so the
+        // section-level fallback below was the only thing search did for it:
+        // typing "gruvbox" with forty-four skins on screen kept the section --
+        // because the section's text contains "Gruvbox" somewhere -- and
+        // narrowed nothing. Anything carrying data-bc-filter opts into being
+        // filtered individually, on that attribute rather than on its text, so a
+        // skin can be found by a tag or an author it does not print.
+        for (const card of body.querySelectorAll("[data-bc-filter]")) {
+          const hay = (card.getAttribute("data-bc-filter") || "").toLowerCase();
+          card.classList.toggle("bc-hidden", !!query && !hay.includes(query));
+        }
         let shown = 0;
         for (const sec of body.querySelectorAll(".bc-section")) {
           // A section built out of rows is judged by its rows. Several are not:
@@ -227,9 +238,12 @@
           // them for ANY query, so searching "skin" on the Themes tab hid the
           // skin gallery -- the search was hiding exactly what was asked for.
           const hasRows = !!sec.querySelector(".bc-row");
-          const hit = hasRows
-            ? !!sec.querySelector(".bc-row:not(.bc-hidden)")
-            : (sec.textContent || "").toLowerCase().includes(query);
+          const hasCards = !!sec.querySelector("[data-bc-filter]");
+          const hit = hasCards
+            ? !!sec.querySelector("[data-bc-filter]:not(.bc-hidden)")
+            : hasRows
+              ? !!sec.querySelector(".bc-row:not(.bc-hidden)")
+              : (sec.textContent || "").toLowerCase().includes(query);
           sec.classList.toggle("bc-hidden", !!query && !hit);
           if (!query || hit) shown++;
         }
@@ -836,6 +850,10 @@
     const card = h("button.bc-skin-card" + (on ? ".bc-on" : ""), {
       type: "button",
       "aria-pressed": String(on),
+      // What the tab search matches this card on. The author and the tags are in
+      // here even though the card only prints the tags, so "catppuccin",
+      // "gruvbox" and "rose pine" all find their family.
+      "data-bc-filter": [t.name, t.author, t.dark ? "dark" : "light"].concat(t.tags).join(" "),
       // The name alone would read as "Matcha Strawberry" with no indication of
       // what the control does or whether it is the active one.
       "aria-label": (on ? "Applied skin: " : "Apply skin: ") + t.name +
@@ -878,6 +896,7 @@
 
     const noneCard = h("button.bc-skin-card.bc-skin-none" + (t.skin ? "" : ".bc-on"), {
       type: "button", "aria-pressed": String(!t.skin), "aria-label": "No skin — plain Canvas",
+      "data-bc-filter": "none plain canvas off",
       onclick: () => store.set((x) => { x.theming.skin = ""; }),
     }, [
       // icons.el, not icons.node -- the latter does not exist, and calling it
@@ -887,13 +906,37 @@
       h("div.bc-skin-meta", null, [h("span.bc-skin-name", null, "None")]),
     ]);
 
+    // Three grids, not one. Forty-four cards under a single heading is a wall
+    // you scroll past rather than a catalog you browse, and the two halves are
+    // genuinely different things: the illustrated skins are drawn here, the rest
+    // are ports of palettes people already know by name. Split by what you would
+    // go looking for -- art, then dark, then light.
+    const ported = (k) => (k.tags || []).indexOf("editor") >= 0 || k.author !== "Better Canvas";
+    const own = BC.SKIN_CATALOG.filter((k) => !ported(k));
+    const darkPorts = BC.SKIN_CATALOG.filter((k) => ported(k) && k.dark);
+    const lightPorts = BC.SKIN_CATALOG.filter((k) => ported(k) && !k.dark);
+
     c.appendChild(S.section({
-      title: "Skins", icon: "palette",
+      title: "Illustrated", icon: "palette",
       description: "A whole look — surface art, card art, nav and type, not just colours. Every pattern is drawn here, so a skin works offline and downloads nothing.",
       children: [
         h("div.bc-skin-grid", null,
-          [noneCard].concat(BC.SKIN_CATALOG.map((k) => skinCard(store, k, null)))),
+          [noneCard].concat(own.map((k) => skinCard(store, k, null)))),
       ],
+    }));
+
+    // The tab search reaches individual cards, so the count is worth stating:
+    // it tells you the list is long enough to search rather than scroll.
+    c.appendChild(S.section({
+      title: "Dark palettes", icon: "contrast",
+      description: darkPorts.length + " open-source colour schemes, ported. Search this tab by name, family or tag: catppuccin, gruvbox, retro.",
+      children: [h("div.bc-skin-grid", null, darkPorts.map((k) => skinCard(store, k, null)))],
+    }));
+
+    c.appendChild(S.section({
+      title: "Light palettes", icon: "sun",
+      description: lightPorts.length + " of the same, for working in daylight.",
+      children: [h("div.bc-skin-grid", null, lightPorts.map((k) => skinCard(store, k, null)))],
     }));
 
     if (mine.length) {

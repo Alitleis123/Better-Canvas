@@ -49,6 +49,12 @@
     // A crescent, not the sleeping face: that rendered in colour and broke the
     // monochrome row it sits in.
     moon:            '<path d="M13.25 9.6A5.6 5.6 0 0 1 6.4 2.75a5.6 5.6 0 1 0 6.85 6.85z"/>',
+    // The counterpart to moon. The set had one and not the other, so anything
+    // labelling a LIGHT option had to borrow an icon that meant something else.
+    sun:             '<circle cx="8" cy="8" r="3.1"/>' +
+                     '<path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6' +
+                     'M3.4 3.4l1.15 1.15M11.45 11.45l1.15 1.15' +
+                     'M12.6 3.4l-1.15 1.15M4.55 11.45L3.4 12.6"/>',
     alert:           '<path d="M8 2.75 14 13.25H2z"/><path d="M8 6.5v3"/>' + dot(8, 11.4, 0.85),
     bell:            '<path d="M4.5 6.75a3.5 3.5 0 0 1 7 0c0 3 1 4 1 4h-9s1-1 1-4z"/>' +
                      '<path d="M6.75 12.75a1.5 1.5 0 0 0 2.5 0"/>',
