@@ -226,8 +226,12 @@ module.exports = {
       "the rail-collapse query must be scoped to the wrapper, or the two shadow each other");
     // A percentage cap is ignored while an auto track is being intrinsically
     // sized, so the ceiling has to be absolute.
-    const sel = src.match(/\.bc-select \{[^}]*\}/);
-    assert.ok(sel && /max-width: \d+px/.test(sel[0]),
+    // Any .bc-select rule with an absolute ceiling. There are several now (the
+    // narrow-panel query and the @supports fallback both relax it to 100%), so
+    // matching only the first one found the wrong rule.
+    const capped = [...src.matchAll(/\.bc-select \{[^}]*\}/g)]
+      .some((m) => /max-width:\s*\d+px/.test(m[0]));
+    assert.ok(capped,
       "a select sized to its widest option will starve the label again");
   },
 

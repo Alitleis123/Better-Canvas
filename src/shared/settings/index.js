@@ -1837,24 +1837,6 @@
      which is exactly backwards. */
   .bc-shell-wrap { container-type: inline-size; container-name: bc-shell; padding: var(--bc-gap-card, 16px) var(--bc-pad-card, 24px) var(--bc-space-9, 24px); }
   .bc-shell { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--bc-space-8, 20px); align-items: start; }
-  /* The rail only collapses when it genuinely cannot fit. It must also stop
-     being a sticky column when it does: keeping flex-direction:column and
-     position:sticky left a full-height list pinned over the body. */
-  .bc-shell-collapsed { grid-template-columns: minmax(0, 1fr) !important; }
-  .bc-shell-collapsed .bc-nav { position: static; top: auto; }
-  .bc-shell-collapsed .bc-nav-groups { flex-direction: row; overflow-x: auto; overflow-y: hidden; gap: var(--bc-space-5, 12px); padding-bottom: var(--bc-space-2, 6px); }
-  .bc-shell-collapsed .bc-nav-group { flex-direction: row; align-items: center; gap: 2px; }
-  .bc-shell-collapsed .bc-nav-group-label { display: none; }
-  .bc-shell-collapsed .bc-tab { flex: none; white-space: nowrap; }
-  @container bc-shell (max-width: 470px) {
-    .bc-shell { grid-template-columns: minmax(0, 1fr); }
-    .bc-nav { position: static; top: auto; }
-    .bc-nav-groups { flex-direction: row; overflow-x: auto; overflow-y: hidden; gap: var(--bc-space-5, 12px); padding-bottom: var(--bc-space-2, 6px); }
-    .bc-nav-group { flex-direction: row; align-items: center; gap: 2px; }
-    .bc-nav-group-label { display: none; }
-    .bc-tab { flex: none; white-space: nowrap; }
-  }
-
   /* ---- tab rail ---------------------------------------------------------
      No card around it. Seventeen ungrouped tabs in a bordered box was the
      single densest thing in the panel; five labelled groups on the bare page
@@ -1893,6 +1875,41 @@
     width: 3px; height: 16px; border-radius: 0 var(--bc-radius-sm, 3px) var(--bc-radius-sm, 3px) 0; background: currentColor;
   }
   .bc-tab-ic { display: inline-flex; align-items: center; justify-content: center; width: 16px; flex: 0 0 16px; }
+
+  /* The rail only collapses when it genuinely cannot fit. It must also stop
+     being a sticky column when it does: keeping flex-direction:column and
+     position:sticky left a full-height list pinned over the body.
+     There was a .bc-shell-collapsed variant of every rule below, for a class no
+     code has ever set -- six dead rules that the a11y test was reading as proof
+     of a second mechanism. */
+  @container bc-shell (max-width: 470px) {
+    .bc-shell { grid-template-columns: minmax(0, 1fr); }
+    .bc-nav { position: static; top: auto; }
+    .bc-nav-groups { flex-direction: row; overflow-x: auto; overflow-y: hidden; gap: var(--bc-space-5, 12px); padding-bottom: var(--bc-space-2, 6px); }
+    .bc-nav-group { flex-direction: row; align-items: center; gap: 2px; }
+    .bc-nav-group-label { display: none; }
+    .bc-tab { flex: none; white-space: nowrap; }
+  }
+
+  /* Without container queries there is no way to ask how wide the PANEL is, so
+     fall back to the window. It is the wrong axis -- a narrow panel on a wide
+     screen is exactly the case this gets wrong -- but it is better than a rail
+     that never collapses at all. The rewrite dropped this block; container
+     queries are Chrome 105+, Firefox 110+ and Safari 16+, so it is insurance
+     rather than a live path. */
+  @supports not (container-type: inline-size) {
+    @media (max-width: 900px) {
+      .bc-shell { grid-template-columns: minmax(0, 1fr); }
+      .bc-nav { position: static; top: auto; }
+      .bc-nav-groups { flex-direction: row; overflow-x: auto; overflow-y: hidden; gap: var(--bc-space-5, 12px); padding-bottom: var(--bc-space-2, 6px); }
+      .bc-nav-group { flex-direction: row; align-items: center; gap: 2px; }
+      .bc-nav-group-label { display: none; }
+      .bc-tab { flex: none; white-space: nowrap; }
+      .bc-row:not(.bc-row-slim) { grid-template-columns: 28px minmax(0, 1fr); row-gap: var(--bc-space-3, 8px); }
+      .bc-row:not(.bc-row-slim) .bc-row-control { grid-column: 2 / -1; justify-content: flex-start; max-width: 100%; }
+      .bc-select { max-width: 100%; }
+    }
+  }
 
   /* ---- tab head ---------------------------------------------------------
      Replaces the per-section "description" paragraphs. One line at the top of

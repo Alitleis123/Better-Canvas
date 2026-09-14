@@ -285,17 +285,30 @@ module.exports = {
     // so a full-height list stayed pinned over the body and the body scrolled
     // underneath it. Two guarantees, checked at whichever selector now owns
     // them: the rail stops being sticky, and its list runs horizontally.
-    const src = read("src/shared/settings/index.js");
+    // Comments stripped: the note in the source explains which dead rules were
+    // removed and names them, and an unstripped scan reads that as the rules
+    // still being there.
+    const src = read("src/shared/settings/index.js").replace(/\/\*[\s\S]*?\*\//g, "");
+    // There is no JS-measured collapse and there never was: .bc-shell-collapsed
+    // was six rules for a class no code ever set, which an earlier version of
+    // this test counted as a second mechanism. What must hold is that EVERY
+    // place that collapses the rail also unsticks it and turns the groups
+    // sideways: the container query, and the @supports fallback for engines
+    // without one.
     const collapses = [...src.matchAll(/\.bc-nav \{([^}]*)\}/g)]
       .map((m) => m[1])
       .filter((body) => /position: static/.test(body));
     assert.ok(collapses.length >= 2,
-      "both the container-query and the JS-measured collapse must unstick the rail");
+      "the container query and the @supports fallback must both unstick the rail");
     const rows = [...src.matchAll(/\.bc-nav-groups \{([^}]*)\}/g)]
       .map((m) => m[1])
       .filter((body) => /flex-direction: row/.test(body));
     assert.ok(rows.length >= 2,
       "a collapsed rail must lay its groups out horizontally, not as a column");
+    assert.ok(!/bc-shell-collapsed/.test(src),
+      "bc-shell-collapsed is dead: no code sets it, so its rules prove nothing");
+    assert.match(src, /@supports not \(container-type: inline-size\)/,
+      "there must be a path for engines without container queries");
   },
 
   "the settings tab icons are drawn, not typed"() {
