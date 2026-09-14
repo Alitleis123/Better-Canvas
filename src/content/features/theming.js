@@ -63,17 +63,7 @@
     html.bc-dark hr, html.bc-dark .border-bottom, html.bc-dark .border-top {
       border-color: var(--bc-d-border) !important;
     }
-    /* bg2, the same surface as the card itself -- NOT bg3.
-       .ic-DashboardCard__header wraps the artwork AND the text block, and its
-       height is its content's, while the card is stretched to its grid row. A
-       lighter tone here therefore drew a lighter, rounded box inside every card
-       that stopped above the action row, so a card read as a box inside a box --
-       and because the box was content-height, it ended at a different y on every
-       card whose title took a different number of lines. Photographed on a real
-       Canvas dashboard at 1710px: one row had a 60px-tall inner box beside two
-       75px ones. One surface per card is both the correct design and the thing
-       that stops a height difference from being visible at all. */
-    html.bc-dark .ic-DashboardCard__header { background-color: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important; }
+    html.bc-dark .ic-DashboardCard__header { background-color: var(--bc-d-bg3) !important; color: var(--bc-d-text) !important; }
     html.bc-dark .ic-app-course-nav-toggle { background-color: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important; }
     /* Colour only, so every selector here must sit INSIDE a surface darkened
        above. .recent_feedback used to be in this list without being darkened
