@@ -59,6 +59,33 @@ __bcTab("grades")                             // aim it at a tab
 __bcRowWidths(160)                            // rows whose label got starved
 ```
 
+## The whole extension, booting itself
+
+`page.html` loads a hand-picked subset of features and drives them directly.
+That is right for looking at one surface, but it cannot answer *does changing
+this setting do anything without a reload* -- which needs the real registry, the
+real `applyAll`, and the real storage-subscribe path.
+
+`live.html` loads every content script `manifest.json` declares, in the
+manifest's order, and lets `content.js` boot as it does on Canvas. The list is
+fetched rather than restated, so the harness cannot drift from what ships.
+
+```
+live.html?c=<uri-encoded expression>      run it after boot, print the result
+
+await __bcLive({ theming: { radius: 20 } })   change a setting + re-apply
+__bcSeen('[data-bc-node="bc-gpa-card"]')      how many are in the DOM
+__bcNeedsReload(CASES)                        node-driven settings that are stuck
+__bcStyleSweep(CASES)                         style-driven ones that are stuck
+```
+
+Both sweeps set a setting one way, the other way, and back, and report anything
+that reads the same all three times. Two real defects came out of it: the
+read-aloud buttons had no off branch, and `theming`'s global radius rule outranked
+the dashboard's own card-radius control so that slider moved nothing. Three
+apparent failures were wrong selectors on my part, which is the other thing this
+is good for.
+
 ## Photograph it
 
 Three pages exist so a change can be *looked at* rather than described. Each one
