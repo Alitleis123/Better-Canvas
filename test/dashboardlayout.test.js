@@ -284,6 +284,42 @@ module.exports = {
       "box-shadow must not be transitioned");
   },
 
+  // Canvas spaces its cards with margins, because its own container is a
+  // flex-wrap. Ours is a grid with a gap, so the two stack: a real dashboard at
+  // 1710px put 51px between rows against the 16px the gap asks for. The replica
+  // could not show it until canvas.css was changed to space the fixture the way
+  // Canvas actually does.
+  "Canvas's own card margins are cleared, so the grid gap is the only spacing"() {
+    const src = read("src/content/features/dashboard.js");
+    const m = src.match(/const cardReset = `([\s\S]*?)`;/);
+    assert.ok(m, "the card margin reset is not defined in one place");
+    assert.match(m[1], /margin: 0 !important/, "the reset must zero the margin");
+    assert.match(m[1], /\$\{GRID\} > \[data-bc-carditem\]/,
+      "the wrapper carries the margin when Canvas wraps each card");
+    assert.match(m[1], /\$\{GRID\} > \.ic-DashboardCard/,
+      "and the card itself carries it when Canvas does not wrap");
+    assert.ok(src.indexOf("${cardReset}") > 0, "the reset has to be emitted");
+    // masonry uses its own margin for rhythm, so its rule must come AFTER.
+    assert.ok(src.indexOf("${cardReset}") < src.indexOf('d.layout === "masonry"'),
+      "masonry restates margin-bottom, so the reset must precede it");
+  },
+
+  "the fill chain names every box between the card and its metadata"() {
+    // Canvas has shipped the card link both inside __header and beside it.
+    // Naming one of them means margin-top: auto has no slack on the other
+    // markup, and the metadata stops lining up across a row -- which is what a
+    // real dashboard showed after the replica said it worked.
+    const src = read("src/content/features/dashboard.js");
+    const i = src.indexOf("const cardShape =");
+    const block = src.slice(i, src.indexOf("`;", i));
+    assert.match(block, /\.ic-DashboardCard__header, \.ic-DashboardCard__link \{/,
+      "both boxes have to be stretching flex columns, not just one");
+    assert.match(block, /min-height: 0 !important/,
+      "a flex item's default min-height: auto floors it at its content");
+    assert.match(block, /\.ic-DashboardCard__header-subtitle \{ margin-top: auto !important; \}/,
+      "the metadata is what gets pushed to the bottom");
+  },
+
   "the card treatment uses tokens, not literals"() {
     const src = read("src/content/features/dashboard.js");
     const i = src.indexOf("const spine =");

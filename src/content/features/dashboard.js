@@ -185,7 +185,19 @@
            this did, photographed and caught. */
         flex: 1 1 auto !important;
       }
-      .ic-DashboardCard__link { display: flex !important; flex-direction: column !important; }
+      /* Every box between the card and the metadata, not just the one the
+         replica happens to nest. Canvas has shipped the link both inside
+         __header and beside it, so naming one of them means the chain breaks on
+         the other markup and margin-top: auto silently has no slack to spend --
+         which is what a real dashboard showed after the replica said it worked.
+         min-height: 0 because a flex item's default min-height: auto floors it
+         at its content and stops it shrinking to share a row. */
+      .ic-DashboardCard__header, .ic-DashboardCard__link {
+        display: flex !important;
+        flex-direction: column !important;
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+      }
       .ic-DashboardCard__header-subtitle { margin-top: auto !important; }
       /* Canvas pads the body 10px 12px, which is thin against a 250px card and
          is the other half of what reads as bad spacing. On the scale, so the
@@ -241,9 +253,24 @@
         margin: 0 0 var(--bc-space-5, 12px) !important;
       }`;
 
+    // Canvas spaces its cards with MARGINS, because its own container is a
+    // flex-wrap rather than a grid. Ours is a grid with a gap, so the two stack:
+    // photographed on a real dashboard at 1710px, the space between rows came to
+    // 51px against the 16px the gap asks for. The replica never showed it because
+    // canvas.css spaces the fixture with gap, like we do.
+    //
+    // The gap owns spacing now, so the margins go. Every layout that uses its own
+    // margin for rhythm -- masonry -- restates it after this.
+    const cardReset = `
+      ${GRID} > [data-bc-carditem], ${GRID} > .ic-DashboardCard,
+      ${GRID} [data-bc-carditem] > .ic-DashboardCard {
+        margin: 0 !important;
+      }`;
+
     let css = `
       ${shell}
       ${chrome}
+      ${cardReset}
       .ic-DashboardCard { border-radius: ${rad} !important; overflow: hidden; }
       .ic-DashboardCard__link, .ic-DashboardCard__box { border-radius: ${rad} !important; }
       ${d.hoverLift ? `.ic-DashboardCard:hover { transform: translateY(-2px); }

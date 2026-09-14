@@ -20,12 +20,22 @@ a { color: #0374b5; text-decoration: none; }
 .ic-Dashboard-header__title { margin: 0; font-size: 28px; font-weight: 300; }
 .Button { background: #fff; color: #2d3b45; border: 1px solid #c7cdd1; padding: 8px 14px; border-radius: 3px; }
 
-/* Canvas's own dashboard card grid: a flex-wrap container of per-card boxes. */
+/* Canvas's own dashboard card grid: a flex-wrap container of per-card boxes.
+   Spaced with MARGINS on the card, not gap on the container. That is what Canvas
+   actually does, and it matters: our layout is a grid with a gap, so a margin
+   here stacks on top of it. The fixture used `gap` and so could not reproduce
+   the 51px row gap a real dashboard showed against the 16px we ask for. */
 #DashboardCard_Container { padding: 16px 0; }
-.ic-DashboardCard__box { display: flex; flex-wrap: wrap; gap: 16px; }
+.ic-DashboardCard__box { display: flex; flex-wrap: wrap; }
 .ic-DashboardCard__box_header { width: 100%; margin: 0 0 8px; font-size: 16px; }
 .ic-DashboardCard { width: 262px; background: #fff; border: 1px solid #c7cdd1;
-  border-radius: 4px; overflow: hidden; position: relative; }
+  border-radius: 4px; overflow: hidden; position: relative;
+  margin: 0 16px 35px 0; }
+/* The kebab. Absolutely positioned, so it must NOT become a flex item when the
+   card's header is made a flex column. */
+.ic-DashboardCard__header-button { position: absolute; top: 8px; right: 8px;
+  width: 28px; height: 28px; border-radius: 6px; border: 0; background: rgba(0,0,0,.45);
+  color: #fff; z-index: 4; }
 .ic-DashboardCard__header { position: relative; }
 .ic-DashboardCard__header_image { height: 146px; background-size: cover; background-position: center; }
 .ic-DashboardCard__header_hero { height: 146px; }
