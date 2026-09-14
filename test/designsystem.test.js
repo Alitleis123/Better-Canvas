@@ -359,4 +359,22 @@ module.exports = {
       "the property has to actually be stamped on the card");
     assert.match(src, /clearCourseIdentity/, "and cleared on teardown");
   },
+
+  // Two of our own rules, both !important, on the same property and the same
+  // element: the more specific one wins, and it is not necessarily the one the
+  // user just moved a slider for. theming's global radius rule is (0,3,0) on
+  // .ic-DashboardCard and the dashboard's own rule is (0,1,0), so the Dashboard
+  // tab's corner-radius control rendered 8px whatever it was set to.
+  "the dashboard owns its card radius"() {
+    // Comments stripped first: the note above the rule names the selector it is
+    // warning about, and an unstripped match starts inside the comment.
+    const theming = read("src/content/features/theming.js").replace(/\/\*[\s\S]*?\*\//g, "");
+    const rule = theming.match(/:root\[data-bc-radius\][^{]*\{[^}]*\}/);
+    assert.ok(rule, "the global radius rule is missing");
+    assert.ok(!/ic-DashboardCard/.test(rule[0]),
+      "the global radius rule must not claim the dashboard card; it outranks the card's own control");
+    const dash = read("src/content/features/dashboard.js");
+    assert.match(dash, /\.ic-DashboardCard \{ border-radius: \$\{rad\}/,
+      "the dashboard must still set the card radius from its own setting");
+  },
 };

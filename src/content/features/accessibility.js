@@ -81,6 +81,19 @@
     BC.injector.setStyle("bc-a11y-css", CSS);
     installCbFilters();
     if (a.tts) installTts();
+    // Switching the setting OFF had no branch at all, so the Speak buttons
+    // stayed on the page until a reload -- and the _bcTts expando meant they
+    // would not come back afterwards either. Same teardown the unmount hook
+    // does, so there is one definition of "no TTS here".
+    else if (ttsCount !== -1) removeTts();
+  }
+
+  function removeTts() {
+    ttsCount = -1;
+    for (const el of document.querySelectorAll(TTS_SELECTOR)) {
+      if (el._bcTts) delete el._bcTts;
+    }
+    BC.injector.removeNode("bc-tts-btn");
   }
 
   BC.registry.register({
@@ -89,10 +102,7 @@
     // installTts() skipped every element it had already marked and the Speak buttons
     // (which teardown had just removed) never came back.
     unmount() {
-      ttsCount = -1;
-      for (const el of document.querySelectorAll(TTS_SELECTOR)) {
-        delete el._bcTts;
-      }
+      removeTts();
       if (window.speechSynthesis && window.speechSynthesis.speaking) window.speechSynthesis.cancel();
     },
   });

@@ -131,8 +131,11 @@
     :root[data-bc-density="spacious"] { --bc-density: 1.4; }
     :root[data-bc-density="cozy"]     { --bc-density: 1.7; }
 
-    /* Global radius */
-    :root[data-bc-radius] .ic-DashboardCard, :root[data-bc-radius] .ic-DashboardCard__box,
+    /* Global radius. Deliberately NOT the dashboard card: the Dashboard tab has
+       its own corner-radius control, and this rule was beating it. Both carry
+       !important, and :root[data-bc-radius] .ic-DashboardCard is (0,3,0) against
+       the dashboard's (0,1,0), so the global value won and the card slider moved
+       nothing at all -- 2px and 22px both rendered 8px. */
     :root[data-bc-radius] .btn, :root[data-bc-radius] input, :root[data-bc-radius] select,
     :root[data-bc-radius] .Button, :root[data-bc-radius] .card, :root[data-bc-radius] .panel {
       border-radius: var(--bc-radius) !important;
