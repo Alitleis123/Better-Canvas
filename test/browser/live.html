@@ -1,0 +1,193 @@
+<!doctype html>
+<!--
+  The whole extension, booting itself.
+
+  page.html loads a hand-picked subset of features and drives them directly,
+  which is right for looking at one surface but cannot answer "does changing
+  this setting do anything without a reload". That needs the real registry, the
+  real applyAll, and the real storage-subscribe path.
+
+  So this loads every content script the MANIFEST declares, in the manifest's
+  order, and then lets content.js boot exactly as it does on Canvas. The script
+  list is fetched rather than restated, so this harness cannot drift from what
+  ships.
+
+    await __bcLiveReady
+    __bcLive({ dashboard: { widgets: { todo: false } } })   // change + re-apply
+    __bcSeen("[data-bc-node='bc-gpa-card']")                // is it in the DOM?
+    __bcNeedsReload(CASES)                                  // the whole sweep
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Better Canvas live harness</title>
+<link rel="stylesheet" href="canvas.css">
+</head>
+<body>
+<pre id="bc-out" style="margin:0;padding:10px;font:12px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;background:#fff;color:#111;position:relative;z-index:2147483646"></pre>
+<div id="bc-fixture"></div>
+<script>
+// ---- chrome stub -------------------------------------------------------
+// Only what the content bundle touches. storage is real enough to round-trip,
+// because the settings-change path under test goes through it.
+(() => {
+  const store = {};
+  const listeners = [];
+  window.chrome = {
+    storage: {
+      local: {
+        get: (keys, cb) => {
+          const out = {};
+          for (const k of [].concat(keys || [])) if (k in store) out[k] = store[k];
+          cb ? cb(out) : null;
+        },
+        set: (obj, cb) => {
+          const changes = {};
+          for (const k of Object.keys(obj)) { changes[k] = { oldValue: store[k], newValue: obj[k] }; store[k] = obj[k]; }
+          for (const fn of listeners.slice()) fn(changes, "local");
+          if (cb) cb();
+        },
+        remove: (k, cb) => { delete store[k]; if (cb) cb(); },
+      },
+      onChanged: { addListener: (fn) => listeners.push(fn), removeListener: (fn) => {
+        const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1);
+      } },
+    },
+    runtime: {
+      lastError: null,
+      id: "bc-live-harness",
+      getManifest: () => window.__bcManifest,
+      getURL: (p) => "/" + p,
+      sendMessage: (m, cb) => { if (cb) cb({ ok: true }); },
+      onMessage: { addListener() {} },
+    },
+    permissions: { contains: (o, cb) => cb(true), request: (o, cb) => cb(true), getAll: () => Promise.resolve({ origins: [] }) },
+    alarms: { create() {}, clear() {}, onAlarm: { addListener() {} } },
+    notifications: { create() {}, onClicked: { addListener() {} } },
+    tabs: { query: () => Promise.resolve([]), sendMessage() {} },
+  };
+})();
+</script>
+<script>
+window.__bcLiveReady = (async () => {
+  const bust = "?t=" + Date.now();
+  const mf = await (await fetch("/manifest.json" + bust)).json();
+  window.__bcManifest = mf;
+
+  // The fixture is page.html's replica markup, reused rather than copied: two
+  // hand-written Canvas replicas would drift and only one of them would be the
+  // one anybody checked.
+  const page = await (await fetch("/test/browser/page.html" + bust)).text();
+  const doc = new DOMParser().parseFromString(page, "text/html");
+  const app = doc.querySelector("#application");
+  document.getElementById("bc-fixture").appendChild(document.importNode(app, true));
+
+  const load = (src) => new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "/" + src + bust;
+    s.onload = res; s.onerror = () => rej(new Error("failed to load " + src));
+    document.head.appendChild(s);
+  });
+  // Top-frame bundle only: the all_frames entry is for embedded Canvas iframes.
+  const entry = (mf.content_scripts || []).find((c) => !c.all_frames);
+  for (const src of entry.js) await load(src);
+
+  // The API needs a live Canvas; everything else is real.
+  const courses = [
+    { id: "1", shortName: "ENGL2700 Creative Writing", originalName: "ENGL2700 Creative Writing", courseCode: "ENGL2700", color: "#b58a3c" },
+    { id: "2", shortName: "SOCL2320 Statistical Analysis", originalName: "SOCL2320 Statistical Analysis", courseCode: "SOCL2320", color: "#4a9d7f" },
+  ];
+  BC.api = Object.assign(BC.api || {}, {
+    dashboardCards: () => Promise.resolve(courses),
+    activeCourses: () => Promise.resolve(courses),
+    coursesWithScores: () => Promise.resolve(courses.map((c, i) => ({
+      id: c.id, name: c.shortName, enrollments: [{ computed_current_score: [91, 84][i] }],
+    }))),
+    plannerItems: () => Promise.resolve([]),
+    announcements: () => Promise.resolve([]),
+    filesForCourse: () => Promise.resolve([]),
+    submissions: () => Promise.resolve([]),
+    createPlannerNote: () => Promise.resolve({}),
+    setPlannerComplete: () => Promise.resolve({}),
+  });
+
+  // content.js boots on its own; wait for it to have applied once.
+  for (let i = 0; i < 60 && !document.querySelector("style[data-better-canvas]"); i++) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return true;
+})();
+
+// Change a setting the way the settings panel does, then wait for the applyAll
+// that the storage subscription schedules.
+window.__bcLive = async function (patch) {
+  const merge = (dst, src) => {
+    for (const k of Object.keys(src)) {
+      if (src[k] && typeof src[k] === "object" && !Array.isArray(src[k]) &&
+          dst[k] && typeof dst[k] === "object" && !Array.isArray(dst[k])) merge(dst[k], src[k]);
+      else dst[k] = src[k];
+    }
+    return dst;
+  };
+  await BC.storage.update((d) => merge(d, patch));
+  if (BC.applyNow) BC.applyNow();
+  await new Promise((r) => setTimeout(r, 260));
+  return true;
+};
+
+window.__bcSeen = (sel) => document.querySelectorAll(sel).length;
+
+// ?c=<uri-encoded expression> runs after boot and prints into the page, because
+// headless Chrome gives you no console to collect.
+(async () => {
+  const code = new URLSearchParams(location.search).get("c");
+  if (!code) return;
+  const out = document.getElementById("bc-out");
+  try {
+    await window.__bcLiveReady;
+    // The tour is modal and would sit over everything being measured.
+    await BC.storage.update((d) => { d.onboarding = Object.assign(d.onboarding || {}, { seen: true, done: true }); });
+    document.querySelectorAll('[data-bc-node="bc-dialog"],[data-bc-node="bc-scrim"]').forEach((n) => n.remove());
+    const r = await window.eval(decodeURIComponent(code));
+    out.textContent = "RESULT: " + JSON.stringify(r, null, 1);
+  } catch (e) {
+    out.textContent = "ERR: " + e.message + "\n" + (e.stack || "");
+  }
+  document.title = "ready";
+})();
+
+// Same idea for settings whose effect is a computed style rather than a node:
+// read the property one way, the other way, and back. A setting that needs a
+// reload reads the same all three times.
+window.__bcStyleSweep = async function (cases) {
+  const read = (c) => {
+    const el = document.querySelector(c.sel);
+    if (!el) return "(no " + c.sel + ")";
+    const cs = getComputedStyle(el);
+    return c.prop.startsWith("--") ? cs.getPropertyValue(c.prop).trim() : cs[c.prop];
+  };
+  const stuck = [];
+  for (const c of cases) {
+    await __bcLive(c.a); const a = read(c.sel ? c : c);
+    await __bcLive(c.b); const b = read(c);
+    await __bcLive(c.a); const d = read(c);
+    if (a === b || d !== a) stuck.push(c.name + " [a=" + a + " b=" + b + " a=" + d + "]");
+  }
+  return stuck;
+};
+
+// For each case: set it one way, count; set it the other way, count. A setting
+// that needs a reload shows the same count both times.
+window.__bcNeedsReload = async function (cases) {
+  const stuck = [];
+  for (const c of cases) {
+    await __bcLive(c.off); const a = __bcSeen(c.sel);
+    await __bcLive(c.on);  const b = __bcSeen(c.sel);
+    await __bcLive(c.off); const d = __bcSeen(c.sel);
+    if (!(b > a && d === a)) stuck.push(c.name + " [off=" + a + " on=" + b + " off=" + d + "]");
+  }
+  return stuck;
+};
+</script>
+</body>
+</html>
