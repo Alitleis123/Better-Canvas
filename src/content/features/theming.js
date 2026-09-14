@@ -32,7 +32,7 @@
     html.bc-dark .header-secondary,
     html.bc-dark .Sidebar__TodoListContainer, html.bc-dark .ToDoSidebar,
     html.bc-dark .PlannerApp, html.bc-dark .planner-day, html.bc-dark .planner-empty-state,
-    html.bc-dark .ic-DashboardCard, html.bc-dark .ic-DashboardCard__box, html.bc-dark .ic-DashboardCard__link,
+    html.bc-dark .ic-DashboardCard, html.bc-dark .ic-DashboardCard__link,
     html.bc-dark .ic-notification, html.bc-dark .Announcement, html.bc-dark .discussion-topic,
     html.bc-dark .ic-Table-content-wrapper, html.bc-dark .roster,
     html.bc-dark table:not(.user_content *), html.bc-dark thead:not(.user_content *),
@@ -136,6 +136,17 @@
     :root[data-bc-density="compact"]  { --bc-density: 0.6; }
     :root[data-bc-density="spacious"] { --bc-density: 1.4; }
     :root[data-bc-density="cozy"]     { --bc-density: 1.7; }
+
+    /* The card grid's container is LAYOUT, not a surface. Treating it as one
+       gave it the raised card background, which turned the unavoidable leftover
+       at the end of a row into a visible empty slab: cards are a fixed 250px so
+       they never stretch, and the remainder ran from 4px to 254px depending on
+       the window. On the page background that remainder is simply page. */
+    html:is(.bc-dark, .bc-skin) [data-bc-cardgrid],
+    html:is(.bc-dark, .bc-skin) .ic-DashboardCard__box {
+      background-color: transparent !important;
+      border-color: transparent !important;
+    }
 
     /* Global radius. Deliberately NOT the dashboard card: the Dashboard tab has
        its own corner-radius control, and this rule was beating it. Both carry

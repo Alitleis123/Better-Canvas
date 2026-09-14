@@ -166,7 +166,13 @@
       .ic-DashboardCard__action-container {
         background: var(--bc-surface-3) !important;
         border-top: 1px solid var(--bc-border-subtle, var(--bc-border)) !important;
-      }`;
+      }
+      /* Having chosen that surface, we own the contrast on it. Canvas's link
+         blue (#0374b5) is 4.5:1 on white but 4.09:1 on this warm surface-3, so
+         every action link on every card sat below AA in light mode. --bc-link is
+         the accent already guarded against surface-1, -2 and -3, and it is what
+         dark mode has always used here, so the two modes now agree. */
+      .ic-DashboardCard__action-container a { color: var(--bc-link) !important; }`;
     // Canvas gives the card a fixed width, so without this the cards sit
     // left-aligned inside whatever column width the size slider produced, with
     // dead space to the right of each one.

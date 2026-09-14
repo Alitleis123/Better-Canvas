@@ -375,4 +375,19 @@ module.exports = {
     assert.ok(!/\.ic-DashboardCard__header \{ flex: 0 0 120px/.test(css),
       "sizing the header as the artwork is what clipped the text");
   },
+
+  // Cards are a fixed width so they never stretch, which means a row always has
+  // leftover: measured 4px to 254px depending on the window. That is fine on the
+  // page background and awful on a raised one, and the grid's container was being
+  // treated as a card surface, so the remainder showed as an empty slab beside
+  // the last card.
+  "the card grid's container is layout, not a surface"() {
+    const theming = read("src/content/features/theming.js").replace(/\/\*[\s\S]*?\*\//g, "");
+    const surfaces = theming.match(/html\.bc-dark \.recent_feedback[\s\S]*?\}/);
+    assert.ok(surfaces, "the dark surface list is missing");
+    assert.ok(!/ic-DashboardCard__box/.test(surfaces[0]),
+      "the grid container must not be in the surface list; it is not a card");
+    assert.match(theming, /\[data-bc-cardgrid\][\s\S]{0,120}background-color: transparent/,
+      "the grid container must be transparent so a row's leftover reads as page");
+  },
 };
