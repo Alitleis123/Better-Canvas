@@ -47,7 +47,47 @@ __bcAudit().filter(a => a.ratio < 4.5)        // anything failing AA
 ```
 
 `__bcAudit` resolves the background the way the browser paints it: the nearest
-ancestor with an opaque background, not the element's own declaration.
+ancestor with an opaque background, not the element's own declaration. It walks
+the light DOM; for the settings panel, which lives in a shadow root, reach it
+through `document.querySelector('[data-bc-node="bc-drawer"]').shadowRoot`.
+
+```js
+__bcPanel(600)                                // the drawer, pinned to a width
+__bcTab("grades")                             // aim it at a tab
+__bcRowWidths(160)                            // rows whose label got starved
+```
+
+## Photograph it
+
+Three pages exist so a change can be *looked at* rather than described. Each one
+takes its state in the query string, so a capture is one command and no manual
+clicking.
+
+```sh
+CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+"$CHROME" --headless --disable-gpu --hide-scrollbars \
+  --virtual-time-budget=3000 --window-size=1440,1250 \
+  --screenshot=/tmp/out.png --user-data-dir=/tmp/bcshot \
+  'http://localhost:8731/test/browser/_shot.html?m=panel&t=grades'
+```
+
+- **`_shot.html`** — the surface, ready to photograph.
+  `m=panel|todo|skin|plain`, plus `t=<tab id>`, `w=<drawer px>`,
+  `p=<progress style>`, `s=<skin id>`, `dark=1`.
+- **`_eval.html?c=<expr>`** — run one expression and print the result into the
+  page, because headless Chrome gives you no console to read. `__bcPanel`,
+  `__bcRowWidths`, `__bcAudit` and `BC` are all in scope.
+- **`_popup.html`** — the toolbar popup, light and dark side by side. It splices
+  a `chrome.*` stub in ahead of the popup's own scripts; stubbing after load
+  races them and silently leaves `render()` un-run.
+
+Chrome does not always exit after writing the file — poll for the PNG and kill
+the process rather than waiting on it.
+
+Two defects in the panel rebuild were visible only here and passed the whole
+node suite: a renderer that threw left the *previous* tab's body mounted while
+the rail highlighted the new one, and a `<select>` sized to its widest option
+starved its label to 26px with a seven-line hint at a 600px drawer.
 
 ## What it does and does not prove
 

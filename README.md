@@ -8,6 +8,37 @@ The most feature-complete browser extension for Instructure Canvas — free fore
 
 ---
 
+## The settings panel
+
+One bar of chrome, thirteen tabs in four named groups, and a drawn mark on every
+row. It is warm paper rather than a control panel: a rounded system face, an
+ochre-clay accent, and card padding on the panel scale instead of the component
+scale.
+
+| | Before | Now |
+|---|---|---|
+| Chrome bars | 2 (the second overflowed its own right edge) | 1 |
+| Tabs | 17, flat | 13, in Look / Pages / Tools / You |
+| Rows carrying an icon | 0 of 125 | 128 of 128 |
+| Words of hint and section copy | 438 | 357 |
+| Narrowest label column, 360–900px | 26px at 600px | ≥ 144px at every width |
+| Deepest wrapped hint | 7 lines | 2 |
+
+Five tabs that held one or two switches each — Files, Calendar, Announcements,
+Instructor, and the Modules and Discussions blocks — became one **Course tools**
+tab; **Accessibility** joined the colour-blind and reduced-motion switches it
+already belonged beside, in Appearance. Nothing was removed.
+
+Rows with no bearing on your current choice go inert rather than sitting there
+live: pick "Canvas's own" for the planner and the planner's ten controls dim;
+set the page background to None and its eight follow-up controls dim with it.
+
+Numbers above are measured, not estimated — `test/browser/page.html` plus
+`__bcPanel(width)` and `__bcRowWidths()` report label widths and hint depth from
+the real engine, and `test/panel.test.js` holds them there.
+
+---
+
 ## Features
 
 ### Skins
@@ -20,7 +51,7 @@ Not a colour scheme — a whole look. A skin carries surface art, per-card art, 
 - **Every built-in clears AA** for body text, hint text, links and accent labels — enforced by the suite, because a pretty theme nobody can read their assignments in is not shippable.
 
 ### Appearance (30+ knobs)
-- **One drawn icon set** — a single 16px grid at one stroke weight, shared by the settings rail, the planner, the popup and every button. Nothing is a typed glyph, so nothing renders in the wrong colour or as a box when the host font lacks it.
+- **One drawn icon set** — a single 16px grid at one stroke weight, shared by every settings row, the tab rail, the planner, the popup and every button. Nothing is a typed glyph, so nothing renders in the wrong colour or as a box when the host font lacks it.
 - Dark mode: Off / On / Auto (system) / Scheduled window.
 - **Dark mode inside iframes** — SpeedGrader submissions, New Quizzes, and other embedded Canvas frames.
 - **6 dark palettes** (Neutral, Slate, Midnight, Nord, Dracula, Solarized) + **6 light palettes** + custom-background derivation.
@@ -114,6 +145,7 @@ Three modes:
 - Hover over any assignment link to see a floating card with title / due date / points / score / description — no page nav.
 
 ### Accessibility
+Lives in the Appearance tab, beside the colour-blind and reduced-motion switches.
 - **TTS "Speak"** button on assignments / announcements / discussion bodies.
 - **Larger click targets**, **dyslexia-friendly font stack**.
 - Color-blind SVG palette shifts. Reduced-motion honored.
@@ -123,6 +155,7 @@ Three modes:
 - **Grade trend sparklines** and **Pomodoro session history** in the same tab.
 
 ### Instructor helpers
+In the Course tools tab.
 - **Roster CSV export**, attendance quick-mark (P/A buttons + CSV), **ungraded-count badges** on the assignments index.
 
 ### Backgrounds & CSS
@@ -228,7 +261,7 @@ src/
     content.js         entry: applies registered features, wires observer + shortcuts + palette
   background/
     service-worker.js  register dynamic scripts on custom domains + badge + context menu
-  popup/               toolbar popup: enable/dark/dash toggles + Palette + Open settings
+  popup/               toolbar popup: master switch, dark/dash/reminders, palette, settings
   options/             standalone options page hosting the shared settings UI
 ```
 
@@ -249,7 +282,9 @@ src/
 2. Add any new settings to `src/shared/defaults.js`.
 3. Register the script in **both manifests**, before `observer.js`. The service worker derives its injection lists from `manifest.json` at runtime, so there is no second list to update.
 4. If it only applies to certain pages, declare `pages: [...]` so it is skipped elsewhere.
-5. Add controls to `src/shared/settings/index.js`.
+5. Add controls to `src/shared/settings/index.js`. Every row takes an `icon:`
+   from `BC.icons`, and a hint only where the label genuinely cannot say it —
+   `test/panel.test.js` enforces both, plus a word budget for the whole panel.
 6. Run `npm test` (or `node test/run.js`) and rebuild with `build.ps1`.
 
 ---
