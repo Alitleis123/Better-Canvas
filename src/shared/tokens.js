@@ -303,6 +303,22 @@
   --bc-space-8: calc(var(--bc-space-unit) * 5);
   --bc-space-9: calc(var(--bc-space-unit) * 6);
 
+  /* The spectrum. A fixed set of hues rather than theme colours, because the
+     only thing that reads it maps hue to a VALUE — the rainbow progress style,
+     where the colour at the tip of the bar is what tells you how far along you
+     are. hsl so it stays legible against both modes, and one definition so a
+     feature never hardcodes a gradient of its own. */
+  --bc-spectrum: linear-gradient(90deg,
+    hsl(350 78% 56%), hsl(28 88% 54%), hsl(48 92% 50%),
+    hsl(142 62% 42%), hsl(198 82% 46%), hsl(262 68% 58%));
+
+  /* A tick as a mask, for the places we restyle Canvas's OWN markup and so
+     cannot put an <svg> inside the element. A mask takes its colour from
+     background-color, which means one definition works in both modes — a
+     background-image would need a light and a dark copy. Same geometry as
+     BC.icons "check". */
+  --bc-check-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5 6.25 11.25 12.5 4.75' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+
   /* radius, derived from the user's slider */
   --bc-radius: 8px;
   --bc-radius-sm: calc(var(--bc-radius) * 0.5);
@@ -325,6 +341,11 @@
   --bc-text-xl:  calc(17px * var(--bc-font-scale));
   --bc-text-2xl: calc(20px * var(--bc-font-scale));
   --bc-text-figure: calc(24px * var(--bc-font-scale));
+  /* The width a settings row's label is guaranteed before its control is sent
+     to a line of its own. It belongs to the type scale rather than the spacing
+     scale: when a sentence wraps is a function of how big the text is, not of
+     how much air the density setting is buying. */
+  --bc-row-label-min: calc(var(--bc-text-md) * 17);
   --bc-line-height: 1.5;
   --bc-leading-tight: 1.25;
   --bc-leading-body: var(--bc-line-height);

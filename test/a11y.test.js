@@ -300,9 +300,13 @@ module.exports = {
     const src = read("src/shared/settings/index.js");
     assert.noMatch(src, /\{ id: "\w+",\s*label: "[^"]*",\s*icon: "/,
       "a settings tab must not carry a text glyph as its icon");
-    assert.match(src, /const TAB_ICONS = \{/, "the tab icon set is missing");
-    assert.match(src, /<svg width="16" height="16"[^>]*stroke="currentColor"/,
-      "tab icons must inherit the tab's colour");
+    // The geometry moved to BC.icons so the drawer, the planner and the popup
+    // share one set; this only checks the rail still draws from it.
+    assert.match(src, /const TAB_ICON = \{/, "the tab icon map is missing");
+    assert.match(src, /sp\.innerHTML = BC\.icons\.svg\(TAB_ICON\[id\]/,
+      "the rail must render through the shared icon set");
+    assert.match(read("src/shared/icons.js"), /stroke="currentColor"/,
+      "icons must inherit the colour of what they sit in");
   },
 
   "the utility icons are drawn, not typed"() {

@@ -34,6 +34,11 @@ __bcApply({ theming: { darkMode: "on" } })   // apply real settings
 __bcApply({ theming: { darkMode: "on", darkTone: "nord" } })
 __bcClear()                                   // remove every sheet and mark
 
+__bcTodo()                                    // render the planner widget on the
+__bcTodo("segments")                          // fixture sidebar, in any of its
+__bcTodo("rainbow")                           // six progress styles
+__bcTodo("ring", { theming: { density: "compact" } })
+
 __bcAudit()                                   // every element carrying text,
                                               // with its rendered colours and
                                               // contrast against what is

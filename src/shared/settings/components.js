@@ -101,6 +101,50 @@
     return sel;
   };
 
+  // A radio group whose options are drawn rather than described. A <select>
+  // reading "Segments / Rainbow / Ring" asks the user to imagine the answer;
+  // for a setting that is purely about appearance, the control should just show
+  // it. `preview(value)` returns the swatch markup for each option.
+  C.choice = function ({ get, set, options, ariaLabel, preview }) {
+    const name = "bc-choice-" + Math.random().toString(36).slice(2, 8);
+    const group = h("div.bc-choice", null);
+    group.setAttribute("role", "radiogroup");
+    if (ariaLabel) group.setAttribute("aria-label", ariaLabel);
+    const inputs = [];
+
+    for (const o of options) {
+      const input = el("input", { type: "radio", name, value: o.value, class: "bc-sr-only" });
+      input.checked = o.value === get();
+      const swatch = h("span.bc-choice-art", null);
+      swatch.setAttribute("aria-hidden", "true");
+      if (preview) swatch.innerHTML = preview(o.value);
+      const label = h("label.bc-choice-opt", null, [
+        input, swatch, h("span.bc-choice-label", null, o.label),
+      ]);
+      const paint = () => label.classList.toggle("bc-on", input.checked);
+      paint();
+      // change, not click: the arrow keys a radiogroup is expected to answer to
+      // move the selection without ever firing a click.
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        for (const i of inputs) i.paint();
+        set(o.value);
+      });
+      inputs.push({ input, paint });
+      group.appendChild(label);
+    }
+
+    bind(group, () => {
+      const v = String(get());
+      for (const i of inputs) {
+        const want = i.input.value === v;
+        if (i.input.checked !== want) i.input.checked = want;
+        i.paint();
+      }
+    });
+    return group;
+  };
+
   C.text = function ({ get, set, placeholder, ariaLabel, validate }) {
     const wrap = h("div.bc-text-wrap", null);
     const inp = el("input", { type: "text", class: "bc-text", placeholder: placeholder || "", value: get() || "", "aria-label": ariaLabel || "" });
@@ -194,10 +238,21 @@
     return wrap;
   };
 
-  C.button = function ({ label, onClick, variant, icon }) {
+  // `icon` takes a name from the shared set (preferred) or a node. A name keeps
+  // every button on the same grid and stroke weight as the tab rail and the
+  // planner, which is the whole point of having one set.
+  C.button = function ({ label, onClick, variant, icon, title }) {
     const b = el("button", { class: "bc-btn " + (variant ? "bc-btn-" + variant : ""), type: "button" });
-    if (icon) b.appendChild(h("span.bc-btn-ic", null, icon));
+    if (typeof icon === "string" && BC.icons && BC.icons.has(icon)) {
+      const ic = h("span.bc-btn-ic", null);
+      ic.setAttribute("aria-hidden", "true");
+      ic.innerHTML = BC.icons.svg(icon, { size: 14 });
+      b.appendChild(ic);
+    } else if (icon && typeof icon !== "string") {
+      b.appendChild(h("span.bc-btn-ic", null, icon));
+    }
     b.appendChild(document.createTextNode(label));
+    if (title) b.title = title;
     b.addEventListener("click", onClick);
     return b;
   };
@@ -207,7 +262,10 @@
     const list = h("ul.bc-sortable", null);
     items.forEach((it) => {
       const li = el("li", { class: "bc-sortable-item " + (itemClass || ""), draggable: "true", "data-id": String(it.id) });
-      li.appendChild(h("span.bc-drag", null, "⋮⋮"));
+      const handle = h("span.bc-drag", null);
+      handle.setAttribute("aria-hidden", "true");
+      handle.innerHTML = BC.icons.svg("grip", { size: 14 });
+      li.appendChild(handle);
       li.appendChild(render(it));
       list.appendChild(li);
     });

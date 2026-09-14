@@ -26,8 +26,8 @@
       root.appendChild(app);
       app.appendChild(el("style", null, CSS));
 
-      const undoBtn = S.button({ label: "Undo", onClick: () => store.undo() });
-      const redoBtn = S.button({ label: "Redo", onClick: () => store.redo() });
+      const undoBtn = S.button({ label: "Undo", icon: "chevron-left", onClick: () => store.undo() });
+      const redoBtn = S.button({ label: "Redo", icon: "chevron-right", onClick: () => store.redo() });
 
       const header = h("header.bc-header", null, [
         h("div.bc-brand", null, [
@@ -52,9 +52,9 @@
           h("span", null, "Enable Better Canvas"),
         ]),
         h("div.bc-topbar-right", null, [
-          S.button({ label: "Import", onClick: () => importFlow(store) }),
-          S.button({ label: "Export", onClick: () => exportFlow(store) }),
-          S.button({ label: "Reset",  variant: "danger", onClick: () => { if (confirm("Reset all settings to defaults?")) store.reset(); } }),
+          S.button({ label: "Import", icon: "folder", onClick: () => importFlow(store) }),
+          S.button({ label: "Export", icon: "external-link", onClick: () => exportFlow(store) }),
+          S.button({ label: "Reset",  variant: "danger", icon: "refresh", onClick: () => { if (confirm("Reset all settings to defaults?")) store.reset(); } }),
         ]),
       ]);
       app.appendChild(bar);
@@ -67,24 +67,17 @@
       shellWrap.appendChild(shell);
       app.appendChild(shellWrap);
 
-      const TAB_ICONS = {
-        dashboard: '<rect x="2.5" y="2.5" width="5" height="5" rx="1"/><rect x="8.5" y="2.5" width="5" height="5" rx="1"/><rect x="2.5" y="8.5" width="5" height="5" rx="1"/><rect x="8.5" y="8.5" width="5" height="5" rx="1"/>',
-        todo: '<circle cx="8" cy="8" r="5.75"/><path d="M5.5 8.25 7.25 10l3.25-3.5"/>',
-        theming: '<circle cx="8" cy="8" r="5.75"/><path d="M8 2.25a5.75 5.75 0 0 1 0 11.5z" fill="currentColor" stroke="none"/>',
-        themes: '<path d="M8 2.25a5.75 5.75 0 1 0 0 11.5c.7 0 1.1-.5 1.1-1.05 0-.5-.35-.8-.35-1.2 0-.4.35-.7.8-.7h1.15A3.55 3.55 0 0 0 13.75 6.9C13.75 4.3 11.2 2.25 8 2.25z"/><circle cx="5.4" cy="7.1" r=".8" fill="currentColor" stroke="none"/><circle cx="8" cy="5.3" r=".8" fill="currentColor" stroke="none"/><circle cx="10.6" cy="7.1" r=".8" fill="currentColor" stroke="none"/>',
-        cosmetics: '<rect x="2.25" y="3.25" width="11.5" height="9.5" rx="1.5"/><circle cx="6" cy="6.5" r="1.1"/><path d="m3 11.75 3-3 2.5 2.5L11 8.5l2.5 2.5"/>',
-        navigation: '<path d="M2.75 4.5h10.5M2.75 8h10.5M2.75 11.5h10.5"/>',
-        grades: '<path d="M3.25 13V7.5M8 13V3.25M12.75 13V9.25"/>',
-        notifications: '<path d="M4.5 6.75a3.5 3.5 0 0 1 7 0c0 3 1 4 1 4h-9s1-1 1-4z"/><path d="M6.75 12.75a1.5 1.5 0 0 0 2.5 0"/>',
-        files: '<path d="M2.5 5a1.5 1.5 0 0 1 1.5-1.5h2.2l1.3 1.5H12a1.5 1.5 0 0 1 1.5 1.5v5A1.5 1.5 0 0 1 12 13H4a1.5 1.5 0 0 1-1.5-1.5z"/>',
-        calendar: '<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2.25v2.5M10.5 2.25v2.5"/>',
-        announcements: '<path d="M3 6.5v3a1 1 0 0 0 1 1h1.5L10 13.25v-10.5L5.5 5.5H4a1 1 0 0 0-1 1z"/><path d="M12.25 6.25a3 3 0 0 1 0 3.5"/>',
-        productivity: '<circle cx="8" cy="9.25" r="4.5"/><path d="M8 7v2.25l1.6.9M6.25 2.5h3.5"/>',
-        accessibility: '<circle cx="8" cy="8" r="5.75"/><circle cx="8" cy="5.6" r=".8" fill="currentColor" stroke="none"/><path d="M5.6 7.4h4.8M8 7.6v2M8 9.6 6.7 11.9M8 9.6l1.3 2.3"/>',
-        insights: '<path d="M2.75 10.75 6 7.5l2.25 2.25 5-5"/><path d="M10.5 4.75h2.75V7.5"/>',
-        shortcuts: '<rect x="6" y="6" width="4" height="4" rx=".5"/><path d="M6 6H4.5a1.5 1.5 0 1 1 1.5-1.5zM10 6h1.5A1.5 1.5 0 1 0 10 4.5zM6 10H4.5A1.5 1.5 0 1 0 6 11.5zM10 10h1.5a1.5 1.5 0 1 1-1.5 1.5z"/>',
-        instructor: '<path d="M8 2.75 14 5.5 8 8.25 2 5.5z"/><path d="M4.5 6.9v3.35c0 1.1 1.6 2 3.5 2s3.5-.9 3.5-2V6.9"/>',
-        about: '<circle cx="8" cy="8" r="5.75"/><path d="M8 7.4v3.4"/><circle cx="8" cy="5.3" r=".75" fill="currentColor" stroke="none"/>',
+      // Which shared icon stands for each tab. The geometry lives in BC.icons so
+      // the drawer, the planner widget and the popup cannot drift apart; this
+      // map is only the naming.
+      const TAB_ICON = {
+        dashboard: "grid",       todo: "check-circle",  theming: "contrast",
+        themes: "palette",       cosmetics: "image",    navigation: "menu",
+        grades: "bars",          notifications: "bell", files: "folder",
+        calendar: "calendar",    announcements: "megaphone",
+        productivity: "timer",   accessibility: "accessibility",
+        insights: "trend",       shortcuts: "command",  instructor: "mortarboard",
+        about: "info",
       };
 
       // Drawn, not typed. These were geometric glyphs (a telephone for
@@ -93,9 +86,7 @@
       function tabIcon(id) {
         const sp = h("span.bc-tab-ic", null);
         sp.setAttribute("aria-hidden", "true");
-        sp.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" ' +
-          'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" ' +
-          'stroke-linejoin="round">' + (TAB_ICONS[id] || "") + '</svg>';
+        sp.innerHTML = BC.icons.svg(TAB_ICON[id] || "circle");
         return sp;
       }
 
@@ -127,7 +118,7 @@
       // horizontal nav's scroll position).
       const tabBtns = new Map();
       for (const t of TABS) {
-        const btn = h("button.bc-tab", { type: "button", onclick: () => showTab(t.id) },
+        const btn = h("button.bc-tab", { type: "button", "data-tab": t.id, onclick: () => showTab(t.id) },
           [tabIcon(t.id), t.label]);
         tabBtns.set(t.id, btn);
         nav.appendChild(btn);
@@ -316,6 +307,46 @@
     return wrap;
   }
 
+  // Each progress style, drawn at 60% so the difference between them is the
+  // thing on screen. These are deliberately the same class names the planner
+  // widget uses, so a swatch cannot drift away from what it is advertising.
+  // Layout previews. Same approach as the progress swatches: each option draws
+  // its own shape, because "Compact / Cards / Minimal / Timeline" as four words
+  // in a dropdown asks the reader to imagine four things they have never seen.
+  // These are miniatures, not the real widget -- the real one needs live task
+  // data, and a picker that renders nothing until tasks load is a picker that
+  // looks broken every September.
+  function layoutSwatch(style) {
+    const row = (cls) => '<span class="bc-lsw-row ' + cls + '"><i></i><b></b></span>';
+    if (style === "compact") return '<span class="bc-lsw compact">' + row("") + row("") + row("") + row("") + "</span>";
+    if (style === "cards") return '<span class="bc-lsw cards">' + row("") + row("") + "</span>";
+    if (style === "minimal") return '<span class="bc-lsw minimal">' + row("") + row("") + row("") + "</span>";
+    if (style === "timeline") return '<span class="bc-lsw timeline">' + row("") + row("") + row("") + "</span>";
+    return '<span class="bc-lsw comfortable">' + row("") + row("") + row("") + "</span>";
+  }
+
+  function progressSwatch(style) {
+    if (style === "off") return '<span class="bc-sw-none">—</span>';
+    if (style === "text") return '<span class="bc-sw-text"><b>6</b> of 10</span>';
+    if (style === "ring") {
+      const R = 9, C = 2 * Math.PI * R;
+      return '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">' +
+        '<circle cx="12" cy="12" r="' + R + '" fill="none" stroke-width="2.5" class="bc-sw-track"/>' +
+        '<circle cx="12" cy="12" r="' + R + '" fill="none" stroke-width="2.5" stroke-linecap="round"' +
+        ' stroke-dasharray="' + C.toFixed(2) + '" stroke-dashoffset="' + (C * 0.4).toFixed(2) + '"' +
+        ' transform="rotate(-90 12 12)" class="bc-sw-fill"/></svg>';
+    }
+    if (style === "segments") {
+      let out = "";
+      for (let i = 0; i < 8; i++) out += '<span class="bc-sw-seg' + (i < 5 ? " on" : "") + '"></span>';
+      return '<span class="bc-sw-segs">' + out + "</span>";
+    }
+    // bar and rainbow: same track, different fill.
+    const rb = style === "rainbow";
+    return '<span class="bc-sw-track-bar"><span class="bc-sw-bar' + (rb ? " rainbow" : "") +
+      '" style="width:60%' + (rb ? "; background-size: 166.7% 100%" : "") + '"></span></span>';
+  }
+
   function renderTodo(store) {
     const S = BC.SettingsComponents;
     const t = store.get().todo;
@@ -327,6 +358,20 @@
     ]}));
 
     c.appendChild(S.section({ title: "Planner widget", description: "Only applies when mode is Planner widget.", children: [
+      S.row({ label: "Layout", hint: "How each task is drawn. Applies to the list and kanban views.",
+        control: S.choice({
+          ariaLabel: "Planner layout",
+          get: () => t.layout,
+          set: (v) => store.set((x) => { x.todo.layout = v; }),
+          preview: layoutSwatch,
+          options: [
+            { value: "comfortable", label: "Comfortable" },
+            { value: "compact",     label: "Compact" },
+            { value: "cards",       label: "Cards" },
+            { value: "minimal",     label: "Minimal" },
+            { value: "timeline",    label: "Timeline" },
+          ],
+        }) }),
       S.row({ label: "View",
         control: S.select({ get: () => t.view, set: (v) => store.set((x) => { x.todo.view = v; }),
           // "Day" and "Week" were selectable but todo.js only ever rendered
@@ -338,10 +383,32 @@
       S.row({ label: "Group tasks by",
         control: S.select({ get: () => t.groupBy, set: (v) => store.set((x) => { x.todo.groupBy = v; }),
           options: [{value:"day",label:"Day"},{value:"course",label:"Course"},{value:"priority",label:"Priority"},{value:"tag",label:"Tag"},{value:"none",label:"None"}] }) }),
-      S.row({ label: "Show weekly progress ring", control: S.switch({ get: () => t.ring, set: (v) => store.set((x) => { x.todo.ring = v; }) }) }),
       S.row({ label: "Show completed", control: S.switch({ get: () => t.showCompleted, set: (v) => store.set((x) => { x.todo.showCompleted = v; }) }) }),
       S.row({ label: "Show New Task composer", control: S.switch({ get: () => t.allowNewTask, set: (v) => store.set((x) => { x.todo.allowNewTask = v; }) }) }),
-      S.row({ label: "Ring accent color", control: S.color({ get: () => t.accent, set: (v) => store.set((x) => { x.todo.accent = v; }), allowEmpty: true }) }),
+      S.row({ label: "Progress accent", hint: "Colours the indicator, the checkboxes and the time-block grid.",
+        control: S.color({ get: () => t.accent, set: (v) => store.set((x) => { x.todo.accent = v; }), allowEmpty: true }) }),
+    ]}));
+
+    // A whole section, because this is the widget's most visible element and the
+    // old control was a switch labelled "Show weekly progress ring": one style,
+    // take it or leave it. Each option draws itself at 60% progress, so the
+    // choice is made by looking rather than by reading adjectives.
+    c.appendChild(S.section({ title: "Progress indicator", children: [
+      S.row({ label: "Style",
+        control: S.choice({
+          ariaLabel: "Progress indicator style",
+          get: () => t.progress,
+          set: (v) => store.set((x) => { x.todo.progress = v; }),
+          preview: progressSwatch,
+          options: [
+            { value: "ring",     label: "Ring" },
+            { value: "bar",      label: "Bar" },
+            { value: "segments", label: "Segments" },
+            { value: "rainbow",  label: "Rainbow" },
+            { value: "text",     label: "Text" },
+            { value: "off",      label: "None" },
+          ],
+        }) }),
     ]}));
 
     c.appendChild(S.section({ title: "Streaks", children: [
@@ -385,7 +452,7 @@
 
     const children = rules.map((r) => h("div.bc-rec-row", null, [
       h("div", null, [h("div.bc-rec-title", null, r.title), h("div.bc-rec-meta", null, describe(r))]),
-      S.button({ label: "Delete", variant: "danger",
+      S.button({ label: "Delete", icon: "trash", variant: "danger",
         onClick: () => store.set((x) => { x.todo.recurring = (x.todo.recurring || []).filter((q) => q.id !== r.id); }) }),
     ]));
     if (!rules.length) children.push(h("p.bc-hint", null, "No recurring tasks yet. They show up in the Planner widget alongside Canvas items."));
@@ -412,7 +479,7 @@
     };
     freq.addEventListener("change", sync); sync();
 
-    const add = S.button({ label: "Add recurring task", onClick: () => {
+    const add = S.button({ label: "Add recurring task", icon: "plus", onClick: () => {
       const t = title.value.trim();
       if (!t) { BC.toast && BC.toast.warn("Enter a task title first"); return; }
       const rule = { id: BC.util.uuid(), title: t, rule: freq.value, at: at.value || "", until: until.value || "" };
@@ -550,14 +617,23 @@
     };
   }
 
-  function downloadTheme(bundle) {
-    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+  function downloadJson(filename, text) {
+    const blob = new Blob([text], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = (bundle.name || "theme").toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".bctheme.json";
+    a.download = filename;
     a.click();
+    // Revoking immediately races the download in Firefox, which reads the blob
+    // asynchronously after the synthetic click returns.
     setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  function downloadTheme(bundle) {
+    downloadJson(
+      (bundle.name || "theme").toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".bctheme.json",
+      JSON.stringify(bundle, null, 2)
+    );
   }
 
   function themeCard(store, p, custom) {
@@ -584,10 +660,162 @@
     return card;
   }
 
+  // ---- skin gallery -------------------------------------------------------
+  // A skin card previews itself with the real engine rather than a stored
+  // thumbnail. That is the point of generating the art: the row in this grid
+  // and the page it themes are produced by the same function, so they cannot
+  // drift apart the way a checked-in PNG does the moment a palette is tweaked.
+  function skinCard(store, raw, opts) {
+    const S = BC.SettingsComponents;
+    const t = BC.skins.normalize(raw);
+    if (!t) return null;
+    const o = opts || {};
+    const sw = BC.skins.swatchStyles(t, 4);
+    const on = store.get().theming.skin === t.id;
+
+    const page = h("div.bc-skin-page", null, sw.cards.map((style) => {
+      const cell = h("div.bc-skin-cell", null);
+      cell.style.cssText = style;
+      return cell;
+    }));
+    page.style.cssText += sw.page;
+    const rail = h("div.bc-skin-rail", null);
+    rail.style.cssText = sw.nav;
+
+    const dot = h("span.bc-skin-dot", null);
+    dot.style.background = t.accent;
+    const tags = t.tags.length ? h("span.bc-skin-tags", null, t.tags.join(" · ")) : null;
+
+    const card = h("button.bc-skin-card" + (on ? ".bc-on" : ""), {
+      type: "button",
+      "aria-pressed": String(on),
+      // The name alone would read as "Matcha Strawberry" with no indication of
+      // what the control does or whether it is the active one.
+      "aria-label": (on ? "Applied skin: " : "Apply skin: ") + t.name +
+        (t.dark ? ", dark" : ", light"),
+      onclick: () => {
+        store.set((x) => { x.theming.skin = on ? "" : t.id; });
+        BC.toast && BC.toast.success(on ? "Skin removed" : "Applied " + t.name);
+      },
+    }, [
+      h("div.bc-skin-mock", null, [rail, page]),
+      h("div.bc-skin-meta", null, [
+        h("div.bc-skin-line", null, [dot, h("span.bc-skin-name", null, t.name)]),
+        tags,
+      ]),
+    ]);
+
+    if (o.removable) {
+      // Not inside the button: a button nested in a button is invalid markup and
+      // the inner one stops receiving clicks in Safari.
+      const del = S.button({
+        label: "Delete", icon: "trash", variant: "ghost", title: "Delete " + t.name,
+        onClick: () => store.set((x) => {
+          x.theming.skins = (x.theming.skins || []).filter((k) => k.id !== t.id);
+          // Deleting the skin that is applied has to clear the selection too,
+          // or theming.skin points at nothing and the page silently unthemes
+          // with the gallery still showing it as active.
+          if (x.theming.skin === t.id) x.theming.skin = "";
+        }),
+      });
+      del.classList.add("bc-skin-del");
+      return h("div.bc-skin-slot", null, [card, del]);
+    }
+    return card;
+  }
+
+  function renderSkinGallery(store, c) {
+    const S = BC.SettingsComponents;
+    const t = store.get().theming;
+    const mine = Array.isArray(t.skins) ? t.skins : [];
+
+    const noneCard = h("button.bc-skin-card.bc-skin-none" + (t.skin ? "" : ".bc-on"), {
+      type: "button", "aria-pressed": String(!t.skin), "aria-label": "No skin — plain Canvas",
+      onclick: () => store.set((x) => { x.theming.skin = ""; }),
+    }, [
+      // icons.el, not icons.node -- the latter does not exist, and calling it
+      // threw inside renderThemes, which left the whole tab rendering the
+      // previous tab's body with no error surfaced anywhere.
+      h("div.bc-skin-mock.bc-skin-empty", null, BC.icons.el("minus", { size: 20 })),
+      h("div.bc-skin-meta", null, [h("span.bc-skin-name", null, "None")]),
+    ]);
+
+    c.appendChild(S.section({
+      title: "Skins",
+      description: "A skin restyles the whole page — surface art, card art, nav, type and palette — not just the colours. Every pattern is drawn at runtime, so nothing is downloaded and a skin works offline.",
+      children: [
+        h("div.bc-skin-grid", null,
+          [noneCard].concat(BC.SKIN_CATALOG.map((k) => skinCard(store, k, null)))),
+      ],
+    }));
+
+    if (mine.length) {
+      c.appendChild(S.section({
+        title: "My skins",
+        description: "Imported or edited skins. One of these with the same id as a built-in overrides it.",
+        children: [h("div.bc-skin-grid", null, mine.map((k) => skinCard(store, k, { removable: true })))],
+      }));
+    }
+
+    const active = BC.skins.active(store.get());
+    c.appendChild(S.section({
+      title: "Skin options",
+      children: [
+        S.row({
+          label: "Course card colour",
+          hint: "Replace them, or let the pattern tint them.",
+          enabledWhen: (st) => !!st.theming.skin,
+          control: S.select({
+            get: () => (active && active.cardColor) || "skin",
+            set: (v) => store.set((x) => {
+              // Changing this on a built-in forks it into the user's own list:
+              // the catalog is shipped data and editing it in place would be
+              // undone by the next update.
+              const cur = BC.skins.active(x);
+              if (!cur) return;
+              const forked = Object.assign(BC.skins.normalize(cur), { cardColor: v });
+              const mineNow = (x.theming.skins || []).filter((k) => k.id !== forked.id);
+              x.theming.skins = mineNow.concat([forked]);
+            }),
+            options: [{ value: "skin", label: "Use the skin's colours" },
+                      { value: "course", label: "Keep course colours" }],
+          }),
+        }),
+        h("div.bc-inline", null, [
+          S.button({ label: "Export skin", icon: "external-link", onClick: () => {
+            const cur = BC.skins.active(store.get());
+            if (!cur) { BC.toast && BC.toast.error("No skin applied"); return; }
+            downloadJson(cur.id + ".skin.json", BC.skins.export(cur));
+          } }),
+          S.button({ label: "Import skin", icon: "folder", onClick: () => {
+            const inp = document.createElement("input");
+            inp.type = "file"; inp.accept = "application/json";
+            inp.onchange = () => {
+              const f = inp.files && inp.files[0];
+              if (!f) return;
+              f.text().catch(() => null).then((txt) => {
+                const skin = txt == null ? null : BC.skins.import(txt);
+                if (!skin) { BC.toast && BC.toast.error("That is not a skin file"); return; }
+                store.set((x) => {
+                  x.theming.skins = (x.theming.skins || []).filter((k) => k.id !== skin.id).concat([skin]);
+                  x.theming.skin = skin.id;
+                });
+                BC.toast && BC.toast.success("Imported " + skin.name);
+              });
+            };
+            inp.click();
+          } }),
+        ]),
+      ],
+    }));
+  }
+
   function renderThemes(store) {
     const S = BC.SettingsComponents;
     const c = h("div.bc-tab-body", null);
     const custom = store.get().customThemes || [];
+
+    renderSkinGallery(store, c);
 
     const nameInput = el("input", { type: "text", class: "bc-text", placeholder: "Theme name" });
     c.appendChild(S.section({
@@ -599,7 +827,7 @@
           : h("p.bc-hint", null, "No saved themes yet. Set up a look you like, name it, and save it."),
         h("div.bc-inline", { style: { marginTop: "10px" } }, [
           nameInput,
-          S.button({ label: "Save current look", onClick: () => {
+          S.button({ label: "Save current look", icon: "palette", onClick: () => {
             const name = nameInput.value.trim() || "My theme";
             const bundle = themeSnapshot(store, name);
             store.set((x) => { x.customThemes = (x.customThemes || []).concat([bundle]); });
@@ -641,8 +869,8 @@
       description: "Share themes as JSON files — no accounts, no cloud.",
       children: [
         h("div.bc-inline", null, [
-          S.button({ label: "Export current theme", onClick: () => downloadTheme(themeSnapshot(store, "My theme")) }),
-          S.button({ label: "Import theme", onClick: () => {
+          S.button({ label: "Export current theme", icon: "external-link", onClick: () => downloadTheme(themeSnapshot(store, "My theme")) }),
+          S.button({ label: "Import theme", icon: "folder", onClick: () => {
             const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json";
             inp.onchange = () => {
               const f = inp.files && inp.files[0]; if (!f) return;
@@ -909,7 +1137,7 @@
         control: S.switch({ get: () => cal.syllabusExtract, set: (v) => store.set((x) => { x.calendar.syllabusExtract = v; }) }) }),
       S.row({ label: ".ics export",
         control: h("div.bc-inline", null, [
-          S.button({ label: "Export upcoming (.ics)", onClick: () => {
+          S.button({ label: "Export upcoming (.ics)", icon: "calendar", onClick: () => {
             if (!BC.calendar || !BC.calendar.exportIcs) { BC.toast.warn("Open a Canvas tab to export"); return; }
             BC.calendar.exportIcs();
           } }),
@@ -1143,7 +1371,7 @@
         h("p", null, "Better Canvas customizes the Instructure Canvas LMS with real dark mode, a redesigned dashboard, a planner-style To Do widget, grade tools, notifications, files browser, keyboard shortcuts, and a lot more — all configured from this panel."),
         h("p", null, "Grade and planner features use your existing Canvas login session; nothing is ever sent off-domain."),
         h("div.bc-inline", null, [
-          S.button({ label: "Reset all settings", variant: "danger", onClick: () => { if (confirm("Reset ALL settings?")) store.reset(); } }),
+          S.button({ label: "Reset all settings", icon: "refresh", variant: "danger", onClick: () => { if (confirm("Reset ALL settings?")) store.reset(); } }),
         ]),
       ],
     }));
@@ -1162,7 +1390,7 @@
       // The options page is a different JS realm, so it has its own empty BC.diag.
       children.push(h("p.bc-hint", null, "Open the settings drawer on a Canvas page to see diagnostics."));
     } else if (!entries.length) {
-      children.push(h("p.bc-hint", null, "No errors recorded. 🎉"));
+      children.push(h("p.bc-hint", null, "No errors recorded."));
     } else {
       for (const e of entries) {
         children.push(h("div.bc-ins-row", null, [
@@ -1286,7 +1514,7 @@
     line-height: var(--bc-leading-body, 1.5);
     letter-spacing: var(--bc-tracking, 0px);
     color: var(--fg); background: var(--bg);
-    min-height: 100%; padding: 12px 12px 40px;
+    min-height: 100%; padding: var(--bc-space-6, 14px) var(--bc-space-6, 14px) var(--bc-space-9, 24px);
     box-sizing: border-box;
   }
   .bc-app * { box-sizing: border-box; }
@@ -1297,8 +1525,8 @@
     outline-offset: 2px;
     box-shadow: 0 0 0 4px var(--bc-focus-halo, var(--panel));
   }
-  .bc-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 4px 12px; }
-  .bc-brand { display: flex; align-items: center; gap: 10px; }
+  .bc-header { display: flex; align-items: center; justify-content: space-between; padding: var(--bc-space-3, 8px) var(--bc-space-1, 4px) var(--bc-space-5, 12px); }
+  .bc-brand { display: flex; align-items: center; gap: var(--bc-space-4, 10px); }
   .bc-logo {
     width: 34px; height: 34px; border-radius: var(--bc-radius-md, 8px); background: var(--accent);
     /* The accent is user-chosen, so the label has to be the derived contrast
@@ -1307,22 +1535,22 @@
     display: inline-flex; align-items: center; justify-content: center; font-weight: 800;
   }
   .bc-brand-name { font-weight: 700; }
-  .bc-brand-sub  { font-size: 11px; color: var(--muted); }
-  .bc-header-actions { display: flex; gap: 8px; align-items: center; }
-  .bc-search { padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 8px); background: var(--panel); color: inherit; min-width: 200px; }
+  .bc-brand-sub  { font-size: var(--bc-text-2xs, 11px); color: var(--muted); }
+  .bc-header-actions { display: flex; gap: var(--bc-space-3, 8px); align-items: center; }
+  .bc-search { padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px); border: 1px solid var(--border); border-radius: var(--bc-radius-md, 8px); background: var(--panel); color: inherit; min-width: 200px; }
 
   /* Room for the drawer's close button, which floats over this corner. */
-  .bc-topbar { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 14px; padding: 10px 46px 10px 12px; flex-wrap: wrap; gap: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
-  .bc-master { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .bc-topbar { display: flex; justify-content: space-between; align-items: center; margin: var(--bc-space-1, 4px) 0 var(--bc-space-6, 14px); padding: var(--bc-space-4, 10px) 46px var(--bc-space-4, 10px) var(--bc-space-5, 12px); flex-wrap: wrap; gap: var(--bc-space-3, 8px); background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+  .bc-master { display: flex; align-items: center; gap: var(--bc-space-3, 8px); font-weight: 600; }
   .bc-master input { width: 18px; height: 18px; }
-  .bc-topbar-right { display: flex; gap: 6px; }
+  .bc-topbar-right { display: flex; gap: var(--bc-space-2, 6px); }
 
   /* Container, not viewport. This UI is mounted in a shadow root inside a panel
      whose width has nothing to do with the window's, so a media query here
      collapsed the tab rail on a narrow screen and kept it on a narrow panel,
      which is exactly backwards. */
   .bc-shell-wrap { container-type: inline-size; }
-  .bc-shell { display: grid; grid-template-columns: 210px 1fr; gap: 14px; }
+  .bc-shell { display: grid; grid-template-columns: 210px 1fr; gap: var(--bc-space-6, 14px); }
   /* The rail only collapses when it genuinely cannot fit. It must also stop being
      a sticky column when it does: keeping flex-direction:column and position:
      sticky left a full-height list pinned over the body, and the body scrolled
@@ -1330,26 +1558,26 @@
   .bc-shell-collapsed { grid-template-columns: 1fr !important; }
   .bc-shell-collapsed .bc-nav {
     flex-direction: row; overflow-x: auto; overflow-y: hidden;
-    padding: 8px; position: static; top: auto;
+    padding: var(--bc-space-3, 8px); position: static; top: auto;
   }
   .bc-shell-collapsed .bc-tab { flex: none; }
   @container (max-width: 430px) {
     .bc-shell { grid-template-columns: 1fr; }
-    .bc-nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 8px; position: static; top: auto; }
+    .bc-nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: var(--bc-space-3, 8px); position: static; top: auto; }
     .bc-tab { flex: none; }
   }
   @supports not (container-type: inline-size) {
     @media (max-width: 430px) {
       .bc-shell { grid-template-columns: 1fr; }
-      .bc-nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 8px; position: static; top: auto; }
+      .bc-nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: var(--bc-space-3, 8px); position: static; top: auto; }
       .bc-tab { flex: none; }
     }
   }
 
-  .bc-nav { display: flex; flex-direction: column; gap: 2px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; height: fit-content; position: sticky; top: 8px; }
+  .bc-nav { display: flex; flex-direction: column; gap: 2px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--bc-space-3, 8px); height: fit-content; position: sticky; top: 8px; }
   .bc-tab {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 10px; border: 0; background: transparent; color: inherit;
+    display: flex; align-items: center; gap: var(--bc-space-4, 10px);
+    padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px); border: 0; background: transparent; color: inherit;
     text-align: left; cursor: pointer; border-radius: var(--bc-radius-md, 8px); font: inherit;
   }
   /* One mode-aware wash replaces each light rule plus its html.bc-dark twin. */
@@ -1358,22 +1586,78 @@
   .bc-tab.active:hover { background: var(--accent); }
   .bc-tab-ic { display: inline-flex; align-items: center; justify-content: center; width: 18px; flex: 0 0 18px; opacity: .9; }
 
-  .bc-body { min-width: 0; }
-  .bc-tab-body { display: flex; flex-direction: column; gap: 14px; }
-  .bc-section { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
-  .bc-section-title { margin: 0 0 4px; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-  .bc-section-desc { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
-  .bc-section-body { display: flex; flex-direction: column; gap: 10px; }
+  /* ---- choice: options that draw themselves ---------------------------- */
+  .bc-choice { display: flex; flex-wrap: wrap; gap: var(--bc-space-2, 6px); justify-content: flex-end; }
+  .bc-choice-opt {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: var(--bc-space-2, 6px); width: 74px; padding: var(--bc-space-3, 8px) var(--bc-space-2, 6px); cursor: pointer;
+    border: 1px solid var(--border); border-radius: var(--bc-radius-md, 8px);
+    background: var(--bc-surface-2, transparent); color: var(--muted);
+    transition: border-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
+                background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
+  }
+  .bc-choice-opt:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
+  /* Two signals, not just colour: the selected card is also the only one with
+     an accent rim, which survives a colour-blind mode and a mono print. */
+  .bc-choice-opt.bc-on {
+    border-color: var(--accent); color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  .bc-choice-opt:focus-within { outline: 2px solid var(--bc-focus-ring, var(--accent)); outline-offset: 1px; }
+  .bc-choice-art { display: flex; align-items: center; justify-content: center; width: 100%; height: 24px; }
+  .bc-choice-label { font-size: var(--bc-text-2xs, 11px); font-weight: 600; }
 
-  .bc-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 6px 0; border-top: 1px solid var(--border); }
+  .bc-sw-track { stroke: var(--bc-surface-4, rgba(0,0,0,.12)); }
+  .bc-sw-fill  { stroke: var(--accent); }
+  .bc-sw-track-bar {
+    display: block; width: 52px; height: 6px; border-radius: 999px;
+    background: var(--bc-surface-4, rgba(0,0,0,.12)); overflow: hidden;
+  }
+  .bc-sw-bar { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+  .bc-sw-bar.rainbow { background-image: var(--bc-spectrum); background-repeat: no-repeat; }
+  .bc-sw-segs { display: flex; gap: 2px; width: 52px; }
+  .bc-sw-seg { flex: 1 1 0; height: 6px; border-radius: var(--bc-radius-sm, 2px); background: var(--bc-surface-4, rgba(0,0,0,.12)); }
+  .bc-sw-seg.on { background: var(--accent); }
+  .bc-sw-text { font-size: var(--bc-text-2xs, 11px); font-variant-numeric: tabular-nums; }
+  .bc-sw-text b { color: var(--text); }
+  .bc-sw-none { color: var(--muted); }
+
+  .bc-body { min-width: 0; }
+  .bc-tab-body { display: flex; flex-direction: column; gap: var(--bc-space-7, 16px); }
+  .bc-section { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--bc-space-8, 20px); }
+  /* Was 14px uppercase muted, which reads as a fieldset legend rather than a
+     heading: all-caps costs ~12% legibility, and muted put the one word that
+     tells you where you are below its own body text in contrast. */
+  .bc-section-title { margin: 0 0 var(--bc-space-1, 4px); font-size: var(--bc-text-lg, 15px); font-weight: 650; letter-spacing: -.006em; color: var(--text, inherit); }
+  .bc-section-desc { margin: 0 0 var(--bc-space-5, 12px); color: var(--muted); font-size: var(--bc-text-sm, 13px); }
+  .bc-section-body { display: flex; flex-direction: column; gap: var(--bc-space-3, 8px); }
+
+  /* Was a 1fr/auto grid, which handed the control max-content
+     and gave the label only what survived. In a ~360px drawer that crushed
+     "Progress accent" -- swatch + hex field + Clear -- into a 130px label column
+     and wrapped its hint over five lines. Flex with a real basis inverts the
+     priority: the label keeps --bc-row-label-min, and a control that no longer
+     fits beside it takes its own line instead of strangling the text. */
+  .bc-row {
+    display: flex; flex-wrap: wrap; align-items: center;
+    gap: var(--bc-space-3, 8px) var(--bc-space-6, 14px);
+    padding: var(--bc-space-4, 10px) 0; border-top: 1px solid var(--border);
+  }
+  .bc-row-label { flex: 1 1 var(--bc-row-label-min); min-width: 0; }
   .bc-section-body > .bc-row:first-child { border-top: 0; padding-top: 0; }
   .bc-hidden { display: none !important; }
   .bc-row-off { opacity: .5; }
   .bc-row-off .bc-row-control { pointer-events: none; }
-  .bc-row-title { font-weight: 500; }
-  .bc-row-hint  { color: var(--muted); font-size: 12px; margin-top: 2px; }
-  .bc-row-warn  { color: var(--danger); font-size: 12px; margin-top: 2px; }
-  .bc-row-control { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+  .bc-row-title { font-weight: 600; }
+  .bc-row-hint  { color: var(--muted); font-size: var(--bc-text-sm, 13px); margin-top: var(--bc-space-1, 4px); text-wrap: pretty; }
+  .bc-row-warn  { color: var(--danger); font-size: var(--bc-text-sm, 13px); margin-top: var(--bc-space-1, 4px); }
+  /* margin-left:auto keeps the control right-aligned on a shared line AND on a
+     line of its own, so a wrapped row still reads as one column of controls.
+     max-width stops an over-wide control from escaping the card instead. */
+  .bc-row-control {
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--bc-space-3, 8px);
+    justify-content: flex-end; margin-left: auto; max-width: 100%; min-width: 0;
+  }
 
   .bc-switch { position: relative; width: 40px; height: 22px; display: inline-block; flex: none; border-radius: 999px; background: var(--bc-border-strong, var(--border)); transition: background .15s ease; cursor: pointer; }
   .bc-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
@@ -1385,88 +1669,143 @@
   .bc-switch input:focus-visible + .bc-switch-thumb { box-shadow: 0 1px 2px rgba(0,0,0,.15), 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
 
   .bc-select, .bc-text, .bc-textarea, .bc-number, .bc-color-text, .bc-tags-inp {
-    padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px); background: var(--panel); color: inherit; font: inherit;
+    padding: var(--bc-space-2, 6px) var(--bc-space-3, 8px); border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px); background: var(--panel); color: inherit; font: inherit;
   }
   .bc-textarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .bc-number { width: 90px; }
-  .bc-color { display: inline-flex; align-items: center; gap: 6px; }
+  .bc-color { display: inline-flex; align-items: center; gap: var(--bc-space-2, 6px); }
   .bc-color input[type=color] { width: 32px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px); background: transparent; }
   .bc-color-text { width: 100px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .bc-slider { display: inline-flex; align-items: center; gap: 8px; }
+  .bc-slider { display: inline-flex; align-items: center; gap: var(--bc-space-3, 8px); }
   .bc-slider-val { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
   .bc-invalid input { border-color: var(--danger); }
-  .bc-text-warn { color: var(--danger); font-size: 12px; }
+  .bc-text-warn { color: var(--danger); font-size: var(--bc-text-xs, 12px); }
 
-  .bc-btn { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px); background: var(--panel); color: inherit; cursor: pointer; font: inherit; }
+  .bc-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--bc-space-2, 6px);
+    padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px);
+    border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px);
+    background: var(--panel); color: inherit; cursor: pointer; font: inherit;
+  }
+  /* Optically aligned with the label rather than parked on the text baseline,
+     and dimmer than it: the word is the instruction, the icon is the hint. */
+  .bc-btn-ic { display: inline-flex; line-height: 0; flex: 0 0 auto; opacity: .75; }
+  .bc-btn:hover .bc-btn-ic { opacity: 1; }
   .bc-btn:hover { background: var(--bc-surface-4, rgba(0,0,0,.04)); }
   .bc-btn-danger { color: var(--danger); border-color: var(--bc-danger-border, rgba(185,28,28,.4)); }
   .bc-btn-ghost  { background: transparent; }
 
-  .bc-sortable { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+  .bc-sortable { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--bc-space-2, 6px); }
   .bc-sortable-item {
     display: grid; grid-template-columns: 20px 1fr;
-    align-items: center; gap: 10px; padding: 6px 8px;
+    align-items: center; gap: var(--bc-space-4, 10px); padding: var(--bc-space-2, 6px) var(--bc-space-3, 8px);
     background: var(--panel); border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px);
   }
   .bc-drag { cursor: grab; color: var(--muted); user-select: none; text-align: center; }
   .bc-sortable-item.bc-dragging { opacity: .5; }
 
-  .bc-course-row { display: grid; grid-template-columns: 20px 1fr 40px auto 1fr; gap: 8px; align-items: center; }
+  .bc-course-row { display: grid; grid-template-columns: 20px 1fr 40px auto 1fr; gap: var(--bc-space-3, 8px); align-items: center; }
   .bc-course-swatch { width: 18px; height: 18px; border-radius: 50%; }
   .bc-course-name { min-width: 0; }
   .bc-course-bg { min-width: 0; }
-  .bc-mini-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
-  .bc-bulk { display: flex; gap: 6px; margin-top: 10px; }
+  .bc-mini-check { display: inline-flex; align-items: center; gap: var(--bc-space-1, 4px); font-size: var(--bc-text-xs, 12px); color: var(--muted); }
+  .bc-bulk { display: flex; gap: var(--bc-space-2, 6px); margin-top: var(--bc-space-4, 10px); }
 
-  .bc-inline { display: inline-flex; gap: 6px; align-items: center; }
+  .bc-inline { display: inline-flex; gap: var(--bc-space-2, 6px); align-items: center; }
 
-  .bc-theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-  .bc-theme-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--bc-radius-lg, 10px); padding: 10px; cursor: pointer; text-align: left; color: inherit; }
+  .bc-theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--bc-space-4, 10px); }
+  .bc-theme-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--bc-radius-lg, 10px); padding: var(--bc-space-4, 10px); cursor: pointer; text-align: left; color: inherit; }
   .bc-theme-card:hover { border-color: var(--accent); }
   .bc-theme-swatch { height: 60px; border-radius: var(--bc-radius-md, 8px); border: 2px solid; position: relative; overflow: hidden; }
   .bc-theme-swatch span { position: absolute; right: 8px; bottom: 8px; width: 20px; height: 20px; border-radius: 50%; }
-  .bc-theme-name { margin-top: 8px; font-weight: 600; font-size: 13px; }
-  .bc-theme-actions { display: flex; gap: 4px; margin-top: 8px; }
-  .bc-theme-actions .bc-btn { padding: 3px 8px; font-size: 12px; }
-  .bc-rot-list { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 6px 0; }
+  .bc-theme-name { margin-top: var(--bc-space-3, 8px); font-weight: 600; font-size: var(--bc-text-sm, 13px); }
+  .bc-theme-actions { display: flex; gap: var(--bc-space-1, 4px); margin-top: var(--bc-space-3, 8px); }
+  .bc-theme-actions .bc-btn { padding: 3px var(--bc-space-3, 8px); font-size: var(--bc-text-xs, 12px); }
+  .bc-rot-list { display: flex; flex-wrap: wrap; gap: var(--bc-space-3, 8px) var(--bc-space-7, 16px); padding: var(--bc-space-2, 6px) 0; }
+
+  /* Skin gallery. minmax(150px) rather than the theme grid's 140px because a
+     skin card carries a four-cell mock, and below ~150px the cells stop being
+     large enough to tell a lattice from a plaid -- which is the only thing the
+     preview is there to do. */
+  /* Layout swatches. Each miniature is built from the same two elements -- a
+     dot and a bar -- so the only thing that differs between them is the
+     geometry the layout itself changes. */
+  .bc-lsw { display: flex; flex-direction: column; gap: 3px; width: 34px; }
+  .bc-lsw-row { display: flex; align-items: center; gap: 3px; }
+  .bc-lsw-row i { width: 5px; height: 5px; border-radius: var(--bc-radius-circle, 50%); border: 1px solid currentColor; flex: none; }
+  .bc-lsw-row b { height: 3px; flex: 1; border-radius: var(--bc-radius-sm, 2px); background: currentColor; opacity: .45; }
+  .bc-lsw.comfortable .bc-lsw-row { background: currentColor; border-radius: var(--bc-radius-sm, 2px); padding: 2px; }
+  .bc-lsw.comfortable .bc-lsw-row i, .bc-lsw.comfortable .bc-lsw-row b { mix-blend-mode: screen; }
+  .bc-lsw.compact { gap: 1px; }
+  .bc-lsw.compact .bc-lsw-row { border-bottom: 1px solid currentColor; padding-bottom: 1px; }
+  .bc-lsw.cards { gap: var(--bc-space-1, 4px); }
+  .bc-lsw.cards .bc-lsw-row { border: 1px solid currentColor; border-radius: var(--bc-radius-sm, 2px); padding: 3px 2px; }
+  .bc-lsw.minimal .bc-lsw-row + .bc-lsw-row { border-top: 1px solid currentColor; padding-top: 2px; }
+  .bc-lsw.timeline { border-left: 1px solid currentColor; padding-left: var(--bc-space-1, 4px); margin-left: 2px; }
+  /* Pull the node back over the rail: the padding, plus half a 7px dot. Written
+     as maths rather than the -8px it evaluates to, so it still lands on the rail
+     when the density scale moves the padding. */
+  .bc-lsw.timeline .bc-lsw-row i { margin-left: calc(-1 * var(--bc-space-1, 4px) - 4px); }
+
+  .bc-skin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--bc-space-4, 10px); }
+  .bc-skin-slot { position: relative; }
+  .bc-skin-card { display: block; width: 100%; padding: 0; border: 1px solid var(--border); border-radius: var(--bc-radius-lg, 10px); background: var(--panel); cursor: pointer; overflow: hidden; text-align: left; color: inherit; }
+  .bc-skin-card:hover { border-color: var(--accent); }
+  /* Two rings, not a colour change: the applied skin has to be findable at a
+     glance in a grid where every card is already a different colour. */
+  .bc-skin-card.bc-on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+  .bc-skin-mock { display: flex; height: 74px; }
+  .bc-skin-rail { width: 14px; flex: none; }
+  .bc-skin-page { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: var(--bc-space-1, 4px); padding: var(--bc-space-2, 6px); background-size: cover; }
+  .bc-skin-cell { border-radius: var(--bc-radius-sm, 3px); }
+  .bc-skin-empty { align-items: center; justify-content: center; color: var(--muted); background: var(--bc-surface-3, rgba(0,0,0,.04)); }
+  .bc-skin-meta { display: flex; flex-direction: column; gap: 2px; padding: var(--bc-space-3, 8px); border-top: 1px solid var(--border); min-width: 0; }
+  .bc-skin-line { display: flex; align-items: center; gap: var(--bc-space-2, 6px); min-width: 0; }
+  .bc-skin-dot { width: 10px; height: 10px; border-radius: var(--bc-radius-circle, 50%); flex: none; }
+  .bc-skin-name { font-weight: 600; font-size: var(--bc-text-sm, 13px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bc-skin-tags { font-size: var(--bc-text-xs, 12px); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Only on hover/focus-within: a delete control sitting permanently on every
+     card turns a gallery into a list of things to accidentally destroy. */
+  .bc-skin-del { position: absolute; top: var(--bc-space-2, 6px); right: var(--bc-space-2, 6px); opacity: 0; }
+  .bc-skin-slot:hover .bc-skin-del, .bc-skin-del:focus-visible { opacity: 1; }
 
   .bc-navitem { display: flex; justify-content: space-between; align-items: center; width: 100%; }
-  .bc-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .bc-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .bc-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; background: var(--bc-surface-4, rgba(0,0,0,.05)); border-radius: var(--bc-radius-pill, 999px); font-size: 12px; }
+  .bc-tags { display: flex; flex-wrap: wrap; gap: var(--bc-space-2, 6px); align-items: center; }
+  .bc-chips { display: flex; flex-wrap: wrap; gap: var(--bc-space-1, 4px); }
+  .bc-chip { display: inline-flex; align-items: center; gap: var(--bc-space-1, 4px); padding: 2px var(--bc-space-2, 6px); background: var(--bc-surface-4, rgba(0,0,0,.05)); border-radius: var(--bc-radius-pill, 999px); font-size: var(--bc-text-xs, 12px); }
   .bc-chip-x { background: none; border: 0; cursor: pointer; color: var(--bc-text-subtle, var(--muted)); }
   .bc-tags-inp { min-width: 120px; flex: 1; }
 
-  .bc-links { display: flex; flex-direction: column; gap: 6px; }
-  .bc-link-row { display: grid; grid-template-columns: 1fr 2fr auto auto; gap: 6px; align-items: center; }
+  .bc-links { display: flex; flex-direction: column; gap: var(--bc-space-2, 6px); }
+  .bc-link-row { display: grid; grid-template-columns: 1fr 2fr auto auto; gap: var(--bc-space-2, 6px); align-items: center; }
 
-  .bc-key { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px); background: var(--panel); color: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; font-size: 13px; }
+  .bc-key { padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px); border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px); background: var(--panel); color: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; font-size: var(--bc-text-sm, 13px); }
 
-  .bc-hint { color: var(--muted); font-size: 12px; }
+  .bc-hint { color: var(--muted); font-size: var(--bc-text-xs, 12px); }
   .bc-notice {
-    padding: 10px 12px; border-radius: var(--radius); font-size: 13px;
+    padding: var(--bc-space-4, 10px) var(--bc-space-5, 12px); border-radius: var(--radius); font-size: var(--bc-text-sm, 13px);
     background: var(--bc-warn-bg, #fffbeb); color: var(--bc-text, inherit);
     border: 1px solid var(--bc-warn, #a16207);
   }
-  .bc-ins-total { font-weight: 700; margin-bottom: 8px; }
-  .bc-ins-days { display: flex; gap: 4px; align-items: flex-end; height: 64px; margin: 8px 0 12px; }
+  .bc-ins-total { font-weight: 700; margin-bottom: var(--bc-space-3, 8px); }
+  .bc-ins-days { display: flex; gap: var(--bc-space-1, 4px); align-items: flex-end; height: 64px; margin: var(--bc-space-3, 8px) 0 var(--bc-space-5, 12px); }
   .bc-ins-day { flex: 1; height: 100%; display: flex; align-items: flex-end; background: var(--bc-surface-4, rgba(0,0,0,.04)); border-radius: var(--bc-radius-sm, 4px); overflow: hidden; }
   .bc-ins-day-fill { width: 100%; background: var(--accent); border-radius: var(--bc-radius-sm, 4px) var(--bc-radius-sm, 4px) 0 0; min-height: 2px; }
-  .bc-ins-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 5px 0; border-top: 1px solid var(--border); font-size: 13px; }
+  .bc-ins-row { display: flex; justify-content: space-between; align-items: center; gap: var(--bc-space-4, 10px); padding: var(--bc-space-2, 6px) 0; border-top: 1px solid var(--border); font-size: var(--bc-text-sm, 13px); }
   .bc-ins-row:first-child { border-top: 0; }
   .bc-ins-val { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
   .bc-ins-spark { line-height: 0; }
-  .bc-rec-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 8px); }
+  .bc-rec-row { display: flex; justify-content: space-between; align-items: center; gap: var(--bc-space-4, 10px); padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px); border: 1px solid var(--border); border-radius: var(--bc-radius-md, 8px); }
   .bc-rec-title { font-weight: 600; }
-  .bc-rec-meta { font-size: 12px; color: var(--muted); }
-  .bc-rec-days { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0; }
-  .bc-rec-form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+  .bc-rec-meta { font-size: var(--bc-text-xs, 12px); color: var(--muted); }
+  .bc-rec-days { display: flex; gap: var(--bc-space-4, 10px); flex-wrap: wrap; margin: var(--bc-space-1, 4px) 0; }
+  .bc-rec-form { display: flex; flex-direction: column; gap: var(--bc-space-3, 8px); margin-top: var(--bc-space-4, 10px); padding-top: var(--bc-space-4, 10px); border-top: 1px dashed var(--border); }
   .bc-rec-form input[type=time], .bc-rec-form input[type=date] { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px); background: var(--panel); color: inherit; font: inherit; }
 
-  .bc-gpa { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  .bc-gpa th, .bc-gpa td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .bc-gpa { width: 100%; border-collapse: collapse; margin-top: var(--bc-space-3, 8px); }
+  .bc-gpa th, .bc-gpa td { padding: var(--bc-space-2, 6px) var(--bc-space-3, 8px); text-align: left; border-bottom: 1px solid var(--border); font-size: var(--bc-text-sm, 13px); }
   .bc-gpa-cred { width: 70px; }
-  .bc-gpa-total { margin-top: 10px; font-weight: 700; }
+  .bc-gpa-total { margin-top: var(--bc-space-4, 10px); font-weight: 700; }
   /* A token, not opacity: fading text that already sits at AA drops it below AA. */
   .bc-concluded td { color: var(--bc-text-subtle, var(--muted)); }
   `;

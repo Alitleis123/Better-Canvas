@@ -11,11 +11,40 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 const PALETTE_SOURCES = new Set([
   "src/shared/tokens.js",       // the token values themselves
   "src/shared/themes.js",       // tone and preset definitions
+  "src/shared/skins.js",        // gradient endpoints and colour fallbacks
+  "src/shared/skin-catalog.js", // the skin palettes themselves
   "src/content/core/color.js",  // contrast maths against black/white endpoints
   "src/shared/defaults.js",     // default cosmetic background colours
   "src/content/core/toast.js",  // documented exception, see below
   "src/background/service-worker.js", // chrome.action badge colour, not CSS
 ]);
+
+// Blank out comments while keeping the line structure, so a scan can still
+// report a line number. Checking only whether a line STARTS with * or /* misses
+// every continuation line of a block comment, and prose describing CSS ("...
+// border-radius:50% was applied to...") then reads as a declaration.
+function stripComments(src) {
+  let out = "";
+  let i = 0;
+  while (i < src.length) {
+    if (src[i] === "/" && src[i + 1] === "*") {
+      const end = src.indexOf("*/", i + 2);
+      const stop = end === -1 ? src.length : end + 2;
+      // Keep the newlines so line numbers survive.
+      out += src.slice(i, stop).replace(/[^\n]/g, " ");
+      i = stop;
+    } else if (src[i] === "/" && src[i + 1] === "/") {
+      const nl = src.indexOf("\n", i);
+      const stop = nl === -1 ? src.length : nl;
+      out += " ".repeat(stop - i);
+      i = stop;
+    } else {
+      out += src[i];
+      i++;
+    }
+  }
+  return out;
+}
 
 function jsFiles(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -42,9 +71,8 @@ const DECL = new RegExp("(?:^|[;{]|\\s)(" + COLOR_PROPS.join("|") + ")\\s*:");
 // A literal colour inside a CSS declaration, ignoring var() fallbacks and comments.
 function cssColorLiterals(src) {
   const out = [];
-  for (const [i, line] of src.split("\n").entries()) {
-    const code = line.replace(/\/\/.*$/, "");
-    if (/^\s*\*|^\s*\/\*/.test(code)) continue;
+  for (const [i, line] of stripComments(src).split("\n").entries()) {
+    const code = line;
     if (!DECL.test(code)) continue;
     for (const m of code.matchAll(/#[0-9a-fA-F]{6}\b/g)) {
       const before = code.slice(0, m.index);
@@ -187,7 +215,7 @@ module.exports = {
     const offenders = [];
     for (const abs of jsFiles(path.join(ROOT, "src"))) {
       const rel = path.relative(ROOT, abs).split(path.sep).join("/");
-      const src = fs.readFileSync(abs, "utf8");
+      const src = stripComments(fs.readFileSync(abs, "utf8"));
       for (const [i, line] of src.split("\n").entries()) {
         for (const m of line.matchAll(/border-radius:\s*([^;\n]+)/g)) {
           const v = m[1].replace("!important", "").trim();
@@ -198,6 +226,91 @@ module.exports = {
     }
     assert.deepEqual(offenders, [],
       "literal border-radius values ignore the radius slider: " + offenders.join(", "));
+  },
+
+  // Every settings-UI assertion in this repo reads its file as TEXT. Nothing
+  // required src/shared/settings/index.js, so a stray backtick inside its CSS
+  // template literal -- which terminates the literal and makes the rest of the
+  // file garbage -- left the whole suite green while the drawer was dead on
+  // arrival. Parsing is the cheapest possible check and nothing else did it.
+  "every shipped source file actually parses"() {
+    const vm = require("vm");
+    const broken = [];
+    for (const abs of jsFiles(path.join(ROOT, "src"))) {
+      const rel = path.relative(ROOT, abs).split(path.sep).join("/");
+      try { new vm.Script(fs.readFileSync(abs, "utf8"), { filename: rel }); }
+      catch (e) { broken.push(rel + ": " + e.message); }
+    }
+    assert.deepEqual(broken, [], "source files that do not parse:\n  " + broken.join("\n  "));
+  },
+
+  // The bug this pins: `.bc-row { grid-template-columns: 1fr auto }` sized the
+  // CONTROL to max-content and gave the label whatever survived. A colour row
+  // -- swatch + hex field + Clear -- is ~230px, so in the drawer's body it left
+  // a 130px label column and wrapped a one-line hint over five lines. Measured
+  // in a real engine after the fix: narrowest label 250px, deepest hint 2 lines.
+  "a settings row guarantees its label a minimum width"() {
+    const css = read("src/shared/settings/index.js");
+    const row = css.match(/\.bc-row \{[^}]*\}/);
+    assert.ok(row, ".bc-row rule not found");
+    assert.noMatch(row[0], /grid-template-columns/,
+      "a max-content control column starves the label; the row must not be that grid again");
+    assert.match(row[0], /flex-wrap:\s*wrap/,
+      "a control that no longer fits must take its own line rather than squeeze the label");
+    const label = css.match(/\.bc-row-label \{[^}]*\}/);
+    assert.ok(label, ".bc-row-label has no rule, so the label has no width floor");
+    assert.match(label[0], /flex:\s*1 1 var\(--bc-row-label-min\)/,
+      "the label's floor must come from the token, not from whatever is left over");
+    assert.match(BC.tokens.staticCss(), /--bc-row-label-min:\s*calc\(var\(--bc-text-md\)/,
+      "the floor scales with the type scale: when a sentence wraps is a type question");
+  },
+
+  "our own surfaces take their spacing and type from the scale"() {
+    // The density setting (compact/spacious/cozy) and the font-size setting work
+    // by scaling --bc-space-unit and --bc-font-scale. A hardcoded px is a value
+    // that ignores both, and 157 of them meant the sliders reached almost none
+    // of the panels we ship.
+    //
+    // Exempt: anything below one unit (a hairline, an optical nudge), viewport
+    // units, a reset to zero, and interpolated values whose maths is elsewhere.
+    const offenders = [];
+    for (const abs of jsFiles(path.join(ROOT, "src"))) {
+      const rel = path.relative(ROOT, abs).split(path.sep).join("/");
+      const src = stripComments(fs.readFileSync(abs, "utf8"));
+      for (const [i, line] of src.split("\n").entries()) {
+        // A JS assignment is not a declaration; PREVIEW_PAD is deliberately a
+        // number because buildPreview does arithmetic against it.
+        if (line.includes("=") || line.includes("PREVIEW_PAD")) continue;
+        for (const m of line.matchAll(/(?:^|[;{]|\s)(padding|margin|gap|row-gap|column-gap)(-\w+)?\s*:\s*([^;\n}]+)/g)) {
+          const v = m[3];
+          if (/var\(--bc-|\$\{|calc\(|%|vh|vw|\bC\b/.test(v)) continue;
+          // Exempt when every component is zero, auto, or under one unit: a
+          // shorthand like "0 3px" is two hairlines, not a spacing decision.
+          const parts = v.replace("!important", "").trim().split(/\s+/);
+          if (parts.every((x) => /^(0|auto|inherit|-?[0-3](\.\d+)?px)$/.test(x))) continue;
+          offenders.push(`${rel}:${i + 1} ${m[1]}${m[2] || ""}: ${v.trim()}`);
+        }
+      }
+    }
+    assert.deepEqual(offenders, [],
+      "spacing that ignores the density setting:\n  " + offenders.join("\n  "));
+  },
+
+  "our own surfaces take their type sizes from the scale"() {
+    const offenders = [];
+    for (const abs of jsFiles(path.join(ROOT, "src"))) {
+      const rel = path.relative(ROOT, abs).split(path.sep).join("/");
+      const src = stripComments(fs.readFileSync(abs, "utf8"));
+      for (const [i, line] of src.split("\n").entries()) {
+        for (const m of line.matchAll(/font-size:\s*([^;\n}]+)/g)) {
+          const v = m[1];
+          if (/var\(--bc-text|inherit|\$\{|calc\(|%|em\b|0\s*(!important)?\s*$/.test(v)) continue;
+          offenders.push(`${rel}:${i + 1} font-size: ${v.trim()}`);
+        }
+      }
+    }
+    assert.deepEqual(offenders, [],
+      "type sizes that ignore the font-size setting:\n  " + offenders.join("\n  "));
   },
 
   "top-level feature panels share one surface treatment"() {

@@ -3,12 +3,14 @@
  * Three modes:
  *  - "default": leave Canvas native list alone.
  *  - "clean":   restyle the native list into rounded cards + circle checks.
- *  - "custom":  replace with the Better Canvas planner widget (ring, week nav,
- *               course filter, groupings, streaks, pomodoro, personal tasks).
+ *  - "custom":  replace with the Better Canvas planner widget (progress
+ *               indicator, week nav, filter pane, groupings, list/kanban/
+ *               time-block views, streaks, pomodoro, personal tasks).
  */
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
+
   BC.features = BC.features || {};
 
   // Item keys, estimates and schedule times reach HTML attributes below. They
@@ -19,130 +21,546 @@
   const CLEAN_CSS = `
     .Sidebar__TodoListContainer, .ToDoSidebar {
       background: var(--bc-surface-2, #fff) !important;
-      border-radius: var(--bc-radius-xl, 12px); padding: 12px;
+      border-radius: var(--bc-radius-xl, 12px); padding: var(--bc-space-5, 12px);
       border: 1px solid var(--bc-border, #e5e7eb) !important;
     }
-    .todo-list-header-container h2 { font-size: 14px !important; margin-bottom: 8px !important; }
-    .to-do-list li { background: var(--bc-surface-3, #f7fafc) !important;
-      border-radius: var(--bc-radius-lg, 10px) !important; padding: 8px 10px !important; margin-bottom: 6px !important; border: 0 !important; }
+    .todo-list-header-container h2 {
+      font-size: var(--bc-text-md, 14px) !important;
+      margin-bottom: var(--bc-space-3, 8px) !important;
+    }
+    .to-do-list li {
+      background: var(--bc-surface-3, #f7fafc) !important;
+      border-radius: var(--bc-radius-lg, 10px) !important;
+      padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px) !important;
+      margin-bottom: var(--bc-space-2, 6px) !important; border: 0 !important;
+    }
+    /* Canvas's "Ignore" control is an <a>, which is display:inline — so the
+       width, the height and the overflow this rule used to set were all silently
+       ignored, and border-radius:50% was applied to whatever box the text
+       happened to make. The result was not a circle: it was a lopsided pill as
+       wide as the hidden label, which text-indent:-9999px could not clip either
+       (overflow does not apply to inline boxes). Laying it out as inline-flex is
+       what makes every one of those declarations mean something. */
     .to-do-list li a[title="Ignore"] {
-      width: 22px !important; height: 22px !important; border: 2px solid var(--bc-accent, #0374b5) !important;
-      border-radius: 50% !important; background: transparent !important; text-indent: -9999px; overflow: hidden;
+      display: inline-flex !important; align-items: center; justify-content: center;
+      box-sizing: border-box !important;
+      width: 22px !important; height: 22px !important; flex: 0 0 auto;
+      border: 2px solid var(--bc-todo-accent, var(--bc-accent, #0374b5)) !important;
+      border-radius: var(--bc-radius-circle, 50%) !important;
+      background: transparent !important;
+      /* The label is now clipped by a box that actually clips, and kept for
+         screen readers rather than pushed off-screen by a magic number. */
+      font-size: 0 !important; line-height: 0 !important; text-indent: 0 !important;
+      overflow: hidden !important; text-decoration: none !important;
+      transition: background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
+    }
+    /* The tick is a mask rather than a background image, so it takes its colour
+       from the element and needs no second rule for dark mode. */
+    .to-do-list li a[title="Ignore"]::after {
+      content: ""; width: 12px; height: 12px;
+      background-color: var(--bc-accent-contrast, #fff);
+      opacity: 0; transition: opacity var(--bc-dur-1, 90ms) var(--bc-ease-out, ease);
+      -webkit-mask-image: var(--bc-check-mask); mask-image: var(--bc-check-mask);
+      -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+      -webkit-mask-position: center; mask-position: center;
+    }
+    .to-do-list li a[title="Ignore"]:hover,
+    .to-do-list li a[title="Ignore"]:focus-visible {
+      background: var(--bc-todo-accent, var(--bc-accent, #0374b5)) !important;
+    }
+    .to-do-list li a[title="Ignore"]:hover::after,
+    .to-do-list li a[title="Ignore"]:focus-visible::after { opacity: 1; }
+    .to-do-list li a[title="Ignore"]:focus-visible {
+      outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .to-do-list li a[title="Ignore"], .to-do-list li a[title="Ignore"]::after { transition: none; }
     }
   `;
 
+  const LAYOUTS = ["comfortable", "compact", "cards", "minimal", "timeline"];
+
   const WIDGET_CSS = `
     .bc-todo {
+      container-type: inline-size; container-name: bctodo;
       background: var(--bc-surface-2, #fff);
       border: 1px solid var(--bc-border, #e5e7eb);
       border-radius: var(--bc-radius-lg, 10px); padding: var(--bc-space-6, 14px);
       color: var(--bc-text, inherit);
       font: var(--bc-text-md, 14px)/var(--bc-leading-body, 1.4) var(--bc-font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
     }
-    .bc-todo-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-    .bc-todo-title { font-weight: 700; font-size: 15px; margin: 0; flex: 1; }
-    .bc-todo-ring { width: 46px; height: 46px; flex: 0 0 46px; }
-    .bc-todo-week { display: flex; align-items: center; gap: 6px; }
-    .bc-todo-week button { background: transparent; border: 1px solid var(--bc-border, #e5e7eb); border-radius: 999px; padding: 2px 8px; cursor: pointer; color: inherit; }
-    .bc-todo-week button:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
-    .bc-todo-controls { display: flex; gap: 6px; margin-bottom: 10px; }
-    .bc-todo-controls select { padding: 4px 6px; border-radius: var(--bc-radius-md, 6px); border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
-    .bc-todo-day-header { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--bc-muted, #6b7280); margin: 10px 0 6px; }
+    /* Every length here comes off the spacing scale. Hardcoded px meant the
+       density setting (compact/spacious/cozy) reached every other surface we
+       ship and stopped dead at this widget's border. */
+
+    /* ---- header -------------------------------------------------------- */
+    /* The old row laid the ring, the title and three text buttons out as one
+       unwrapped flex line. In a 280px Canvas sidebar the title got ~100px and
+       "To Do - Sep 8-14" broke across four lines. The nav is now three 26px
+       icon buttons — a fixed 82px — so the title always has the rest, and the
+       date moved to its own line where it cannot compete for width. */
+    .bc-todo-head {
+      display: flex; align-items: flex-start; gap: var(--bc-space-3, 8px);
+      margin-bottom: var(--bc-space-4, 10px);
+    }
+    .bc-todo-headings { flex: 1 1 auto; min-width: 0; }
+    .bc-todo-eyebrow {
+      font-size: var(--bc-text-2xs, 11px); font-weight: var(--bc-weight-semibold, 600);
+      text-transform: uppercase; letter-spacing: var(--bc-tracking-caps, .04em);
+      color: var(--bc-muted, #6b7280); display: block;
+    }
+    .bc-todo-title {
+      margin: 0; font-size: var(--bc-text-lg, 15px); font-weight: var(--bc-weight-bold, 700);
+      line-height: var(--bc-leading-tight, 1.25);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .bc-todo-nav {
+      display: inline-flex; align-items: center; flex: 0 0 auto;
+      border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-pill, 999px);
+      padding: 1px; gap: 1px;
+    }
+
+    /* ---- the one icon button this widget uses --------------------------- */
+    .bc-todo-ibtn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; padding: 0; flex: 0 0 auto;
+      border: 0; border-radius: var(--bc-radius-pill, 999px);
+      background: transparent; color: var(--bc-muted, #6b7280);
+      cursor: pointer; font: inherit; line-height: 0;
+      transition: background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
+                  color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
+    }
+    .bc-todo-ibtn:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); color: var(--bc-text, #1b2430); }
+    .bc-todo-ibtn[aria-pressed="true"] {
+      background: var(--bc-accent-weak, rgba(79,70,229,.12));
+      color: var(--bc-accent-text, var(--bc-accent, #0374b5));
+    }
+    .bc-todo-ibtn:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 1px; }
+    .bc-todo-ibtn.on { color: var(--bc-accent-text, var(--bc-accent, #0374b5)); }
+
+    /* ---- progress ------------------------------------------------------- */
+    /* Six styles off one number. The ring was the only option and it was the
+       worst fit for the space it had: 46px across with a 12px "100%" inside a
+       36px hole, which collided with itself at any font scale above default. */
+    .bc-todo-prog { margin: 0 0 var(--bc-space-5, 12px); }
+
+    .bc-prog-row { display: flex; align-items: center; gap: var(--bc-space-4, 10px); }
+    .bc-prog-count {
+      font-size: var(--bc-text-xs, 12px); color: var(--bc-muted, #6b7280);
+      font-variant-numeric: tabular-nums; letter-spacing: 0; flex: 0 0 auto;
+    }
+    .bc-prog-count b { color: var(--bc-text, #1b2430); font-weight: var(--bc-weight-semibold, 600); }
+
+    /* Ring: the figure inside is the number of tasks LEFT, not the percentage.
+       It is one or two characters at any font scale where "100%" was four and
+       overflowed, and "how many left" is the number you actually act on. At
+       zero it becomes a check, so finishing the week looks like finishing. */
+    .bc-prog-ringwrap { position: relative; width: 44px; height: 44px; flex: 0 0 44px; }
+    .bc-prog-ring { display: block; width: 44px; height: 44px; }
+    .bc-prog-ring-track { stroke: var(--bc-surface-4, rgba(0,0,0,.08)); }
+    .bc-prog-ring-fill {
+      stroke: var(--bc-todo-accent, var(--bc-accent-stroke, var(--bc-accent, #0374b5)));
+      transition: stroke-dashoffset var(--bc-dur-4, 300ms) var(--bc-ease-out, ease);
+    }
+    .bc-prog-ring-val {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: var(--bc-text-sm, 13px); font-weight: var(--bc-weight-bold, 700);
+      font-variant-numeric: tabular-nums; letter-spacing: 0; line-height: 1;
+      color: var(--bc-text, #1b2430);
+    }
+    .bc-prog-ring-val.bc-prog-done { color: var(--bc-success, #047857); line-height: 0; }
+
+    /* Bar, rainbow and segments all share the track so switching style does not
+       move the rest of the widget by a pixel. */
+    .bc-prog-track {
+      position: relative; flex: 1 1 auto; height: 6px; min-width: 0;
+      border-radius: var(--bc-radius-pill, 999px);
+      background: var(--bc-surface-4, rgba(0,0,0,.08)); overflow: hidden;
+    }
+    .bc-prog-fill {
+      height: 100%; width: 0; border-radius: inherit;
+      background: var(--bc-todo-accent, var(--bc-accent-stroke, var(--bc-accent, #0374b5)));
+      transition: width var(--bc-dur-4, 300ms) var(--bc-ease-out, ease);
+    }
+    /* The spectrum is sized to the whole TRACK, not to the fill, so the colour
+       at the tip is a reading of how far along you are rather than a decoration
+       that looks identical at 10% and 90%. */
+    .bc-prog-fill--rainbow { background-image: var(--bc-spectrum); background-repeat: no-repeat; }
+
+    .bc-prog-segs { display: flex; align-items: center; gap: 2px; flex: 1 1 auto; min-width: 0; }
+    .bc-prog-seg {
+      flex: 1 1 0; min-width: 2px; height: 6px;
+      border-radius: var(--bc-radius-sm, 3px);
+      background: var(--bc-surface-4, rgba(0,0,0,.08));
+      transition: background-color var(--bc-dur-2, 160ms) var(--bc-ease-out, ease);
+    }
+    .bc-prog-seg.on { background: var(--bc-todo-accent, var(--bc-accent-stroke, var(--bc-accent, #0374b5))); }
+    .bc-prog-text { font-size: var(--bc-text-sm, 13px); color: var(--bc-muted, #6b7280); }
+    .bc-prog-text b { color: var(--bc-text, #1b2430); font-variant-numeric: tabular-nums; }
+
+    /* ---- toolbar: view switch + one filter popover ---------------------- */
+    /* Was four full-width <select>s stacked two-per-row above the list: in a
+       280px sidebar that is most of the widget spent on chrome before a single
+       task appears. The view is the only one worth a permanent control, so it
+       became a segmented icon group; range, grouping and course moved behind
+       one button, where they are still one click away but cost no height. */
+    .bc-todo-toolbar {
+      display: flex; align-items: center; gap: var(--bc-space-2, 6px);
+      margin-bottom: var(--bc-space-4, 10px);
+    }
+    .bc-todo-seg {
+      display: inline-flex; align-items: center; gap: 1px; padding: 1px;
+      border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-pill, 999px);
+    }
+    .bc-todo-spacer { flex: 1 1 auto; }
+    .bc-todo-filters { position: relative; flex: 0 0 auto; }
+    .bc-todo-filters > summary { list-style: none; cursor: pointer; }
+    .bc-todo-filters > summary::-webkit-details-marker { display: none; }
+    .bc-todo-filters[open] > summary .bc-todo-ibtn,
+    .bc-todo-filters > summary:focus-visible .bc-todo-ibtn {
+      background: var(--bc-surface-4, rgba(0,0,0,.05)); color: var(--bc-text, #1b2430);
+    }
+    .bc-todo-filters > summary:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 1px; border-radius: var(--bc-radius-pill, 999px); }
+    .bc-todo-pane {
+      position: absolute; right: 0; top: calc(100% + var(--bc-space-2, 6px));
+      z-index: 20; width: 200px; padding: var(--bc-space-4, 10px);
+      display: grid; gap: var(--bc-space-2, 6px);
+      background: var(--bc-surface-2, #fff); color: var(--bc-text, #1b2430);
+      border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-lg, 10px);
+      box-shadow: var(--bc-shadow-3, 0 8px 24px rgba(0,0,0,.18));
+    }
+    .bc-todo-pane label {
+      display: block; font-size: var(--bc-text-2xs, 11px); font-weight: var(--bc-weight-semibold, 600);
+      text-transform: uppercase; letter-spacing: var(--bc-tracking-caps, .04em);
+      color: var(--bc-muted, #6b7280); margin-bottom: var(--bc-space-1, 4px);
+    }
+    .bc-todo-pane select {
+      width: 100%; box-sizing: border-box; padding: var(--bc-space-1, 4px) var(--bc-space-2, 6px);
+      border-radius: var(--bc-radius-md, 6px); border: 1px solid var(--bc-border, #e5e7eb);
+      background: var(--bc-surface-2, #fff); color: inherit; font: inherit; font-size: var(--bc-text-sm, 13px);
+    }
+
+    /* ---- list ----------------------------------------------------------- */
+    .bc-todo-day-header {
+      font-size: var(--bc-text-2xs, 11px); text-transform: uppercase;
+      letter-spacing: var(--bc-tracking-caps, .04em); font-weight: var(--bc-weight-semibold, 600);
+      color: var(--bc-muted, #6b7280);
+      margin: var(--bc-space-5, 12px) 0 var(--bc-space-2, 6px);
+    }
+    .bc-todo-day-header:first-child { margin-top: 0; }
     .bc-todo-item {
-      display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center;
-      padding: 8px 10px; border-radius: var(--bc-radius-lg, 10px); background: var(--bc-surface-3, #f7fafc); margin-bottom: 6px;
+      display: grid; grid-template-columns: 22px minmax(0, 1fr) auto;
+      gap: var(--bc-space-3, 8px); align-items: center;
+      padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px);
+      border-radius: var(--bc-radius-lg, 10px);
+      background: var(--bc-surface-3, #f7fafc);
+      margin-bottom: var(--bc-space-2, 6px);
     }
     /* Tokens rather than opacity: fading already-AA text pushes it below AA. */
     .bc-todo-item.done .bc-todo-name { color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); text-decoration: line-through; }
     .bc-todo-check {
-      width: 22px; height: 22px; border-radius: 50%;
+      width: 22px; height: 22px; padding: 0; border-radius: var(--bc-radius-circle, 50%);
       border: 2px solid var(--bc-todo-accent, var(--bc-accent, #0374b5));
-      background: transparent; cursor: pointer;
+      background: transparent; cursor: pointer; color: var(--bc-accent-contrast, #fff);
+      display: inline-flex; align-items: center; justify-content: center; line-height: 0;
+      transition: background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
     }
+    .bc-todo-check:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px; }
+    /* The tick was a CSS content: "✓" — one more glyph at the mercy of the
+       font, vertically centred by a hand-tuned line-height that only held at
+       one font scale. */
+    .bc-todo-check > svg { opacity: 0; transform: scale(.6); transition: opacity var(--bc-dur-1, 90ms) var(--bc-ease-out, ease), transform var(--bc-dur-1, 90ms) var(--bc-ease-spring, ease); }
     .bc-todo-check.done { background: var(--bc-todo-accent, var(--bc-accent, #0374b5)); }
-    .bc-todo-check.done::after { content: "✓"; color: var(--bc-accent-contrast, #fff); font-size: var(--bc-text-md, 14px); line-height: 20px; display: block; text-align: center; }
-    .bc-todo-name { color: inherit; text-decoration: none; }
+    .bc-todo-check.done > svg { opacity: 1; transform: none; }
+    .bc-todo-name { color: inherit; text-decoration: none; font-size: var(--bc-text-sm, 13px); }
     .bc-todo-name:hover { text-decoration: underline; }
-    .bc-todo-course { font-size: 11px; color: var(--bc-muted, #6b7280); }
-    .bc-todo-due { font-size: 11px; color: var(--bc-muted, #6b7280); }
-    .bc-todo-actions { display: flex; gap: 4px; }
-    .bc-todo-btn { background: transparent; border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-md, 6px); padding: 2px 6px; font-size: 11px; cursor: pointer; color: inherit; }
-    .bc-todo-btn:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
-    .bc-todo-new { display: flex; gap: 6px; margin-top: 8px; }
-    .bc-todo-new input { flex: 1; padding: 6px 8px; border-radius: var(--bc-radius-md, 6px); border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
-    .bc-todo-new button { padding: 6px 10px; border-radius: var(--bc-radius-md, 6px); background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); border: 0; cursor: pointer; font: inherit; }
-    .bc-todo-empty { color: var(--bc-muted, #6b7280); font-size: 13px; padding: 6px 0; }
+    .bc-todo-course {
+      font-size: var(--bc-text-2xs, 11px); color: var(--bc-muted, #6b7280);
+      margin-top: 1px;
+    }
+
+    /* Row actions: present, but not three bordered boxes shouting for
+       attention on every row. They fade in on hover or keyboard focus, and
+       stay put on touch, where there is no hover to reveal them. */
+    .bc-todo-actions { display: flex; gap: 0; align-items: center; }
+    .bc-todo-actions .bc-todo-ibtn { opacity: 0; transition: opacity var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease); }
+    .bc-todo-item:hover .bc-todo-actions .bc-todo-ibtn,
+    .bc-todo-item:focus-within .bc-todo-actions .bc-todo-ibtn,
+    .bc-todo-actions .bc-todo-ibtn.on { opacity: 1; }
+    @media (hover: none) { .bc-todo-actions .bc-todo-ibtn { opacity: 1; } }
+    /* Reduced motion still needs them to APPEAR — just without the fade. */
+    @media (prefers-reduced-motion: reduce) { .bc-todo-actions .bc-todo-ibtn { transition: none; } }
+
+    /* Below this the actions squeeze the task name into a column two words
+       wide, so they take their own row under it instead. */
+    @container bctodo (max-width: 340px) {
+      .bc-todo-item { grid-template-columns: 22px minmax(0, 1fr); }
+      .bc-todo-actions { grid-column: 2; justify-content: flex-start; margin-top: var(--bc-space-1, 4px); }
+      .bc-todo-actions .bc-todo-ibtn { opacity: 1; }
+    }
+
+    /* ---- layouts ---------------------------------------------------------
+       Five presentations of the same markup, selected by data-bc-layout on the
+       widget root. Everything below only ever changes presentation: no rule
+       here hides an action, a checkbox or a link, because a layout that drops
+       controls is a different feature set wearing a layout's name.
+
+       Each one exists for a different reader:
+         comfortable  the default, boxed rows
+         compact      many tasks, small sidebar -- density over comfort
+         cards        few tasks, each one an object worth looking at
+         minimal      no boxes at all; hierarchy carried by type and rules
+         timeline     order in time made spatial, for date-driven work       */
+
+    /* compact: the row box disappears and the grid tightens. Type drops one
+       step but not two -- 11px task titles are where a dense list stops being
+       readable and starts being a wall. */
+    [data-bc-layout="compact"] .bc-todo-item {
+      background: transparent; border-radius: 0;
+      padding: var(--bc-space-1, 4px) var(--bc-space-2, 6px);
+      margin-bottom: 0; gap: var(--bc-space-2, 6px);
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      border-bottom: 1px solid var(--bc-border, rgba(0,0,0,.07));
+    }
+    [data-bc-layout="compact"] .bc-todo-item:last-child { border-bottom: 0; }
+    [data-bc-layout="compact"] .bc-todo-check { width: 18px; height: 18px; border-width: 1.5px; }
+    [data-bc-layout="compact"] .bc-todo-name { font-size: var(--bc-text-xs, 12px); }
+    [data-bc-layout="compact"] .bc-todo-course { font-size: var(--bc-text-2xs, 11px); margin-top: 0; }
+    [data-bc-layout="compact"] .bc-todo-day-header { margin: var(--bc-space-4, 10px) 0 var(--bc-space-1, 4px); }
+    /* The tag and subtask row is the first thing to go when space is the point;
+       both are still on the detail popover. */
+    [data-bc-layout="compact"] .bc-todo-tags { display: none; }
+
+    /* cards: each task an object. The lift is a border and a shadow, not a
+       transform -- a hover transform on a list that re-renders on a timer
+       produces a row that twitches under the pointer. */
+    [data-bc-layout="cards"] .bc-todo-item {
+      background: var(--bc-surface-2, #fff);
+      border: 1px solid var(--bc-border, rgba(0,0,0,.08));
+      box-shadow: var(--bc-shadow-1, 0 1px 2px rgba(0,0,0,.06));
+      padding: var(--bc-space-5, 12px);
+      margin-bottom: var(--bc-space-3, 8px);
+      align-items: flex-start;
+    }
+    [data-bc-layout="cards"] .bc-todo-item:hover {
+      border-color: var(--bc-todo-accent, var(--bc-accent, #0374b5));
+      box-shadow: var(--bc-shadow-2, 0 2px 8px rgba(0,0,0,.1));
+    }
+    [data-bc-layout="cards"] .bc-todo-name {
+      font-size: var(--bc-text-sm, 13px); font-weight: var(--bc-weight-semibold, 600);
+      display: block; margin-bottom: var(--bc-space-1, 4px);
+    }
+    [data-bc-layout="cards"] .bc-todo-course { font-size: var(--bc-text-xs, 12px); }
+    [data-bc-layout="cards"] .bc-todo-check { margin-top: 1px; }
+    /* Actions stay visible here: a card has the room, and hiding them on an
+       object this deliberate reads as the card being inert. */
+    [data-bc-layout="cards"] .bc-todo-actions .bc-todo-ibtn { opacity: 1; }
+
+    /* minimal: no boxes anywhere. The only separators are the group headers and
+       a hairline, so the type hierarchy has to do all the work. */
+    [data-bc-layout="minimal"] .bc-todo-item {
+      background: transparent; border-radius: 0;
+      padding: var(--bc-space-3, 8px) 0; margin-bottom: 0;
+    }
+    [data-bc-layout="minimal"] .bc-todo-item + .bc-todo-item {
+      border-top: 1px solid var(--bc-border, rgba(0,0,0,.06));
+    }
+    [data-bc-layout="minimal"] .bc-todo-check {
+      border-width: 1.5px; border-color: var(--bc-border-strong, var(--bc-muted, #9aa0a8));
+    }
+    [data-bc-layout="minimal"] .bc-todo-check.done { border-color: var(--bc-todo-accent, var(--bc-accent, #0374b5)); }
+    [data-bc-layout="minimal"] .bc-todo-day-header {
+      border-bottom: 1px solid var(--bc-border, rgba(0,0,0,.08));
+      padding-bottom: var(--bc-space-2, 6px);
+    }
+
+    /* timeline: a rail down the left with a node per task. The rail is a
+       border on the row and the node is a positioned pseudo-element, so the
+       grid is untouched and every handler still finds the same elements. */
+    [data-bc-layout="timeline"] .bc-todo-item {
+      position: relative; background: transparent; border-radius: 0;
+      margin-bottom: 0; padding: var(--bc-space-3, 8px) 0 var(--bc-space-3, 8px) var(--bc-space-6, 14px);
+      border-left: 2px solid var(--bc-border, rgba(0,0,0,.12));
+      margin-left: var(--bc-space-2, 6px);
+    }
+    [data-bc-layout="timeline"] .bc-todo-item::before {
+      content: ""; position: absolute; left: -5px; top: var(--bc-space-6, 14px);
+      width: 8px; height: 8px; border-radius: var(--bc-radius-circle, 50%);
+      background: var(--bc-surface-1, #fff);
+      border: 2px solid var(--bc-todo-accent, var(--bc-accent, #0374b5));
+    }
+    /* A completed node fills in, so progress reads down the rail at a glance
+       without reading a single task title. */
+    [data-bc-layout="timeline"] .bc-todo-item.done::before {
+      background: var(--bc-todo-accent, var(--bc-accent, #0374b5));
+    }
+    [data-bc-layout="timeline"] .bc-todo-day-header {
+      margin-left: var(--bc-space-2, 6px); padding-left: var(--bc-space-6, 14px);
+    }
+
+    /* Kanban owns its own geometry -- a card border or a timeline rail inside a
+       draggable column is noise fighting the column. The time-block view needs
+       no equivalent: it renders chips, not task rows, so none of the above
+       reaches it. */
+    [data-bc-layout] .bc-todo-kanban .bc-todo-item {
+      border-left: 0; border-top: 0; border-bottom: 0; padding-left: var(--bc-space-3, 8px);
+      margin-left: 0; background: var(--bc-surface-3, #f7fafc);
+      border-radius: var(--bc-radius-lg, 10px);
+    }
+    [data-bc-layout] .bc-todo-kanban .bc-todo-item::before { display: none; }
+
+    /* ---- composer ------------------------------------------------------- */
+    /* A leading plus does the work the word "Add" was doing, so the input gets
+       the width back and the row stops being input-plus-button. */
+    .bc-todo-new {
+      display: flex; align-items: center; gap: var(--bc-space-2, 6px);
+      margin-top: var(--bc-space-4, 10px); padding: 0 var(--bc-space-2, 6px);
+      border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-pill, 999px);
+      color: var(--bc-muted, #6b7280);
+      transition: border-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
+    }
+    .bc-todo-new:focus-within { border-color: var(--bc-accent-stroke, var(--bc-accent, #0374b5)); }
+    .bc-todo-new > svg { flex: 0 0 auto; }
+    .bc-todo-new input {
+      flex: 1 1 auto; min-width: 0; padding: var(--bc-space-2, 6px) 0;
+      border: 0; background: transparent; color: var(--bc-text, #1b2430);
+      font: inherit; font-size: var(--bc-text-sm, 13px);
+    }
+    .bc-todo-new input:focus { outline: 0; }
+
+    .bc-todo-empty {
+      display: flex; align-items: center; gap: var(--bc-space-3, 8px);
+      color: var(--bc-muted, #6b7280); font-size: var(--bc-text-sm, 13px);
+      padding: var(--bc-space-5, 12px) 0;
+    }
+    .bc-todo-empty > svg { color: var(--bc-success, #047857); flex: 0 0 auto; }
+
+    /* ---- snoozed -------------------------------------------------------- */
     .bc-todo-snoozed { margin-top: var(--bc-space-4, 10px); border-top: 1px solid var(--bc-border, #e5e7eb); padding-top: var(--bc-space-2, 6px); }
-    .bc-todo-snoozed > summary { cursor: pointer; font-size: var(--bc-text-xs, 12px); color: var(--bc-muted, #6b7280); }
+    .bc-todo-snoozed > summary {
+      cursor: pointer; font-size: var(--bc-text-xs, 12px); color: var(--bc-muted, #6b7280);
+      display: flex; align-items: center; gap: var(--bc-space-2, 6px); list-style: none;
+    }
+    .bc-todo-snoozed > summary::-webkit-details-marker { display: none; }
     .bc-todo-snoozed > summary:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px; }
     .bc-todo-snoozed-row { display: flex; align-items: center; gap: var(--bc-space-3, 8px); padding: var(--bc-space-1, 4px) 0; font-size: var(--bc-text-sm, 13px); }
     .bc-todo-snoozed-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bc-todo-snoozed-when { color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); font-size: var(--bc-text-xs, 12px); }
     .bc-todo-wake {
       border: 1px solid var(--bc-border, #e5e7eb); background: var(--bc-surface-3, #f7fafc);
-      color: var(--bc-text, #1b2430); border-radius: var(--bc-radius-md, 6px);
-      font: inherit; font-size: var(--bc-text-xs, 12px); padding: 1px var(--bc-space-2, 6px); cursor: pointer;
+      color: var(--bc-text, #1b2430); border-radius: var(--bc-radius-pill, 999px);
+      font: inherit; font-size: var(--bc-text-2xs, 11px);
+      padding: 1px var(--bc-space-3, 8px); cursor: pointer; flex: 0 0 auto;
     }
     .bc-todo-wake:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
-    .bc-todo-tools { display: flex; align-items: center; gap: 8px; padding: 6px 0 0; border-top: 1px dashed var(--bc-border, #e5e7eb); margin-top: 10px; font-size: 12px; }
-    .bc-todo-tools button { background: transparent; border: 0; cursor: pointer; color: var(--bc-accent, #0374b5); }
-    /* A real button now: it exposes grace/repair state and can repair a broken day. */
-    .bc-todo-streak {
-      display: inline-flex; align-items: center; gap: 4px; font-weight: 600;
-      border: 0; background: transparent; color: inherit; font: inherit;
-      cursor: pointer; padding: 2px 4px; border-radius: var(--bc-radius-md, 6px);
+    .bc-todo-wake:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 1px; }
+
+    /* ---- footer: streak + pomodoro -------------------------------------- */
+    .bc-todo-tools {
+      display: flex; align-items: center; gap: var(--bc-space-2, 6px);
+      padding-top: var(--bc-space-3, 8px); margin-top: var(--bc-space-4, 10px);
+      border-top: 1px solid var(--bc-border, #e5e7eb);
+      font-size: var(--bc-text-xs, 12px);
     }
-    .bc-todo-streak:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
-    .bc-todo-streak:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 1px; }
+    .bc-todo-tools:empty { display: none; }
+    /* A real button: it exposes grace/repair state and can repair a broken day. */
+    .bc-todo-chip {
+      display: inline-flex; align-items: center; gap: var(--bc-space-2, 6px);
+      border: 0; background: transparent; color: var(--bc-muted, #6b7280);
+      font: inherit; font-weight: var(--bc-weight-semibold, 600);
+      cursor: pointer; padding: var(--bc-space-1, 4px) var(--bc-space-2, 6px);
+      border-radius: var(--bc-radius-pill, 999px); line-height: 1;
+    }
+    .bc-todo-chip:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); color: var(--bc-text, #1b2430); }
+    .bc-todo-chip:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 1px; }
+    .bc-todo-chip .bc-num { font-variant-numeric: tabular-nums; letter-spacing: 0; }
+    /* Lit only when the streak is actually alive — a flame on a zero-day streak
+       is just noise. */
+    .bc-todo-chip.bc-lit { color: var(--bc-warn, #a16207); }
+    .bc-todo-chip.bc-lit:hover { color: var(--bc-warn, #a16207); }
     .bc-todo-pom { margin-left: auto; }
-    .bc-todo-kanban { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .bc-todo-pom[aria-pressed="true"] { color: var(--bc-accent-text, var(--bc-accent, #0374b5)); }
+
+    /* ---- kanban --------------------------------------------------------- */
+    .bc-todo-kanban { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--bc-space-2, 6px); }
     .bc-kan-col {
       background: var(--bc-surface-3, #f7fafc); border-radius: var(--bc-radius-md, 8px);
       padding: var(--bc-space-3, 8px); min-height: 120px;
     }
-    .bc-kan-col h4 { margin: 0 0 6px; font-size: 12px; }
+    .bc-kan-col h4 {
+      margin: 0 0 var(--bc-space-2, 6px); font-size: var(--bc-text-2xs, 11px);
+      text-transform: uppercase; letter-spacing: var(--bc-tracking-caps, .04em);
+      color: var(--bc-muted, #6b7280); display: flex; align-items: center; gap: var(--bc-space-1, 4px);
+    }
+    .bc-kan-col h4 .bc-num { font-variant-numeric: tabular-nums; letter-spacing: 0; }
     .bc-kan-col.bc-drop { outline: 2px dashed var(--bc-accent, #0374b5); outline-offset: -2px; }
     .bc-todo-kanban .bc-todo-item { cursor: grab; grid-template-columns: 1fr; }
     .bc-todo-kanban .bc-todo-item.bc-dragging { opacity: .4; }
+    /* Three columns inside a sidebar are three words wide. One column each,
+       stacked, is still a kanban and is actually readable. */
+    @container bctodo (max-width: 340px) {
+      .bc-todo-kanban { grid-template-columns: 1fr; }
+      .bc-kan-col { min-height: 0; }
+    }
+
+    /* ---- detail popover ------------------------------------------------- */
     .bc-todo-pop {
-      position: absolute; z-index: 30; width: 260px; padding: 10px;
+      position: absolute; z-index: 30; width: 260px; padding: var(--bc-space-5, 12px);
       background: var(--bc-surface-2, #fff); border: 1px solid var(--bc-border, #e5e7eb);
-      border-radius: var(--bc-radius-lg, 10px); box-shadow: var(--bc-shadow-3, 0 8px 24px rgba(0,0,0,.18)); font-size: var(--bc-text-xs, 12px);
+      border-radius: var(--bc-radius-lg, 10px); box-shadow: var(--bc-shadow-3, 0 8px 24px rgba(0,0,0,.18));
+      font-size: var(--bc-text-xs, 12px);
     }
-    .bc-todo-pop h5 { margin: 0 0 8px; font-size: 12px; }
-    .bc-todo-pop label { display: block; margin: 6px 0 2px; color: var(--bc-muted, #6b7280); }
+    .bc-todo-pop h5 { margin: 0 var(--bc-space-7, 16px) var(--bc-space-3, 8px) 0; font-size: var(--bc-text-xs, 12px); }
+    .bc-todo-pop label { display: block; margin: var(--bc-space-2, 6px) 0 2px; color: var(--bc-muted, #6b7280); }
     .bc-todo-pop input, .bc-todo-pop select, .bc-todo-pop textarea {
-      width: 100%; box-sizing: border-box; padding: 4px 6px; border-radius: var(--bc-radius-md, 6px);
-      border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; font-size: 12px;
+      width: 100%; box-sizing: border-box; padding: var(--bc-space-1, 4px) var(--bc-space-2, 6px);
+      border-radius: var(--bc-radius-md, 6px);
+      border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit;
+      font: inherit; font-size: var(--bc-text-xs, 12px);
     }
-    .bc-todo-pop .bc-sub { display: flex; gap: 6px; align-items: center; margin: 3px 0; }
+    .bc-todo-pop .bc-sub { display: flex; gap: var(--bc-space-2, 6px); align-items: center; margin: var(--bc-space-1, 4px) 0; }
     .bc-todo-pop .bc-sub input[type="checkbox"] { width: auto; }
     .bc-todo-pop .bc-sub span.done { text-decoration: line-through; color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); }
-    .bc-todo-pop .bc-pop-close { position: absolute; top: 6px; right: 8px; border: 0; background: transparent; cursor: pointer; color: inherit; }
-    .bc-todo-tags { font-size: 10px; color: var(--bc-muted, #6b7280); }
-    .bc-todo-tags b { font-weight: 600; background: var(--bc-surface-3, #eef2f7); border-radius: var(--bc-radius-sm, 4px); padding: 0 4px; margin-right: 3px; }
+    .bc-todo-pop .bc-pop-close { position: absolute; top: var(--bc-space-2, 6px); right: var(--bc-space-2, 6px); }
+    .bc-todo-tags { font-size: var(--bc-text-3xs, 10px); color: var(--bc-muted, #6b7280); display: flex; align-items: center; gap: var(--bc-space-2, 6px); margin-top: 2px; flex-wrap: wrap; }
+    .bc-todo-tags b { font-weight: var(--bc-weight-semibold, 600); background: var(--bc-surface-4, rgba(0,0,0,.06)); border-radius: var(--bc-radius-sm, 4px); padding: 0 var(--bc-space-1, 4px); }
+    .bc-todo-subcount { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
+    .bc-todo-taglist { display: inline-flex; align-items: center; gap: 3px; }
+
+    /* ---- time-block ----------------------------------------------------- */
     .bc-tb-grid { position: relative; border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-md, 8px); overflow: hidden; }
     .bc-tb-hour { display: flex; height: 34px; border-top: 1px solid var(--bc-border, #e5e7eb); }
     .bc-tb-hour:first-child { border-top: 0; }
-    .bc-tb-hour em { flex: 0 0 46px; font-style: normal; font-size: 10px; color: var(--bc-muted, #6b7280); padding: 2px 4px; border-right: 1px solid var(--bc-border, #e5e7eb); }
-    .bc-tb-hour.bc-drop { background: rgba(3,116,181,.12); }
-    .bc-tb-block {
-      position: absolute; left: 50px; right: 4px; border-radius: var(--bc-radius-md, 6px); padding: 2px 6px;
-      background: var(--bc-todo-accent, var(--bc-accent, #0374b5)); color: var(--bc-accent-contrast, #fff); font-size: var(--bc-text-2xs, 11px);
-      overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: grab;
+    .bc-tb-hour em {
+      flex: 0 0 46px; font-style: normal; font-size: var(--bc-text-3xs, 10px);
+      color: var(--bc-muted, #6b7280); padding: 2px var(--bc-space-1, 4px);
+      border-right: 1px solid var(--bc-border, #e5e7eb);
+      font-variant-numeric: tabular-nums;
     }
-    .bc-tb-block button { float: right; border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0 2px; }
-    .bc-tb-tray { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .bc-tb-hour.bc-drop { background: var(--bc-accent-weak, rgba(3,116,181,.12)); }
+    .bc-tb-block {
+      position: absolute; left: 50px; right: var(--bc-space-1, 4px);
+      border-radius: var(--bc-radius-md, 6px); padding: 2px var(--bc-space-2, 6px);
+      background: var(--bc-todo-accent, var(--bc-accent, #0374b5)); color: var(--bc-accent-contrast, #fff);
+      font-size: var(--bc-text-2xs, 11px);
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: grab;
+      display: flex; align-items: center; gap: var(--bc-space-2, 6px);
+    }
+    .bc-tb-block span { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
+    .bc-tb-block .bc-todo-ibtn { color: inherit; opacity: .85; width: 18px; height: 18px; }
+    .bc-tb-block .bc-todo-ibtn:hover { opacity: 1; background: rgba(255,255,255,.2); }
+    .bc-tb-tray { display: flex; flex-wrap: wrap; gap: var(--bc-space-2, 6px); margin-bottom: var(--bc-space-3, 8px); }
     .bc-tb-tray .bc-tb-chip {
-      border: 1px dashed var(--bc-border, #e5e7eb); border-radius: 999px; padding: 2px 10px;
-      font-size: 11px; cursor: grab; background: var(--bc-surface-3, #f7fafc);
+      border: 1px dashed var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-pill, 999px);
+      padding: 2px var(--bc-space-4, 10px);
+      font-size: var(--bc-text-2xs, 11px); cursor: grab; background: var(--bc-surface-3, #f7fafc);
     }
   `;
 
   const POM_CSS = `
     .bc-pom-dock {
       position: fixed; right: 18px; bottom: 18px; z-index: var(--bc-z-dock, 2147480000);
-      display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+      display: flex; align-items: center; gap: var(--bc-space-3, 8px); padding: var(--bc-space-3, 8px) var(--bc-space-5, 12px);
       background: var(--bc-surface-2, #fff); color: var(--bc-text, #111);
       border: 1px solid var(--bc-border, #e5e7eb); border-radius: 999px;
       box-shadow: var(--bc-shadow-3, 0 8px 24px rgba(0,0,0,.22));
@@ -150,13 +568,17 @@
     }
     .bc-pom-dock b { font-variant-numeric: tabular-nums; }
     .bc-pom-dock.bc-break b { color: var(--bc-success, #047857); }
-    .bc-pom-dock button { border: 0; background: transparent; cursor: pointer; font-size: 13px; color: inherit; padding: 0 2px; }
+    /* Two signals for a paused timer: the figure dims and the dock loses its
+       accent rim. Colour alone would not survive a colour-blind mode. */
+    .bc-pom-dock.bc-paused b { color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); }
+    .bc-pom-dock.bc-paused { border-style: dashed; }
+    .bc-pom-dock button { border: 0; background: transparent; cursor: pointer; font-size: var(--bc-text-sm, 13px); color: inherit; padding: 0 2px; }
     .bc-pom-task { max-width: 140px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--bc-muted, #6b7280); }
     .bc-pom-stats {
-      position: fixed; right: 18px; bottom: 64px; z-index: var(--bc-z-popover, 2147481500); width: 200px; padding: 10px;
+      position: fixed; right: 18px; bottom: 64px; z-index: var(--bc-z-popover, 2147481500); width: 200px; padding: var(--bc-space-4, 10px);
       background: var(--bc-surface-2, #fff); color: var(--bc-text, #111);
       border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-lg, 10px);
-      box-shadow: var(--bc-shadow-3, 0 8px 24px rgba(0,0,0,.22)); font-size: 12px;
+      box-shadow: var(--bc-shadow-3, 0 8px 24px rgba(0,0,0,.22)); font-size: var(--bc-text-xs, 12px);
     }
   `;
 
@@ -229,16 +651,79 @@
     return out;
   }
 
-  function ringSVG(pct, accent) {
-    const R = 20, C = 2 * Math.PI * R;
-    const off = C - Math.round((pct / 100) * C);
-    return `<svg class="bc-todo-ring" viewBox="0 0 46 46" aria-label="${pct}% complete">
-      <circle cx="23" cy="23" r="${R}" fill="none" stroke="var(--bc-surface-4, rgba(0,0,0,.1))" stroke-width="4"/>
-      <circle cx="23" cy="23" r="${R}" fill="none" stroke="${accent}" stroke-width="4"
-              stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}"
-              transform="rotate(-90 23 23)"/>
-      <text x="23" y="27" text-anchor="middle" font-size="12" fill="currentColor" font-weight="700">${pct}%</text>
-    </svg>`;
+  // ---- progress indicator ------------------------------------------------
+  // One number, six ways to show it. The ring was the only choice and the worst
+  // fit for where this widget lives: 46px across, "100%" set at 12px inside a
+  // 36px hole, and a <text> element that ignored the user's font scale so the
+  // figure either collided with the arc or stayed tiny when everything else grew.
+  const PROGRESS_STYLES = ["off", "ring", "bar", "segments", "rainbow", "text"];
+  const MAX_SEGMENTS = 20;
+
+  function progressHtml(style, done, total) {
+    if (style === "off" || !PROGRESS_STYLES.includes(style)) return "";
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    const left = Math.max(0, total - done);
+    // One sentence that works for every style, because the graphic itself is
+    // aria-hidden: a screen reader gets the reading, not the geometry.
+    const label = total
+      ? `${done} of ${total} done, ${pct}%` + (left ? `, ${left} left` : "")
+      : "Nothing in this window";
+    const meter = (inner) =>
+      `<div class="bc-todo-prog bc-todo-prog--${style}" role="progressbar" aria-valuemin="0" ` +
+      `aria-valuemax="100" aria-valuenow="${pct}" aria-label="${esc(label)}" title="${esc(label)}">${inner}</div>`;
+
+    if (style === "text") {
+      return meter(`<div class="bc-prog-text"><b>${done}</b> of <b>${total}</b> done</div>`);
+    }
+
+    if (style === "ring") {
+      const R = 19, C = 2 * Math.PI * R;
+      const off = (C * (1 - (total ? done / total : 0))).toFixed(2);
+      // The figure is what is LEFT, so it is one or two characters at any font
+      // scale. At zero it becomes a check: finishing should look like finishing.
+      const centre = total && left === 0
+        ? `<span class="bc-prog-ring-val bc-prog-done">${BC.icons.svg("check", { size: 18 })}</span>`
+        : `<span class="bc-prog-ring-val">${left}</span>`;
+      return meter(
+        `<div class="bc-prog-row">
+          <div class="bc-prog-ringwrap">
+            <svg class="bc-prog-ring" viewBox="0 0 44 44" aria-hidden="true" focusable="false">
+              <circle class="bc-prog-ring-track" cx="22" cy="22" r="${R}" fill="none" stroke-width="3.5"/>
+              <circle class="bc-prog-ring-fill" cx="22" cy="22" r="${R}" fill="none" stroke-width="3.5"
+                      stroke-linecap="round" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${off}"
+                      transform="rotate(-90 22 22)"/>
+            </svg>${centre}
+          </div>
+          <div class="bc-prog-count"><b>${done}</b>/${total} done<br>${left} to go</div>
+        </div>`);
+    }
+
+    if (style === "segments") {
+      // One tick per task up to a cap, then each tick stands for several. Past
+      // twenty they would be sub-pixel slivers in a sidebar.
+      const n = Math.max(1, Math.min(total || 1, MAX_SEGMENTS));
+      const filled = total ? Math.round((done / total) * n) : 0;
+      let segs = "";
+      for (let i = 0; i < n; i++) segs += `<span class="bc-prog-seg${i < filled ? " on" : ""}"></span>`;
+      return meter(
+        `<div class="bc-prog-row">
+          <div class="bc-prog-segs" aria-hidden="true">${segs}</div>
+          <div class="bc-prog-count"><b>${done}</b>/${total}</div>
+        </div>`);
+    }
+
+    // bar and rainbow share everything but the fill. Sizing the spectrum to the
+    // TRACK rather than to the fill is what makes the colour at the tip mean
+    // something: at 20% you are in the reds, at 90% in the violets.
+    const rainbow = style === "rainbow";
+    const size = rainbow ? ` background-size: ${(pct > 0 ? (100 / pct) * 100 : 100).toFixed(1)}% 100%;` : "";
+    return meter(
+      `<div class="bc-prog-row">
+        <div class="bc-prog-track" aria-hidden="true">
+          <div class="bc-prog-fill${rainbow ? " bc-prog-fill--rainbow" : ""}" style="width: ${pct}%;${size}"></div>
+        </div>
+        <div class="bc-prog-count"><b>${done}</b>/${total}</div>
+      </div>`);
   }
 
   async function fetchWindow(settings) {
@@ -407,7 +892,7 @@
 
     // Skip observer-tick rebuilds when nothing changed or the user is typing.
     const sig = [state.lastFetchKey, total, done, state.filterCourse, t.rangeDays, t.groupBy,
-                 t.view || "", t.showCompleted ? 1 : 0, accent].join("|");
+                 t.view || "", t.layout || "", t.showCompleted ? 1 : 0, accent].join("|");
     const ae = document.activeElement;
     const typing = ae && container.contains(ae) && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA");
     const popoverOpen = !!container.querySelector(".bc-todo-pop");
@@ -417,43 +902,81 @@
     const start = new Date(state.windowStart || Date.now()); start.setHours(0,0,0,0);
     const end = new Date(start); end.setDate(end.getDate() + parseInt(t.rangeDays, 10) - 1);
 
+    const ic = (n, size) => BC.icons.svg(n, size ? { size } : undefined);
+    const iconBtn = (icon, attrs) =>
+      `<button type="button" class="bc-todo-ibtn" ${attrs}>${ic(icon)}</button>`;
+    const view = ["list", "kanban", "timeblock"].includes(t.view) ? t.view : "list";
+    const VIEWS = [["list", "list", "List"], ["kanban", "columns", "Kanban"], ["timeblock", "timeline", "Time-block"]];
+
+    // One attribute, five presentations. The alternative -- a render function
+    // per layout -- would fork the checkbox handlers, the snooze wiring and the
+    // container queries five ways, and they would drift apart within a release.
+    const layout = LAYOUTS.indexOf(t.layout) >= 0 ? t.layout : "comfortable";
+    if (container.getAttribute("data-bc-layout") !== layout) {
+      container.setAttribute("data-bc-layout", layout);
+    }
+
     container.innerHTML = `
       <div class="bc-todo-head">
-        ${t.ring ? ringSVG(pct, accent || "var(--bc-accent, #0374b5)") : ""}
-        <h3 class="bc-todo-title">To Do — ${BC.util.escapeHtml(BC.dt.fmtRange(start, end))}</h3>
-        <div class="bc-todo-week">
-          <button data-nav="prev" title="Previous">‹</button>
-          <button data-nav="today" title="Today">Today</button>
-          <button data-nav="next" title="Next">›</button>
+        <div class="bc-todo-headings">
+          <span class="bc-todo-eyebrow">To Do</span>
+          <h3 class="bc-todo-title">${BC.util.escapeHtml(BC.dt.fmtRange(start, end))}</h3>
+        </div>
+        <div class="bc-todo-nav">
+          ${iconBtn("chevron-left", 'data-nav="prev" aria-label="Previous period" title="Previous"')}
+          ${iconBtn("target", 'data-nav="today" aria-label="Jump to today" title="Today"')}
+          ${iconBtn("chevron-right", 'data-nav="next" aria-label="Next period" title="Next"')}
         </div>
       </div>
-      <div class="bc-todo-controls">
-        <select class="bc-todo-filter" aria-label="Course filter"></select>
-        <select class="bc-todo-range" aria-label="Range">
-          <option value="3">3 days</option><option value="7">1 week</option>
-          <option value="14">2 weeks</option><option value="30">1 month</option>
-        </select>
-        <select class="bc-todo-group" aria-label="Group by">
-          <option value="day">Group by day</option>
-          <option value="course">Group by course</option>
-          <option value="priority">Group by priority</option>
-          <option value="tag">Group by tag</option>
-          <option value="none">No grouping</option>
-        </select>
-        <select class="bc-todo-view" aria-label="View">
-          <option value="list">List</option>
-          <option value="kanban">Kanban</option>
-          <option value="timeblock">Time-block</option>
-        </select>
+      ${progressHtml(t.progress, done, total)}
+      <div class="bc-todo-toolbar">
+        <div class="bc-todo-seg" role="group" aria-label="View">
+          ${VIEWS.map(([id, icon, label]) =>
+            `<button type="button" class="bc-todo-ibtn" data-view="${id}" aria-pressed="${view === id}" ` +
+            `aria-label="${label} view" title="${label}">${ic(icon)}</button>`).join("")}
+        </div>
+        <span class="bc-todo-spacer"></span>
+        <details class="bc-todo-filters">
+          <summary aria-label="Range, grouping and course filter" title="Filters">
+            <span class="bc-todo-ibtn" role="presentation">${ic("sliders")}</span>
+          </summary>
+          <div class="bc-todo-pane">
+            <div>
+              <label for="bc-todo-range-sel">Range</label>
+              <select id="bc-todo-range-sel" class="bc-todo-range">
+                <option value="3">3 days</option><option value="7">1 week</option>
+                <option value="14">2 weeks</option><option value="30">1 month</option>
+              </select>
+            </div>
+            <div>
+              <label for="bc-todo-group-sel">Group by</label>
+              <select id="bc-todo-group-sel" class="bc-todo-group">
+                <option value="day">Day</option>
+                <option value="course">Course</option>
+                <option value="priority">Priority</option>
+                <option value="tag">Tag</option>
+                <option value="none">Nothing</option>
+              </select>
+            </div>
+            <div>
+              <label for="bc-todo-course-sel">Course</label>
+              <select id="bc-todo-course-sel" class="bc-todo-filter"></select>
+            </div>
+          </div>
+        </details>
       </div>
       <div class="bc-todo-list"></div>
       ${t.allowNewTask ? `<div class="bc-todo-new">
-        <input placeholder="Add a personal task…" aria-label="New task"/>
-        <button>Add</button>
+        ${ic("plus", 14)}
+        <input placeholder="Add a task…" aria-label="New personal task"/>
+        ${iconBtn("arrow-right", 'data-add aria-label="Add task" title="Add task"')}
       </div>` : ""}
       <div class="bc-todo-tools">
-        ${t.streaks && t.streaks.enabled ? `<button type="button" class="bc-todo-streak" title="Daily task streak">🔥 <span data-streak>0</span> day streak</button>` : ""}
-        ${t.pomodoro && t.pomodoro.enabled ? `<button type="button" class="bc-todo-pom" data-pom aria-pressed="false"></button>` : ""}
+        ${t.streaks && t.streaks.enabled
+          ? `<button type="button" class="bc-todo-chip bc-todo-streak" title="Daily task streak">` +
+            `${ic("flame")}<span class="bc-num" data-streak>0</span></button>` : ""}
+        ${t.pomodoro && t.pomodoro.enabled
+          ? `<button type="button" class="bc-todo-chip bc-todo-pom" data-pom aria-pressed="false"></button>` : ""}
       </div>
     `;
 
@@ -481,9 +1004,16 @@
     group.value = t.groupBy || "day";
     group.addEventListener("change", () => BC.storage.update((d) => { d.todo.groupBy = group.value; }));
 
-    const view = container.querySelector(".bc-todo-view");
-    view.value = ["list", "kanban", "timeblock"].includes(t.view) ? t.view : "list";
-    view.addEventListener("change", () => BC.storage.update((d) => { d.todo.view = view.value; }));
+    // The view is a segmented group of icon buttons rather than a fourth select:
+    // it is the one control worth permanent space, and three 26px targets cost
+    // less height than a full-width dropdown.
+    container.querySelectorAll("[data-view]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const v = btn.getAttribute("data-view");
+        if (v === view) return;
+        BC.storage.update((d) => { d.todo.view = v; });
+      });
+    });
 
     // Week nav
     container.querySelectorAll("[data-nav]").forEach((btn) => {
@@ -509,6 +1039,13 @@
         streakChip.title = ss.current + "-day streak · best " + ss.best +
           " · " + ss.graceLeft + " grace day" + (ss.graceLeft === 1 ? "" : "s") + " left" +
           " · " + ss.repairsLeft + " repair" + (ss.repairsLeft === 1 ? "" : "s") + " left this month";
+        // The flame only burns while the streak does. Lit on a zero-day streak
+        // it is decoration; lit only when there is something to lose, it is the
+        // one spot of colour in the footer and it means something.
+        streakChip.classList.toggle("bc-lit", ss.current > 0);
+        // The count alone is not a sentence. The label is what a screen reader
+        // gets where a sighted user gets a flame next to a number.
+        streakChip.setAttribute("aria-label", ss.current + "-day streak");
         streakChip.onclick = () => {
           if (ss.brokenGap && ss.repairsLeft > 0) {
             if (confirm("Repair your streak for " + ss.brokenGap + "? " + ss.repairsLeft + " repair(s) left this month.")) {
@@ -537,8 +1074,16 @@
       const paintPom = () => {
         const p = (BC.storage.local || {}).pomodoro;
         const running = !!(p && p.phase);
-        const label = running ? "\u25a0 Stop pomodoro" : "\u25b6 Pomodoro";
-        if (pom.textContent !== label) pom.textContent = label;
+        const label = running ? "Stop pomodoro" : "Start pomodoro";
+        // The icon carries the direction, so the word "Pomodoro" no longer has
+        // to sit in a 280px footer next to the streak. The name stays on the
+        // control for anyone who cannot see the icon.
+        if (pom.dataset.state !== String(running)) {
+          pom.dataset.state = String(running);
+          pom.innerHTML = BC.icons.svg(running ? "stop" : "play", { size: 13 });
+        }
+        pom.setAttribute("aria-label", label);
+        pom.setAttribute("title", label);
         pom.setAttribute("aria-pressed", running ? "true" : "false");
       };
       paintPom();
@@ -551,7 +1096,7 @@
 
     // New task
     const newInp = container.querySelector(".bc-todo-new input");
-    const newBtn = container.querySelector(".bc-todo-new button");
+    const newBtn = container.querySelector(".bc-todo-new [data-add]");
     if (newInp && newBtn) {
       const commit = () => {
         const title = newInp.value.trim(); if (!title) return;
@@ -598,7 +1143,7 @@
       writeTodoLocal((L) => { for (const k of expired) delete (L.snoozed || {})[k]; });
     }
 
-    if (!items.length && !sleeping.length) { list.innerHTML = `<div class="bc-todo-empty">Nothing due in this window 🎉</div>`; return; }
+    if (!items.length && !sleeping.length) { list.innerHTML = `<div class="bc-todo-empty">${BC.icons.svg("check-circle", { size: 18 })}<span>Nothing due in this window</span></div>`; return; }
 
     if (t.view === "kanban") { renderKanban(list, items, settings, container); return; }
     if (t.view === "timeblock") { renderTimeBlock(list, items, settings, container); return; }
@@ -631,7 +1176,7 @@
     // Snoozed items stay reachable via a collapsed <details> — zero JS state, and it
     // makes the snooze reversible instead of a black hole.
     if (sleeping.length) {
-      html += `<details class="bc-todo-snoozed"><summary>💤 Snoozed (${sleeping.length})</summary>`;
+      html += `<details class="bc-todo-snoozed"><summary>${BC.icons.svg("moon", { size: 12 })} Snoozed (${sleeping.length})</summary>`;
       for (const it of sleeping) {
         const k = keyForItem(it);
         const title = (it.plannable && it.plannable.title) || it.plannable_type || "Task";
@@ -693,7 +1238,7 @@
       else cols.todo.push(it);
     }
     const col = (id, title, arr) =>
-      `<div class="bc-kan-col" data-col="${id}"><h4>${title} (${arr.length})</h4>` +
+      `<div class="bc-kan-col" data-col="${id}"><h4>${title}<span class="bc-num">${arr.length}</span></h4>` +
       arr.slice(0, 25).map((it) => itemHtml(it, settings, true)).join("") + `</div>`;
     list.innerHTML = `<div class="bc-todo-kanban">
       ${col("todo", "To do", cols.todo)}
@@ -770,14 +1315,17 @@
       const title = (it.plannable && it.plannable.title) || it.plannable_title || "Task";
       blocks += `<div class="bc-tb-block" draggable="true" data-key="${esc(key)}" data-i="${state.items.indexOf(it)}"
         style="top:${top}px;height:${height}px" title="${esc(title)} · ${esc(s.start)}">
-        <button data-unsched="${esc(key)}" title="Unschedule">×</button>${esc(title)}</div>`;
+        <span>${esc(title)}</span>
+        <button type="button" class="bc-todo-ibtn" data-unsched="${esc(key)}"
+                aria-label="Unschedule ${esc(title)}" title="Unschedule"
+          >${BC.icons.svg("close", { size: 12 })}</button></div>`;
     }
 
     list.innerHTML = `
       <div class="bc-todo-day-header">${BC.util.escapeHtml(BC.dt.fmtDay(day))} — drag tasks onto the grid</div>
       <div class="bc-tb-tray">${unscheduled.slice(0, 15).map((it) =>
         `<span class="bc-tb-chip" draggable="true" data-i="${state.items.indexOf(it)}">${BC.util.escapeHtml((it.plannable && it.plannable.title) || it.plannable_title || "Task")}</span>`
-      ).join("") || `<span class="bc-todo-empty">Everything is scheduled 🎉</span>`}</div>
+      ).join("") || `<span class="bc-todo-empty">${BC.icons.svg("check-circle", { size: 16 })}<span>Everything is scheduled</span></span>`}</div>
       <div class="bc-tb-grid">${hours}${blocks}</div>
     `;
 
@@ -822,7 +1370,8 @@
     const pop = document.createElement("div");
     pop.className = "bc-todo-pop";
     pop.innerHTML = `
-      <button class="bc-pop-close" aria-label="Close">✕</button>
+      <button type="button" class="bc-todo-ibtn bc-pop-close" aria-label="Close"
+        >${BC.icons.svg("close", { size: 14 })}</button>
       <h5>Task details</h5>
       <label>Priority</label>
       <select data-pri><option value="1">P1 — urgent</option><option value="2">P2</option><option value="3">P3 — normal</option></select>
@@ -835,7 +1384,8 @@
       <input data-newsub placeholder="Add subtask, press Enter">
       <label>Note</label>
       <textarea data-note rows="2">${BC.util.escapeHtml((local.notes || {})[key] || "")}</textarea>
-      <button class="bc-todo-btn" data-pom-task-start style="margin-top:8px">🍅 Start pomodoro on this task</button>
+      <button type="button" class="bc-todo-chip" data-pom-task-start style="margin-top: var(--bc-space-3, 8px)"
+        >${BC.icons.svg("play", { size: 13 })}Start pomodoro on this task</button>
     `;
     // Dialog semantics: it was an unlabelled div that took no focus, so a screen
     // reader user got no announcement and a keyboard user had to tab through the
@@ -937,21 +1487,44 @@
     const subs = (local.subtasks || {})[key] || [];
     const subDone = subs.filter((s) => s.done).length;
     const meta = [];
-    if (tags.length) meta.push(tags.map((tg) => "<b>" + BC.util.escapeHtml(tg) + "</b>").join(""));
-    if (subs.length) meta.push(`☑ ${subDone}/${subs.length}`);
+    if (tags.length) {
+      // One icon for the group, not one per chip: the chips are already visually
+      // distinct, and a glyph on each turned three tags into six objects.
+      meta.push('<span class="bc-todo-taglist">' + BC.icons.svg("tag", { size: 11 }) +
+                tags.map((tg) => "<b>" + BC.util.escapeHtml(tg) + "</b>").join("") + "</span>");
+    }
+    if (subs.length) {
+      meta.push('<span class="bc-todo-subcount">' + BC.icons.svg("checklist", { size: 11 }) +
+                subDone + "/" + subs.length + "</span>");
+    }
+    const title = BC.util.escapeHtml(p);
+    // Three bordered boxes on every row read louder than the task itself. These
+    // are icon buttons that surface on hover or keyboard focus — and stay put on
+    // touch, where there is no hover to surface them with.
+    const actions = `<div class="bc-todo-actions">
+          <button type="button" class="bc-todo-ibtn bc-todo-star${starred ? " on" : ""}" data-key="${esc(key)}"
+                  aria-pressed="${starred ? "true" : "false"}"
+                  aria-label="Star ${title}" title="${starred ? "Unstar" : "Star"}"
+            >${BC.icons.svg(starred ? "star-filled" : "star", { size: 14 })}</button>
+          <button type="button" class="bc-todo-ibtn bc-todo-snooze" data-key="${esc(key)}"
+                  aria-label="Snooze ${title} until tomorrow" title="Snooze until tomorrow"
+            >${BC.icons.svg("moon", { size: 14 })}</button>
+          <button type="button" class="bc-todo-ibtn bc-todo-more" data-key="${esc(key)}"
+                  aria-label="Details for ${title}" title="Details"
+            >${BC.icons.svg("more", { size: 14 })}</button>
+        </div>`;
     return `
       <div class="bc-todo-item ${complete ? "done" : ""}" data-key="${esc(key)}" data-i="${idx}">
-        <button class="bc-todo-check ${complete ? "done" : ""}" data-i="${idx}" aria-label="Toggle complete"></button>
+        <button type="button" class="bc-todo-check ${complete ? "done" : ""}" data-i="${idx}"
+                aria-pressed="${complete ? "true" : "false"}"
+                aria-label="${complete ? "Mark incomplete" : "Mark complete"}: ${title}"
+          >${BC.icons.svg("check", { size: 13 })}</button>
         <div>
-          <a class="bc-todo-name" href="${BC.util.escapeHtml(url)}">${BC.util.escapeHtml(p)}</a>
+          <a class="bc-todo-name" href="${BC.util.escapeHtml(url)}">${title}</a>
           <div class="bc-todo-course">${BC.util.escapeHtml(course)}${due ? " · " + BC.util.escapeHtml(BC.dt.dueLabel(due)) : ""}</div>
-          ${meta.length ? `<div class="bc-todo-tags">${meta.join(" · ")}</div>` : ""}
+          ${meta.length ? `<div class="bc-todo-tags">${meta.join("")}</div>` : ""}
         </div>
-        ${compact ? "" : `<div class="bc-todo-actions">
-          <button class="bc-todo-btn bc-todo-star" data-key="${esc(key)}" title="Star">${starred ? "★" : "☆"}</button>
-          <button class="bc-todo-btn bc-todo-snooze" data-key="${esc(key)}" title="Snooze until tomorrow">💤</button>
-          <button class="bc-todo-btn bc-todo-more" data-key="${esc(key)}" title="Details">⋯</button>
-        </div>`}
+        ${compact ? "" : actions}
       </div>
     `;
   }
@@ -999,17 +1572,64 @@
     BC.storage.updateLocal((d) => {
       const prev = d.pomodoro || {};
       d.pomodoro = {
-        phase: "work", cycle: prev.cycle || 0,
+        phase: "work", cycle: prev.cycle || 0, pausedAt: null,
         startedAt: Date.now(), endsAt: Date.now() + min * 60000,
         taskTitle: taskTitle || "", sessions: prev.sessions || [],
       };
     }).then(() => { BC.toast.success(`Pomodoro started · ${min}m`); ensurePomodoroDock(BC.storage.current); });
   }
 
+  // Pause was the one control a 25-minute timer obviously needed and did not
+  // have: the only way to answer the door was to stop and lose the session.
+  // The state is a single end timestamp, so pausing records when it froze and
+  // resuming pushes the end out by however long that was.
+  // Pure, and exported on BC.features.todo, because the whole correctness of
+  // pause is "does the time you get back equal the time you were away" — which
+  // is a statement about two numbers, not about a dock.
+  function togglePause(p, now) {
+    if (!p || !p.phase) return p;
+    if (p.pausedAt) { p.endsAt += now - p.pausedAt; p.pausedAt = null; }
+    else p.pausedAt = now;
+    return p;
+  }
+
+  // One definition of "how long is left", read by the tick and by the label, so
+  // a paused dock cannot count down while looking stopped.
+  function pomRemaining(p, now) {
+    if (!p || !p.phase) return 0;
+    return Math.max(0, p.endsAt - (p.pausedAt || now));
+  }
+
+  function togglePomodoroPause() {
+    BC.storage.updateLocal((d) => { togglePause(d.pomodoro, Date.now()); }).then(() => {
+      const p = (BC.storage.local || {}).pomodoro || {};
+      BC.toast.info(p.pausedAt ? "Pomodoro paused" : "Pomodoro resumed");
+      paintPomDock();
+    });
+  }
+
+  // The dock's own state, repainted from the store rather than from a closure,
+  // so the tick and a click cannot disagree about whether it is running.
+  function paintPomDock() {
+    const el = document.querySelector('[data-bc-node="bc-pom-dock"]');
+    const cur = (BC.storage.local || {}).pomodoro;
+    if (!el || !cur) return;
+    const paused = !!cur.pausedAt;
+    const btn = el.querySelector("[data-pom-pause]");
+    if (btn && btn.dataset.state !== String(paused)) {
+      btn.dataset.state = String(paused);
+      btn.innerHTML = BC.icons.svg(paused ? "play" : "pause", { size: 14 });
+      const label = paused ? "Resume the timer" : "Pause the timer";
+      btn.setAttribute("aria-label", label);
+      btn.title = label;
+    }
+    el.classList.toggle("bc-paused", paused);
+  }
+
   function stopPomodoro() {
     stopPomTick();
     BC.storage.updateLocal((d) => {
-      if (d.pomodoro) { d.pomodoro.phase = null; d.pomodoro.taskTitle = ""; }
+      if (d.pomodoro) { d.pomodoro.phase = null; d.pomodoro.taskTitle = ""; d.pomodoro.pausedAt = null; }
     }).then(() => { BC.injector.removeNode("bc-pom-dock"); BC.toast.info("Pomodoro stopped"); });
   }
 
@@ -1031,11 +1651,14 @@
       }
       p.startedAt = Date.now();
       p.endsAt = Date.now() + phaseMinutes(cfg, p.phase) * 60000;
+      // A new phase always starts running; carrying a pause across the boundary
+      // would freeze the break the moment it began.
+      p.pausedAt = null;
     }).then(() => {
       const p = (BC.storage.local || {}).pomodoro;
       if (!p || !p.phase) return;
       if (cfg.sound !== false) pomBeep();
-      BC.toast.success(p.phase === "work" ? "Break over — back to work 🍅" : `Pomodoro done! ${PHASE_LABEL[p.phase]} time.`);
+      BC.toast.success(p.phase === "work" ? "Break over — back to work" : `Pomodoro done! ${PHASE_LABEL[p.phase]} time.`);
     });
   }
 
@@ -1079,11 +1702,21 @@
     const dock = BC.injector.ensureNode("bc-pom-dock", document.body, () => {
       const d = document.createElement("div");
       d.className = "bc-pom-dock";
-      d.innerHTML = `<button data-pom-stats title="Stats">🍅</button><b data-pom-time>--:--</b>
-        <span data-pom-phase></span><span class="bc-pom-task" data-pom-task></span>
-        <button data-pom-skip title="Skip phase">⏭</button><button data-pom-stop title="Stop">✕</button>`;
+      // Every control here was a glyph: a tomato for the stats toggle, a
+      // skip-track arrow and a multiplication sign. The tomato rendered in full
+      // colour beside monochrome text and the other two were font roulette.
+      const dbtn = (icon, attr, label) =>
+        `<button type="button" class="bc-todo-ibtn" ${attr} aria-label="${label}" title="${label}"` +
+        `>${BC.icons.svg(icon, { size: 14 })}</button>`;
+      d.innerHTML = dbtn("timer", "data-pom-stats", "Pomodoro session stats") +
+        `<b data-pom-time>--:--</b>` +
+        `<span data-pom-phase></span><span class="bc-pom-task" data-pom-task></span>` +
+        dbtn("pause", "data-pom-pause", "Pause the timer") +
+        dbtn("skip-forward", "data-pom-skip", "Skip to the next phase") +
+        dbtn("close", "data-pom-stop", "Stop the timer");
       document.body.appendChild(d);
       d.querySelector("[data-pom-stop]").addEventListener("click", stopPomodoro);
+      d.querySelector("[data-pom-pause]").addEventListener("click", togglePomodoroPause);
       d.querySelector("[data-pom-skip]").addEventListener("click", () => advancePomodoro(BC.storage.current));
       d.querySelector("[data-pom-stats]").addEventListener("click", () => {
         const old = document.querySelector(".bc-pom-stats");
@@ -1107,8 +1740,8 @@
         const el = document.querySelector('[data-bc-node="bc-pom-dock"]');
         if (!cur || !cur.phase) { BC.injector.removeNode("bc-pom-dock"); stopPomTick(); return; }
         if (!el) return;
-        const remaining = cur.endsAt - Date.now();
-        if (remaining <= 0) { advancePomodoro(BC.storage.current); return; }
+        const remaining = pomRemaining(cur, Date.now());
+        if (!cur.pausedAt && remaining <= 0) { advancePomodoro(BC.storage.current); return; }
         const m = Math.floor(remaining / 60000), s = Math.floor((remaining % 60000) / 1000);
         const timeEl = el.querySelector("[data-pom-time]");
         if (timeEl) timeEl.textContent = m + ":" + String(s).padStart(2, "0");
@@ -1117,6 +1750,7 @@
         const taskEl = el.querySelector("[data-pom-task]");
         if (taskEl) taskEl.textContent = cur.taskTitle || "";
         el.classList.toggle("bc-break", cur.phase !== "work");
+        paintPomDock();
       }, 1000);
     }
   }
@@ -1150,6 +1784,10 @@
       BC.injector.removeNode("bc-todo-widget");
     }
   }
+
+  // Exposed for the test suite: the pause arithmetic is the part worth pinning
+  // down, and it is unreachable through apply().
+  BC.todoPomodoro = { togglePause, pomRemaining };
 
   BC.registry.register({
     id: "todo",

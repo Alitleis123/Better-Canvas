@@ -73,7 +73,7 @@
   };
 
   BC.defaults = {
-    version: 5,
+    version: 6,
     enabled: true,
 
     dashboard: {
@@ -103,13 +103,17 @@
 
     todo: {
       mode: "default",             // default | clean | custom
-      view: "list",                // list | day | week | kanban | timeblock
+      view: "list",                // list | kanban | timeblock
+      layout: "comfortable",       // comfortable | compact | cards | minimal | timeline
       rangeDays: 7,                // 3 | 7 | 14 | 30 | custom
       showCompleted: false,
       accent: "",
       allowNewTask: true,
       groupBy: "day",              // day | course | priority | tag | none
-      ring: true,                  // weekly progress ring
+      // Was a `ring` boolean. One indicator suits one person: a ring is a poor
+      // fit in a 280px sidebar at large font scales, and some people just want a
+      // line. See MIGRATIONS[6].
+      progress: "ring",            // off | ring | bar | segments | rainbow | text
       streaks: {
         enabled: true,
         graceDays: 2,
@@ -154,6 +158,8 @@
       sidebarWidth: 0,             // 0 = default; else px
       logo: { mode: "default", url: "", text: "" }, // default | hide | replace | text
       rotation: { enabled: false, mode: "daily", themeIds: [] }, // auto theme cycling
+      skin: "",                    // id from BC.SKIN_CATALOG or theming.skins; "" = none
+      skins: [],                   // imported skin objects, BC.skins.normalize shape
     },
 
     navigation: {
@@ -310,7 +316,7 @@
     return BC.migrate(merged, carry);
   };
 
-  BC.SETTINGS_VERSION = 5;
+  BC.SETTINGS_VERSION = 6;
 
   // Each entry upgrades settings from (v-1) to v. `carry` collects data that
   // must move to the bcLocal store — storage.load() persists it there.
@@ -388,6 +394,18 @@
       // never read by anything. onboarding.seen is the real gate.
       delete s.firstRun;
       if (s.onboarding) delete s.onboarding.lastWhatsNewVersion;
+    },
+
+    6(s) {
+      // todo.ring (boolean) became todo.progress (a style). Read the old flag
+      // before the default wins: someone who had turned the ring off wanted no
+      // indicator, not the new default one.
+      if (s.todo) {
+        if (s.todo.ring !== undefined) s.todo.progress = s.todo.ring ? "ring" : "off";
+        delete s.todo.ring;
+        const STYLES = ["off", "ring", "bar", "segments", "rainbow", "text"];
+        if (STYLES.indexOf(s.todo.progress) === -1) s.todo.progress = "ring";
+      }
     },
   };
 

@@ -74,7 +74,9 @@
     // the transform, so the host stayed pointer-events-active across the right edge
     // of every Canvas page and silently swallowed clicks there.
     drawerHost.style.cssText =
-      "position:fixed; top:0; right:0; bottom:0; width:min(600px, 48vw);" +
+      // 600px minus a 210px tab rail left ~330px of body, which is less than the
+    // widest control row needs and is what forced labels to wrap five lines deep.
+    "position:fixed; top:0; right:0; bottom:0; width:min(720px, 54vw);" +
       "z-index:var(--bc-z-drawer, 2147482000); transform: translateX(100%); visibility: hidden;" +
       "box-shadow: var(--bc-shadow-4, -20px 0 60px rgba(0,0,0,.18));";
     document.body.appendChild(drawerHost);
@@ -115,7 +117,8 @@
     closeBtn.type = "button";
     closeBtn.className = "bc-drawer-close";
     closeBtn.setAttribute("aria-label", "Close settings");
-    closeBtn.textContent = "✕";
+    closeBtn.title = "Close settings";
+    closeBtn.innerHTML = BC.icons.svg("close", { size: 14 });
     closeBtn.addEventListener("click", close);
     shadow.appendChild(closeBtn);
 
@@ -169,6 +172,9 @@
   // the preview with no wiring at all. Only structural features (a To Do mode
   // that rebuilds the list) need the rebuild below.
   const PREVIEW_NODE = "bc-drawer-preview";
+  // The stage's padding, in one place, because buildPreview does arithmetic
+  // against it rather than measuring it.
+  const PREVIEW_PAD = 24;
   let previewHost = null;
   let previewUnsub = null;
   let previewTimer = 0;
@@ -186,7 +192,10 @@
       "position:fixed; top:0; bottom:0; left:0; right:min(600px, 48vw);" +
       "z-index:calc(var(--bc-z-drawer, 2147482000) - 1);" +
       "display:flex; flex-direction:column; align-items:center; justify-content:center;" +
-      "gap:14px; padding:24px; background: var(--bc-surface-1, #f6f7fb);" +
+      // Deliberately NOT on the spacing scale: buildPreview subtracts this
+      // padding numerically to size the stage, so a density multiplier here
+      // would leave the preview overflowing its own frame.
+      "gap:14px; padding:" + PREVIEW_PAD + "px; background: var(--bc-surface-1, #f6f7fb);" +
       "overflow:hidden;" +
       "pointer-events:auto; opacity:0;" +
       "transition:opacity var(--bc-dur-3, 220ms) var(--bc-ease-out, ease);";
@@ -208,8 +217,8 @@
     if (!src) return;
     const vw = Math.max(320, window.innerWidth);
     const vh = Math.max(240, window.innerHeight);
-    const paneW = host.clientWidth - 48;
-    const paneH = host.clientHeight - 48;
+    const paneW = host.clientWidth - PREVIEW_PAD * 2;
+    const paneH = host.clientHeight - PREVIEW_PAD * 2;
     if (paneW <= 0 || paneH <= 0) return;
     // Reserve the toolbar's own height so zooming to fit does not push it off.
     const fit = Math.min(paneW / vw, (paneH - 44) / vh);
@@ -266,15 +275,19 @@
       "box-shadow: var(--bc-shadow-1, 0 1px 3px rgba(0,0,0,.12));" +
       "font: 12px/1 var(--bc-font-sans, system-ui); color: var(--bc-text, #1b2430);";
 
-    const step = (label, aria, delta) => {
+    // The two steppers were a MINUS SIGN and an ASCII plus: different widths,
+    // different optical weights, and the minus written as an escape so it read
+    // as ASCII in the source while rendering as a glyph on screen.
+    const step = (icon, aria, delta) => {
       const b = document.createElement("button");
       b.type = "button";
       b.setAttribute("aria-label", aria);
-      b.textContent = label;
+      b.title = aria;
+      b.innerHTML = BC.icons.svg(icon, { size: 14 });
       b.style.cssText =
         "width:26px; height:26px; display:inline-flex; align-items:center; justify-content:center;" +
         "border:0; border-radius:50%; background:transparent; color:inherit; cursor:pointer;" +
-        "font:inherit; font-size:15px; line-height:1;";
+        "font:inherit; line-height:0;";
       b.addEventListener("mouseenter", () => { b.style.background = "var(--bc-surface-4, rgba(0,0,0,.05))"; });
       b.addEventListener("mouseleave", () => { b.style.background = "transparent"; });
       b.addEventListener("click", () => {
@@ -289,14 +302,14 @@
     pct.setAttribute("aria-label", "Reset preview zoom to fit");
     pct.textContent = Math.round(previewZoom * 100) + "%";
     pct.style.cssText =
-      "min-width:52px; height:26px; padding:0 8px; border:0; border-radius: var(--bc-radius-pill, 999px);" +
+      "min-width:52px; height:26px; padding:0 var(--bc-space-3, 8px); border:0; border-radius: var(--bc-radius-pill, 999px);" +
       "background:transparent; color:inherit; cursor:pointer; font:inherit; font-variant-numeric: tabular-nums;";
     pct.addEventListener("click", () => { previewZoom = 1; BC.util.guard(buildPreview, "drawer preview"); });
 
     bar.addEventListener("mousedown", (e) => e.stopPropagation());
-    bar.appendChild(step("\u2212", "Zoom out", -0.1));
+    bar.appendChild(step("minus", "Zoom out", -0.1));
     bar.appendChild(pct);
-    bar.appendChild(step("+", "Zoom in", 0.1));
+    bar.appendChild(step("plus", "Zoom in", 0.1));
     return bar;
   }
 

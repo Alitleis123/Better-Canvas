@@ -289,10 +289,13 @@ function load(sandbox, relPath) {
 const CORE = [
   "src/shared/defaults.js",
   "src/shared/themes.js",
+  "src/shared/icons.js",
   "src/content/core/util.js",
   "src/content/core/datetime.js",
   "src/content/core/color.js",
   "src/shared/tokens.js",
+  "src/shared/skins.js",
+  "src/shared/skin-catalog.js",
 ];
 
 function loadCore(sandbox) {
