@@ -70,6 +70,7 @@
        inside it that Canvas gives an explicit dark colour stayed dark on dark. */
     html.bc-dark .ic-app-header { background-color: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important; }
     html.bc-dark .ic-app-header__menu-list-item a { color: var(--bc-d-text) !important; }
+    /* dark-only */
     html.bc-dark img[src*="branded"] { filter: brightness(1.1); }
 
     /* Generic fallback for pages we don't explicitly cover */
@@ -197,8 +198,31 @@
   // The mode-independent half never changes, so build it once rather than
   // reassembling a multi-KB string on every observer tick.
   let staticCssCache = null;
+  // Every surface rule above is written against --bc-d-*, which alias to
+  // --bc-surface-*/--bc-text. That makes the whole list mode-agnostic: it is not
+  // "the dark rules", it is "the list of Canvas surfaces we are willing to
+  // repaint". A skin needs exactly that list in any mode, so rather than
+  // maintain a second copy that would drift the first time Instructure renames
+  // a class, each selector is duplicated onto html.bc-skin.
+  //
+  // Rules tagged /* dark-only */ are skipped: brightening a branded logo is a
+  // statement about darkness, not about which surface something is.
+  function forSkins(css) {
+    return css.replace(/(\/\* dark-only \*\/\s*)?([^{}]+)\{([^{}]*)\}/g, (full, darkOnly, sel, body) => {
+      if (darkOnly) return full;
+      const parts = sel.split(",").map((s) => s.trim()).filter(Boolean);
+      if (!parts.some((s) => s.includes("html.bc-dark"))) return full;
+      const extra = parts
+        .filter((s) => s.includes("html.bc-dark"))
+        .map((s) => s.replace(/html\.bc-dark/g, "html.bc-skin"));
+      return parts.concat(extra).join(", ") + " {" + body + "}";
+    });
+  }
+
   function staticSheet() {
-    if (staticCssCache == null) staticCssCache = staticCSS + "\n" + BC.tokens.staticCss();
+    if (staticCssCache == null) {
+      staticCssCache = forSkins(staticCSS) + "\n" + BC.tokens.staticCss();
+    }
     return staticCssCache;
   }
 
@@ -454,6 +478,10 @@
     const wantAccent = !!(BC.color.normalizeHex(t.accentColor) || (lp && lp.accent));
     if (doc.hasAttribute("data-bc-accent") !== wantAccent) doc.toggleAttribute("data-bc-accent", wantAccent);
     const skin = BC.skins && BC.skins.active ? BC.skins.active(settings) : null;
+    // Without this, a light skin repainted the page background, the nav and the
+    // cards and left every Canvas content surface, table and link at its stock
+    // colour -- which read as "the cards got a pattern", not as a theme.
+    if (doc.classList.contains("bc-skin") !== !!skin) doc.classList.toggle("bc-skin", !!skin);
     attr("data-bc-density", (skin && skin.density) || t.density || "default");
     attr("data-bc-radius", String(skin ? skin.radius | 0 : t.radius | 0));
     attr("data-bc-focus", t.focusRing || "default");
