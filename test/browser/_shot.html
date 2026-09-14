@@ -1,0 +1,40 @@
+<!doctype html>
+<!--
+  Screenshot target. The visual harness is only useful if a change can be LOOKED
+  at, and headless Chrome needs a URL that arrives already in the state you want
+  to photograph. This page takes that state in the query string so a capture is
+  one command:
+
+    <chrome> --headless --screenshot=out.png --window-size=1440,1250 \
+      'http://localhost:8731/test/browser/_shot.html?m=panel&t=grades'
+
+    m=panel   the settings drawer      t=<tab id>   w=<drawer px>
+    m=todo    the planner widget       p=<progress style>
+    m=skin    a skin on the dashboard  s=<skin id>
+    m=plain   the dashboard, no panel
+    dark=1    apply dark mode to whichever of the above you chose
+-->
+<meta charset=utf-8><title>shot</title>
+<body style="margin:0;background:#e8e9ea">
+<iframe id=f src="/test/browser/page.html" style="width:100vw;height:100vh;border:0"></iframe>
+<script>
+const q = new URLSearchParams(location.search);
+document.getElementById('f').onload = async function () {
+  const w = this.contentWindow; await w.__bcReady;
+  const dark = q.get('dark') ? { theming: { darkMode: "on" } } : {};
+  const mode = q.get('m') || 'panel';
+  if (mode === 'panel') {
+    w.__bcPanel(q.get('w') ? +q.get('w') : null, dark);
+    if (q.get('t')) w.__bcTab(q.get('t'));
+  } else if (mode === 'todo') {
+    w.__bcTodo(q.get('p') || 'ring', dark);
+  } else if (mode === 'skin') {
+    w.__bcSkin(q.get('s') || 'matcha-strawberry', dark);
+  } else {
+    w.__bcApply(dark);
+  }
+  // The title is the signal a driver can wait on; --virtual-time-budget alone
+  // will happily photograph a half-painted frame.
+  setTimeout(() => { document.title = "ready"; }, 500);
+};
+</script>

@@ -1,0 +1,30 @@
+<!doctype html><meta charset=utf-8><title>popup preview</title>
+<body style="margin:0;background:#d9d4cc;padding:24px;display:flex;gap:24px;align-items:flex-start;font:12px ui-monospace,Menlo,monospace">
+<!-- The popup is its own document with no chrome.* available outside the
+     extension. Rather than stubbing after load (which races the popup's own
+     script and silently left render() un-run), the real HTML is fetched and a
+     stub <script> is spliced in ahead of every other tag. Everything after that
+     is the shipped file. -->
+<div><div>light</div><iframe id=a style="width:340px;height:420px;border:0;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.2)"></iframe></div>
+<div><div>dark</div><iframe id=b style="width:340px;height:420px;border:0;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.2)"></iframe></div>
+<script>
+const STUB = (dark) => `<script>
+window.chrome = {
+  storage: { local: { get: (k, cb) => cb(${dark ? '{"bcSettings":{"theming":{"darkMode":"on"}}}' : "{}"}), set: () => {} } },
+  tabs: { query: () => Promise.resolve([{ id: 1, url: "https://school.instructure.com/" }]),
+          sendMessage: (i, m, cb) => cb && cb({ canvas: true }), reload(){} },
+  permissions: { contains: (o, cb) => cb(true), request: (o, cb) => cb(true) },
+  runtime: { lastError: null, openOptionsPage(){}, sendMessage(){} },
+};
+<\/script>`;
+(async () => {
+  const html = await (await fetch("/src/popup/popup.html?t=" + Date.now())).text();
+  for (const [id, dark] of [["a", false], ["b", true]]) {
+    const doc = html
+      .replace("<head>", "<head><base href=\"/src/popup/\">" + STUB(dark));
+    const f = document.getElementById(id);
+    f.srcdoc = doc;
+  }
+  setTimeout(() => { document.title = "ready"; }, 900);
+})();
+</script>

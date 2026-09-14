@@ -253,6 +253,9 @@ window.__bcReady = (async () => {
   await load("../../src/content/features/todo.js");
   // The real settings UI, not a stub: its shell layout is what the drawer width
   // has to hold, so a stub would hide exactly the bug worth catching.
+  // The keybind control calls BC.shortcuts.prettify; without this the Shortcuts
+  // tab threw and the panel silently showed the previous tab's body instead.
+  await load("../../src/content/core/shortcuts.js");
   await load("../../src/shared/settings/components.js");
   await load("../../src/shared/settings/state.js");
   await load("../../src/shared/settings/index.js");
