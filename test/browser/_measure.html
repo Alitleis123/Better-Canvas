@@ -5,7 +5,7 @@
 // The dashboard, measured at a range of viewport widths. An iframe is the only
 // way to vary the viewport without varying the screenshot, and the card grid is
 // laid out against the iframe's width, not the window's.
-const WIDTHS = [1280, 1440, 1680, 1920, 2240, 2560, 3000];
+const WIDTHS = [1280, 1440, 1512, 1728, 1920, 2240, 2560, 3000];
 const out = document.getElementById('out');
 const r_cols = (gs) => gs.gridTemplateColumns.split(" ").length;
 (async () => {
@@ -30,14 +30,26 @@ const r_cols = (gs) => gs.gridTemplateColumns.split(" ").length;
     const hr = hero ? hero.getBoundingClientRect() : null;
     rows.push({
       vw: w,
-      cols: gs ? (gs.gridTemplateColumns.split(" ").length) : 0,
+      cols: gs ? gs.gridTemplateColumns.split(" ").filter((t) => parseFloat(t) > 0).length : 0,
       colW: gs ? gs.gridTemplateColumns.split(" ")[0] : "-",
+      gridW: grid ? Math.round(grid.getBoundingClientRect().width) : "-",
+      mainW: (() => { const m = d.querySelector(".ic-Layout-contentMain"); return m ? Math.round(m.getBoundingClientRect().width) : "-"; })(),
+      // Do the header, the grid and the page content end at the same x?
+      rightEdges: (() => {
+        const xs = [".ic-Dashboard-header__layout", "[data-bc-cardgrid]", "#grades_summary"]
+          .map((s) => { const e = d.querySelector(s); return e ? Math.round(e.getBoundingClientRect().right) : null; })
+          .filter((x) => x != null);
+        return xs.join("/");
+      })(),
       gap: gs ? gs.gap : "-",
       card: cr ? Math.round(cr.width) + "x" + Math.round(cr.height) : "-",
       cardAspect: cr ? (cr.width / cr.height).toFixed(2) : "-",
       heroH: hr ? Math.round(hr.height) : "-",
       heroShare: (cr && hr) ? Math.round(hr.height / cr.height * 100) + "%" : "-",
       bodyPad: body ? getComputedStyle(body).padding : "-",
+      heroAspect: hr ? (hr.width / hr.height).toFixed(2) : "-",
+      rowLeftover: (grid && cr) ? Math.round(grid.getBoundingClientRect().width -
+        (Math.floor((grid.getBoundingClientRect().width + 16) / (cr.width + 16)) * (cr.width + 16) - 16)) : "-",
       // Constant-width tracks cannot absorb leftover space, so it lands at the
       // end of the row. Bounded by one column; worth knowing how big.
       trailing: grid ? Math.round(grid.clientWidth - (cr ? (r_cols(gs) * cr.width + (r_cols(gs) - 1) * parseFloat(gs.gap)) : 0)) : "-",

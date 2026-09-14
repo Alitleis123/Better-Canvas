@@ -12,6 +12,9 @@
     m=todo    the planner widget       p=<progress style>
     m=skin    a skin on the dashboard  s=<skin id>
     m=plain   the dashboard, no panel      layout=<grid|list|compact|masonry>
+    n=<count> clone the fixture's cards up to this many courses. The fixture
+              ships four, which is the one count that cannot show whether a row
+              packs, wraps or strands a card on a row of its own.
     dark=1    apply dark mode to whichever of the above you chose
     y=<px>    scroll the drawer down, for a section below the fold
     s=<text>  type into the tab search, to photograph a filtered or empty state
@@ -23,6 +26,24 @@
 const q = new URLSearchParams(location.search);
 document.getElementById('f').onload = async function () {
   const w = this.contentWindow; await w.__bcReady;
+  // Clone cards BEFORE applying, so the grid is laid out against the count we
+  // asked for rather than re-laid-out after it.
+  if (q.get('n')) {
+    const want = Math.max(1, Math.min(24, +q.get('n')));
+    const d = w.document;
+    const cards = [...d.querySelectorAll('.ic-DashboardCard')];
+    const host = cards[0] && cards[0].parentElement;
+    if (host) {
+      const items = cards.map((c) => (c.parentElement === host ? c : c.parentElement));
+      for (let i = items.length; i < want; i++) {
+        const clone = items[i % items.length].cloneNode(true);
+        const a = clone.querySelector('a.ic-DashboardCard__link');
+        if (a) a.setAttribute('href', '/courses/' + (100 + i));
+        host.appendChild(clone);
+      }
+      for (let i = items.length - 1; i >= want; i--) items[i].remove();
+    }
+  }
   const dark = q.get('dark') ? { theming: { darkMode: "on" } } : {};
   const mode = q.get('m') || 'panel';
   if (mode === 'panel') {

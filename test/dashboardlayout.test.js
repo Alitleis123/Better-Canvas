@@ -288,8 +288,12 @@ module.exports = {
     const src = read("src/content/features/dashboard.js");
     const i = src.indexOf("const spine =");
     const block = src.slice(i, src.indexOf("`;", i));
+    // --bc-surface-3 used to be here, when the action row was FILLED with it.
+    // A fill made the bottom of every card a second, warmer colour and a card
+    // read as two stacked panels; the row recedes with a hairline instead, so
+    // the border token is what has to be tokenised now.
     for (const token of ["--bc-text-lg", "--bc-weight-semibold", "--bc-muted",
-                         "--bc-surface-3", "--bc-focus-ring"]) {
+                         "--bc-border-subtle", "--bc-focus-ring"]) {
       assert.ok(block.includes(token), `the card treatment should use ${token}`);
     }
     assert.match(block, /font-variant-numeric: tabular-nums/,
@@ -314,9 +318,50 @@ module.exports = {
     // The grid track must not hand the leftover space to the card.
     const track = src.match(/const track = `([^`]+)`/);
     assert.ok(track, "the card grid track is not defined in one place");
-    assert.ok(!/1fr/.test(track[1]),
-      "a 1fr column makes the card width a function of the viewport: " + track[1]);
-    assert.match(track[1], /repeat\(auto-fill/, "the grid should still pack by available width");
+    // 1fr is required here, not forbidden. Grid counts columns using the track's
+    // max when that max is definite, so a definite ceiling in the track costs a
+    // whole column and wraps the last card onto a row of its own. The ceiling
+    // lives on the card instead.
+    assert.match(track[1], /1fr\)\)$/,
+      "a definite track max mis-counts the columns: " + track[1]);
+    // auto-FIT, not auto-fill. auto-fill keeps the empty tracks it created, so a
+    // 27" monitor laid out eight columns for five courses and drew them as a
+    // strip against 900px of dead grey. auto-fit collapses them, and the cards
+    // that exist share the row.
+    assert.match(track[1], /repeat\(auto-fit/,
+      "auto-fill leaves empty tracks on a wide monitor: " + track[1]);
+    // The ceiling is what keeps the card a card: without it, four cards on a 27"
+    // would each grow past 500px. It has to be on the CARD, because a definite
+    // maximum in the track changes the column count.
+    assert.match(src, /const grow = Math\.round\(size \* 1\.35\)/,
+      "the ceiling should be a modest multiple of the chosen card size");
+    const fill = src.match(/const fillCell = `([\s\S]+?)`;/);
+    assert.ok(fill, "fillCell is not defined in one place");
+    assert.match(fill[1], /max-width: \$\{grow\}px !important/,
+      "the card must carry the ceiling, not the track");
+    // And the column is capped, which is what makes 1920 and 2560 render the
+    // same dashboard rather than merely a similar one.
+    assert.match(src, /const measure = `calc\(\$\{size \* maxCols\}px/,
+      "the dashboard column needs one measure, or nothing shares a right edge");
+    // The cap is a COLUMN COUNT, defaulting to five, and 0 lifts it.
+    assert.match(src, /d\.maxColumns == null \? 5 : d\.maxColumns \| 0/,
+      "the column cap should default to five and be user-settable");
+    assert.match(src, /const shell = !maxCols \? "" :/,
+      "maxColumns: 0 has to lift the cap entirely");
+    // Capping .ic-Layout-contentMain is allowed, but only together with zeroing
+    // its inline padding. Canvas pads that element, so a cap on its own leaves
+    // the grid the measure MINUS that padding -- 1290 against a 1314 measure,
+    // 24px short of a fifth 250px column, which silently dropped every wide
+    // monitor to four columns.
+    const shellStart = src.indexOf("const shell =");
+    const shellSrc = src.slice(shellStart, src.indexOf("`;", shellStart));
+    if (/ic-Layout-contentMain/.test(shellSrc)) {
+      const rule = shellSrc.slice(shellSrc.indexOf(".ic-Layout-contentMain"));
+      assert.match(rule, /padding-inline: 0 !important/,
+        "a cap on the padded content column must zero that padding too");
+    }
+    assert.match(shellSrc, /\$\{GRID\}[\s\S]{0,60}max-width: \$\{measure\} !important/,
+      "the grid itself must carry the measure");
     // And every layout that uses a grid must use that one definition.
     const gridRules = [...src.matchAll(/grid-template-columns: ([^!]+)!important/g)].map((m) => m[1].trim());
     for (const g of gridRules) {

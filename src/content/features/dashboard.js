@@ -44,25 +44,97 @@
   // which is why the cards stacked in a single column.
   const GRID = "[data-bc-cardgrid]";
 
-  function layoutCss(d) {
+  function layoutCss(d, cardCount) {
     const size = { s: 200, m: 250, l: 320 }[d.cardSize || "m"] || 250;
-    // A FIXED track, not minmax(size, 1fr). With 1fr the column takes whatever
-    // is left over, so the card width swung with the viewport and not even
-    // monotonically: measured across 1280 to 3000 it went 299, 260, 253, 301,
-    // 256, 262, 250. Every one of those is a different card, which is why the
-    // dashboard read as well spaced on one monitor and cramped on another.
+
+    // AUTO-FIT, a flexible track, and a ceiling on the CARD rather than on the
+    // track.
     //
-    // Fixed rather than merely capped, because a cap still has to round down to
-    // a whole number of columns and that costs density: at 1.15x the chosen size
-    // a 1440px window dropped from four cards per row to three. Measured over
-    // the same seven widths, a fixed track keeps the original column counts
-    // (3, 4, 5, 5, 7, 8, 10) and leaves an average of 85px at the end of a row
-    // against 170px for the capped version. It is also what Canvas itself does,
-    // so the grid stays native.
+    // This was auto-fill with a constant `size` track, which fixed the card at
+    // exactly `size` on every monitor. That made a card identical everywhere and
+    // the DASHBOARD different everywhere, because a constant track cannot absorb
+    // what is left over, so the slack piled up at the end of the row: measured
+    // across 1280 to 3000 the trailing gap went 146, 40, 14, 254, 42, 96, 4 px.
+    // At 1920 a quarter of the row was empty grey. Worse, auto-fill KEEPS the
+    // empty tracks it created, so a 27" monitor laid out eight columns for the
+    // four or five courses a student actually has and drew them as a thin strip
+    // against 900px of nothing. That is the "it doesn't look the same on my
+    // 27-inch" report, and a constant card width is what caused it rather than
+    // what prevented it.
     //
-    // min(100%, size) as the floor so a container narrower than one card gets a
-    // track that fits it rather than one that overflows.
-    const track = `repeat(auto-fill, minmax(min(100%, ${size}px), ${size}px))`;
+    // 1fr as the track's MAXIMUM, not ${grow}px. The column count is computed
+    // from the track's max track sizing function whenever that is definite, so a
+    // minmax(250px, 300px) track counts as 300px wide when grid decides how many
+    // fit -- at a 1088px grid that dropped four columns to three and wrapped the
+    // fourth card onto a row of its own with a 760px hole beside it. Photographed
+    // before believing it. An indefinite max (1fr) makes the count fall back to
+    // the 250px minimum, which packs as densely as the old constant track did.
+    //
+    // The card then carries the ceiling instead (see `fillCell`), so 1fr gets to
+    // choose the column count without also being allowed to inflate four cards to
+    // 500px each on a wide monitor.
+    const grow = Math.round(size * 1.35);
+
+    // One measure for the dashboard column, and it is a COLUMN COUNT.
+    //
+    // Canvas lets the content column grow without limit, so at 2560 the header
+    // slab and the card grid ended at different x and the grid laid out as many
+    // columns as the monitor allowed. That is what made the same dashboard look
+    // like a different product on a 15", a 24" and a 27": not the card size --
+    // which was already constant -- but the number of cards in a row, and how
+    // much grey was left over beside them.
+    //
+    // Capping the columns is what makes those three agree. Above the cap the
+    // layout stops being a function of the viewport at all: it becomes a
+    // function of how many courses you are taking, which is the same number on
+    // every monitor you own. Five is the default because it is the most that
+    // still fits inside a 15" MacBook's content column at default scaling
+    // (~1400px), and a cap only unifies monitors it actually binds on -- a cap
+    // the laptop cannot reach would leave the laptop out of the agreement.
+    //
+    // The cap lands on the grid and the header rather than on
+    // .ic-Layout-contentMain. Capping the column worked, but Canvas pads that
+    // element, so the grid got `measure` MINUS that padding -- 1290 against a
+    // 1314 measure, which is 24px short of a fifth 250px column and silently
+    // dropped every wide monitor to four. Capping the boxes that lay out means
+    // the measure is exactly the budget, whatever Canvas pads.
+    const maxCols = Math.max(0, Math.min(12, d.maxColumns == null ? 5 : d.maxColumns | 0));
+    const measure = `calc(${size * maxCols}px + ${maxCols - 1} * var(--bc-space-7, 16px))`;
+    // The track minimum is the LARGER of the chosen card size and the width that
+    // makes the courses we actually have fill the row exactly.
+    //
+    // auto-fit is documented as collapsing the tracks nothing occupies, and it
+    // does -- unless some item spans every track, which is exactly what Canvas's
+    // "Published Courses" heading does via ${spanRow}. With a spanning item no
+    // track is ever empty, so auto-fit behaves as auto-fill and four courses in a
+    // five-column measure left a 266px notch at the end of the row while the
+    // prose below ran the full measure. Photographed at 2560 before believing it.
+    //
+    // So the count does the capping instead of relying on collapse: at any width
+    // that can hold `cols` cards the percentage term wins and the grid resolves
+    // to exactly `cols` tracks, which the cards then fill; at narrower widths it
+    // falls under `size`, the max() picks `size` back up, and auto-fit reduces
+    // the count the ordinary responsive way.
+    const cols = Math.max(1, maxCols ? Math.min(maxCols, cardCount || maxCols) : (cardCount || 1));
+    const fillMin = maxCols
+      ? `max(${size}px, calc((100% - ${cols - 1} * var(--bc-space-7, 16px)) / ${cols}))`
+      : `${size}px`;
+    const track = `repeat(auto-fit, minmax(min(100%, ${fillMin}), 1fr))`;
+
+    const shell = !maxCols ? "" : `
+      .ic-Dashboard-header__layout, #DashboardCard_Container, ${GRID} {
+        max-width: ${measure} !important;
+      }
+      /* The rest of the column gets the same measure so prose and announcements
+         below the cards end where the cards do instead of running the width of a
+         27" monitor. Its inline padding goes to zero in the same breath: leave it
+         in and the content box is the measure MINUS that padding, which is what
+         cost the fifth column. The page keeps a gutter -- .ic-Layout-columns has
+         one -- so zeroing this one costs nothing but the double inset. */
+      .ic-Layout-contentMain {
+        max-width: ${measure} !important;
+        padding-inline: 0 !important;
+      }`;
 
     // The card's own proportions, shared by every layout that shows a card face.
     // Canvas fixes the artwork at 146px tall at every card width, so its aspect
@@ -92,6 +164,29 @@
         overflow-wrap: anywhere !important;
       }
       .ic-DashboardCard__header-title span { display: inline !important; white-space: normal !important; }
+      /* Title at the top, course code and term at the BOTTOM of the content box.
+         Cards sharing a row share a height, so this puts every card's metadata on
+         one line across the row. Without it the metadata sat directly under a
+         title that is one line on some cards and two on others, so it stepped up
+         and down across the row -- the single most visible "spacing issue" on the
+         dashboard, and the reason four cards read as four unrelated boxes.
+         margin-top on the SUBTITLE rather than flex-grow on the title: the title
+         carries display: -webkit-box for its line clamp, and growing it is one
+         more thing that can blockify it and cost the ellipsis. */
+      .ic-DashboardCard__header-content {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: var(--bc-space-1, 4px) !important;
+        /* The content box has to be TALLER than its text before margin-top: auto
+           has any slack to spend, and it only is if every box between it and the
+           card is a stretching flex item. The link is an <a>: as a flex item it
+           blockifies, so its own children stay content-sized and the metadata sat
+           straight under the title again -- which is what the first attempt at
+           this did, photographed and caught. */
+        flex: 1 1 auto !important;
+      }
+      .ic-DashboardCard__link { display: flex !important; flex-direction: column !important; }
+      .ic-DashboardCard__header-subtitle { margin-top: auto !important; }
       /* Canvas pads the body 10px 12px, which is thin against a 250px card and
          is the other half of what reads as bad spacing. On the scale, so the
          density setting reaches it. */
@@ -103,7 +198,52 @@
         gap: var(--bc-space-5, 12px) !important;
       }`;
     const rad = (d.cardRadius|0) + "px";
+
+    // The dashboard column above the grid: a page title, our filter, and Canvas's
+    // section heading. Canvas gives these three a 12px slab, a 0px margin and an
+    // 8px margin respectively, so measured top to bottom the gaps ran 9, 35 and
+    // 29px -- no rhythm at all, and the filter read as a stray field dropped
+    // between two unrelated blocks. One scale for all three, off the density var
+    // so it moves with the setting.
+    const chrome = `
+      /* Not a white slab. Canvas paints this bar white with a hairline under it,
+         which on a page whose only other white is a course card makes the title
+         bar look like a card that lost its content. Everything above the grid
+         sits on the page surface instead, so the cards are the only things that
+         float. */
+      .ic-Dashboard-header__layout {
+        background: none !important;
+        border-bottom: 0 !important;
+        padding: 0 0 var(--bc-space-5, 12px) !important;
+        margin: 0 0 var(--bc-space-7, 16px) !important;
+        gap: var(--bc-space-7, 16px) !important;
+        flex-wrap: wrap !important;
+      }
+      /* Canvas sets weight 300 at 28px, which reads washed out next to a card
+         title at 600 and is the only thing on the page with no weight. */
+      .ic-Dashboard-header__title {
+        font-size: var(--bc-text-title, 26px) !important;
+        font-weight: var(--bc-weight-semibold, 600) !important;
+        letter-spacing: -0.01em !important;
+        line-height: var(--bc-leading-tight, 1.25) !important;
+        color: var(--bc-text) !important;
+      }
+      /* Canvas's own 16px band above the cards, replaced by the scale. */
+      #DashboardCard_Container { padding: 0 !important; }
+      /* "Published Courses" is a section eyebrow, not a second page title. At
+         Canvas's 16px/bold it competes with the h1 two lines above it. */
+      .ic-DashboardCard__box_header {
+        font-size: var(--bc-text-xs, 12px) !important;
+        font-weight: var(--bc-weight-semibold, 600) !important;
+        letter-spacing: 0.06em !important;
+        text-transform: uppercase !important;
+        color: var(--bc-text-subtle, var(--bc-muted)) !important;
+        margin: 0 0 var(--bc-space-5, 12px) !important;
+      }`;
+
     let css = `
+      ${shell}
+      ${chrome}
       .ic-DashboardCard { border-radius: ${rad} !important; overflow: hidden; }
       .ic-DashboardCard__link, .ic-DashboardCard__box { border-radius: ${rad} !important; }
       ${d.hoverLift ? `.ic-DashboardCard:hover { transform: translateY(-2px); }
@@ -162,9 +302,13 @@
         font-size: var(--bc-text-2xs, 11px) !important;
         color: var(--bc-text-subtle, var(--bc-muted)) !important;
       }
-      /* The action row is the one part that should recede. */
+      /* The action row is the one part that should recede -- and a hairline is
+         how it recedes. Filling it with surface-3 made the bottom fifth of every
+         card a second, warmer colour, so a card read as two stacked panels
+         rather than one, and the accent links sitting on that warm fill read
+         muddy. The rule stays for the border alone. */
       .ic-DashboardCard__action-container {
-        background: var(--bc-surface-3) !important;
+        background: none !important;
         border-top: 1px solid var(--bc-border-subtle, var(--bc-border)) !important;
       }
       /* Having chosen that surface, we own the contrast on it. Canvas's link
@@ -176,8 +320,15 @@
     // Canvas gives the card a fixed width, so without this the cards sit
     // left-aligned inside whatever column width the size slider produced, with
     // dead space to the right of each one.
-    const fillCell = `${GRID} > [data-bc-carditem] { width: 100% !important; }
-      ${GRID} > [data-bc-carditem] .ic-DashboardCard, ${GRID} > .ic-DashboardCard { width: 100% !important; }`;
+    const fillCell = `${GRID} > [data-bc-carditem] { width: 100% !important; min-width: 0 !important; }
+      ${GRID} > [data-bc-carditem] .ic-DashboardCard, ${GRID} > .ic-DashboardCard {
+        width: 100% !important;
+        /* The ceiling. A 1fr track has to be free to take the leftover so the
+           column count comes out right, but a card is a card: past about 1.35x
+           the chosen size it stops reading as one. Capping here rather than in
+           the track is what lets both be true. */
+        max-width: ${grow}px !important;
+      }`;
     if (d.layout === "grid") css += `${GRID} { display: grid !important; grid-template-columns: ${track} !important; gap: var(--bc-space-7, 16px) !important; align-items: stretch !important; }
       /* stretch, not start: cards sharing a row share a height, and the slack
          from a one-line title collects ABOVE THE ACTION ROW rather than between
@@ -245,14 +396,42 @@
       .ic-DashboardCard__header-title, .ic-DashboardCard__header-title span { -webkit-line-clamp: 1 !important; }
       .ic-DashboardCard__header-title { min-height: 0 !important; }
       .ic-DashboardCard__header-term { display: none !important; }
+      /* The shared card shape pushes the metadata to the bottom of the content
+         box so it lines up across a row. In compact there is no second metadata
+         line to line up and the card is capped at 120px, so all that does is
+         open a gap between the title and the course code inside an already
+         short card. Density is the whole point of this layout. */
+      .ic-DashboardCard__header-subtitle { margin-top: 0 !important; }
       .ic-DashboardCard__header-content, .ic-DashboardCard__link { padding: var(--bc-space-4, 10px) var(--bc-space-5, 12px) !important; }`;
     if (d.layout === "masonry") css += `${spine}
       ${cardShape}
-      /* column-width, not a count computed from a hardcoded 1200: the count made
-         the column width depend on the viewport exactly the way the grid's 1fr
-         did, so masonry had the same inconsistency. */
-      ${GRID} { columns: ${size}px auto !important; column-gap: var(--bc-space-6, 14px) !important; display: block !important; }
-      .ic-DashboardCard { break-inside: avoid !important; margin-bottom: var(--bc-space-6, 14px) !important; }`;
+      /* A column WIDTH and a column COUNT together. The width alone, with the count
+         left at auto, let the columns keep whatever slack was left over, so the
+         masonry right edge stopped 43px short of the prose below it. Given both,
+         the count is a MAXIMUM: the browser takes min(count, what fits) and then
+         divides the width evenly between them, so the columns fill the measure
+         exactly and still reduce on a narrow window. Same cap as the grid, so
+         switching layout does not change how many courses are in a row.
+         Known limit: multicol BALANCES, and with six equal-height cards over
+         four columns 2/2/2/0 and 2/2/1/1 are both height-2 solutions, so the
+         browser may leave the last column empty. column-fill: auto would pack
+         left-to-right but needs a definite height, which a dashboard has not
+         got. The grid layout is the one to use if that matters. */
+      ${GRID} { columns: ${size}px ${cols} !important; column-gap: var(--bc-space-7, 16px) !important; display: block !important; }
+      /* Canvas's "Published Courses" heading is a normal in-flow child, so a
+         multi-column container flows it into the FIRST column and every card
+         below it starts one heading lower than the cards in columns two, three
+         and four. Spanning it lifts it out of the columns entirely. */
+      ${GRID} > :not([data-bc-carditem]) { column-span: all !important; }
+      /* Canvas fixes the card at 262px, and a multi-column column is wider than
+         that, so every masonry card sat left-aligned in its column with ~46px of
+         dead space to its right -- the same defect the grid layout had before
+         fillCell, in the one layout that never got it. */
+      ${fillCell}
+      .ic-DashboardCard, ${GRID} > [data-bc-carditem] {
+        break-inside: avoid !important;
+        margin-bottom: var(--bc-space-7, 16px) !important;
+      }`;
     return css;
   }
 
@@ -616,7 +795,10 @@
     BC.injector.setStyle("bc-dashboard-widgets", widgetCss);
 
     // layout CSS
-    BC.injector.setStyle("bc-dashboard-ui", layoutCss(d) + `
+    // The card count shapes the grid, so it has to be read BEFORE the sheet is
+    // written rather than after.
+    const cardNodes = document.querySelectorAll(".ic-DashboardCard");
+    BC.injector.setStyle("bc-dashboard-ui", layoutCss(d, cardNodes.length) + `
       .bc-inline-grade {
         position: absolute; top: 8px; right: 8px; z-index: 2;
         padding: 2px var(--bc-space-3, 8px); border-radius: 999px; font-size: var(--bc-text-2xs, 11px); font-weight: 700;
@@ -639,7 +821,7 @@
       .bc-badge.due { background: var(--bc-warn, #a16207); color: var(--bc-warn-fg, #fff); }
       .ic-DashboardCard { position: relative; }
 
-      .bc-course-search { margin: 0 0 var(--bc-space-5, 12px); }
+      .bc-course-search { margin: 0 0 var(--bc-space-7, 16px); }
       .bc-course-search-input {
         width: min(320px, 100%);
         padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px);
@@ -655,7 +837,16 @@
         position: absolute; left: 8px; bottom: 12px; z-index: 2;
         line-height: 0; pointer-events: none;
       }
-      .bc-gpa-card { margin-bottom: var(--bc-space-5, 12px); }
+      .bc-gpa-card { margin-bottom: var(--bc-space-7, 16px); }
+      /* Canvas's own sidebar blocks carry three different bottom margins, so the
+         gaps down the right column measured 23px then 14px. One value, on the
+         same scale as the column on the left. */
+      #right-side > *, .ic-app-main-content__secondary > * {
+        margin-bottom: var(--bc-space-7, 16px) !important;
+      }
+      #right-side > :last-child, .ic-app-main-content__secondary > :last-child {
+        margin-bottom: 0 !important;
+      }
     `);
 
     // Load whatever any ENABLED consumer needs, not just the one feature that
@@ -675,7 +866,7 @@
 
     // course cards
     if (d.autoHideConcluded) maybeFetchConcluded(true);
-    const cards = document.querySelectorAll(".ic-DashboardCard");
+    const cards = cardNodes;
     if (!cards.length) { unmarkCardGrid(); return; }
     markCardGrid(Array.from(cards));
 

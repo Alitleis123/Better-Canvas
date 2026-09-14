@@ -359,6 +359,11 @@
   --bc-text-xl:  calc(17px * var(--bc-font-scale));
   --bc-text-2xl: calc(20px * var(--bc-font-scale));
   --bc-text-figure: calc(24px * var(--bc-font-scale));
+  /* A page title. The scale stopped at --bc-text-figure, which is a NUMBER's
+     size -- the GPA stat, the Pomodoro clock -- so a page heading had nothing to
+     use and the dashboard's h1 kept Canvas's unscaled 28px/300. On the scale, so
+     the type-size setting reaches it like everything else. */
+  --bc-text-title: calc(26px * var(--bc-font-scale));
   --bc-line-height: 1.5;
   --bc-leading-tight: 1.25;
   --bc-leading-body: var(--bc-line-height);

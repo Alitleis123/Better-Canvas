@@ -285,6 +285,13 @@
         S.row({ label: "Card size", icon: "grid",
           control: S.select({ get: () => d.cardSize, set: (v) => store.set((x) => { x.dashboard.cardSize = v; }),
             options: [{value:"s",label:"Small"},{value:"m",label:"Medium"},{value:"l",label:"Large"}] }) }),
+        S.row({ label: "Cards per row", icon: "columns",
+          hint: "Caps the dashboard's width, so a laptop and an external monitor lay out the same.",
+          control: S.select({
+            get: () => String(d.maxColumns == null ? 5 : d.maxColumns),
+            set: (v) => store.set((x) => { x.dashboard.maxColumns = +v; }),
+            options: [{value:"3",label:"3"},{value:"4",label:"4"},{value:"5",label:"5"},
+                      {value:"6",label:"6"},{value:"8",label:"8"},{value:"0",label:"Fill the window"}] }) }),
         S.row({ label: "Corner radius", icon: "circle",
           control: S.slider({ get: () => d.cardRadius, set: (v) => store.set((x) => { x.dashboard.cardRadius = v; }), min:0, max:24, format:(v)=>v+"px" }) }),
         S.row({ label: "Lift on hover", icon: "trend", control: sw("hoverLift") }),

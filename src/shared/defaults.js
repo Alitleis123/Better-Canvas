@@ -81,6 +81,11 @@
       autoHideConcluded: true,
       layout: "grid",              // grid | list | masonry | compact
       cardSize: "m",               // s | m | l
+      // Cards per row, at most. 0 lifts the cap and lets the grid fill the
+      // window. This is the control that makes a 15", a 24" and a 27" render the
+      // same dashboard: above the cap the layout depends on your course count
+      // rather than on which monitor you happen to be sitting at.
+      maxColumns: 5,               // 0 = fill the window, else 3-12
       cardRadius: 8,               // 0-24
       hoverLift: true,
       showInlineGrade: false,
