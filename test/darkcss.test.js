@@ -199,4 +199,50 @@ module.exports = {
     assert.noMatch(css, /ic-DashboardCard__header_hero/,
       "the course colour block should be left to the card's own styling");
   },
+
+  // Chrome discards the REMAINDER of a stylesheet at a parse error, so one bad
+  // selector silently disables every rule after it. The skin transform used to
+  // split selectors on every comma and rejoin them, which shredded the first
+  // selector holding a comma inside a string:
+  //
+  //     html.bc-dark [style*="background-color: rgb(255, 255, 255)"]
+  //
+  // became four fragments, one an unterminated string, and 11,820 of 21,743
+  // characters stopped applying. Visible result: the dashboard header kept a
+  // white background and took light text at 1.22:1, and the course card bodies
+  // stayed white. Every node test passed throughout.
+  "the skin transform cannot corrupt the stylesheet"() {
+    const src = read("src/content/features/theming.js");
+    assert.ok(!/sel\.split\(","\)/.test(src),
+      "splitting a selector on commas breaks any selector with a comma in a string");
+    assert.ok(/html:is\(\.bc-dark, \.bc-skin\)/.test(src),
+      "the dark rules should reach skins through :is(), which needs no parsing");
+
+    // And check the real output of the real transform over the real sheet.
+    const { createSandbox, loadCore, load } = require("./harness");
+    const sb = createSandbox();
+    loadCore(sb);
+    sb.BC.registry = { register() {} };
+    sb.BC.injector = { setStyle() {}, removeNode() {}, ensureNode() {} };
+    sb.BC.lifecycle = { pageBag: () => ({ once() {}, timeout() {} }) };
+    load(sb, "src/content/features/theming.js");
+    const sheet = sb.BC.theming.staticSheet();
+    const raw = sb.BC.theming.rawStaticCss();
+    for (const [name, ch] of [["braces", "{}"], ["parens", "()"], ["brackets", "[]"]]) {
+      const open = (sheet.match(new RegExp("\\" + ch[0], "g")) || []).length;
+      const close = (sheet.match(new RegExp("\\" + ch[1], "g")) || []).length;
+      assert.equal(open, close, name + " are unbalanced in the emitted sheet");
+    }
+    const quotes = (sheet.match(/"/g) || []).length;
+    assert.equal(quotes % 2, 0, "the emitted sheet has an odd number of quotes, so a string is unterminated");
+    // Whatever the transform does, it must not lose rules.
+    assert.ok(sheet.split("{").length >= raw.split("{").length,
+      "the transform dropped rule blocks");
+    // :is() rewrites in place rather than appending a second copy of every
+    // selector list. staticSheet() also carries the token layer, so that is
+    // subtracted to compare like with like.
+    const transformed = sheet.length - sb.BC.tokens.staticCss().length - 1;
+    assert.ok(transformed < raw.length * 1.3,
+      "the transform should rewrite, not duplicate; " + transformed + " vs " + raw.length);
+  },
 };

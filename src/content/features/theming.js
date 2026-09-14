@@ -207,15 +207,26 @@
   //
   // Rules tagged /* dark-only */ are skipped: brightening a branded logo is a
   // statement about darkness, not about which surface something is.
+  // :is(), not a duplicated selector list. The first version split the selector
+  // on every comma and rejoined it with skin-prefixed copies, which corrupted
+  // the very first selector containing a comma inside a string:
+  //
+  //     html.bc-dark [style*="background-color: rgb(255, 255, 255)"]
+  //
+  // split into four fragments, one of them an unterminated string. Chrome
+  // discards the remainder of a stylesheet at a parse error, so from that rule
+  // on, 11,820 of 21,743 characters never applied: the dashboard header kept its
+  // white background and got light text at 1.22:1, the course card bodies stayed
+  // white, and the right sidebar lost its cards.
+  //
+  // Replacing the class in place needs no parsing at all. :is() takes the
+  // highest specificity among its arguments and both are classes, so
+  // html:is(.bc-dark, .bc-skin) weighs exactly what html.bc-dark did, and the
+  // sheet gets smaller rather than twice the size.
   function forSkins(css) {
     return css.replace(/(\/\* dark-only \*\/\s*)?([^{}]+)\{([^{}]*)\}/g, (full, darkOnly, sel, body) => {
-      if (darkOnly) return full;
-      const parts = sel.split(",").map((s) => s.trim()).filter(Boolean);
-      if (!parts.some((s) => s.includes("html.bc-dark"))) return full;
-      const extra = parts
-        .filter((s) => s.includes("html.bc-dark"))
-        .map((s) => s.replace(/html\.bc-dark/g, "html.bc-skin"));
-      return parts.concat(extra).join(", ") + " {" + body + "}";
+      if (darkOnly || !sel.includes("html.bc-dark")) return full;
+      return sel.replace(/html\.bc-dark/g, "html:is(.bc-dark, .bc-skin)") + "{" + body + "}";
     });
   }
 
