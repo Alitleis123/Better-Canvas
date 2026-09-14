@@ -63,10 +63,13 @@ body {
 .bc-actions { display: flex; gap: var(--bc-space-2, 6px); }
 .bc-btn {
   flex: 1; padding: var(--bc-space-3, 8px);
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--bc-space-2, 6px);
   border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-md, 8px);
   background: var(--bc-surface-2, #fff); color: var(--bc-text, #1f2937);
   cursor: pointer; font-family: inherit; font-weight: var(--bc-weight-semibold, 600);
 }
+/* The icon rides with the label rather than sitting on the text baseline. */
+.bc-btn-ic { display: inline-flex; line-height: 0; flex: 0 0 auto; }
 .bc-btn:hover { background: var(--bc-surface-4, rgba(0,0,0,.04)); }
 .bc-btn--primary {
   background: var(--bc-accent, #4f46e5); color: var(--bc-accent-contrast, #fff); border: none;

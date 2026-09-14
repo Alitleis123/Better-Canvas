@@ -5,21 +5,29 @@
   BC.features = BC.features || {};
 
   const CSS = `
-    .bc-files-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
-    .bc-files-head input, .bc-files-head select { padding: 4px 8px; border-radius: var(--bc-radius-md, 6px); border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
-    .bc-files-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
+    .bc-files-head { display: flex; gap: var(--bc-space-3, 8px); align-items: center; margin-bottom: var(--bc-space-3, 8px); }
+    .bc-files-head input, .bc-files-head select { padding: var(--bc-space-1, 4px) var(--bc-space-3, 8px); border-radius: var(--bc-radius-md, 6px); border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit; }
+    .bc-files-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--bc-space-2, 6px); }
     .bc-file {
       display: grid; grid-template-columns: 24px 1fr auto; gap: var(--bc-space-2, 6px);
       padding: var(--bc-space-2, 6px) var(--bc-space-3, 8px);
       border-radius: var(--bc-radius-md, 6px); background: var(--bc-surface-3, #f7fafc);
     }
     .bc-file a { color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .bc-file-ic { text-align: center; opacity: .7; }
-    .bc-file-star {
-      cursor: pointer; opacity: .6; background: none; border: 0; padding: 0;
-      color: inherit; font: inherit; line-height: 1;
+    /* An SVG is not text, so text-align no longer places it; and a token beats
+       opacity, which dimmed the drawn icon unevenly against the two surfaces
+       this list renders on. */
+    .bc-file-ic {
+      display: inline-flex; align-items: center; justify-content: center;
+      line-height: 0; color: var(--bc-muted, #6b7280);
     }
-    .bc-file-star.on { opacity: 1; }
+    .bc-file-star {
+      cursor: pointer; background: none; border: 0; padding: 0;
+      color: var(--bc-muted, #6b7280); font: inherit; line-height: 0;
+      display: inline-flex; align-items: center;
+    }
+    .bc-file-star:hover { color: var(--bc-text, #1b2430); }
+    .bc-file-star.on { color: var(--bc-warn, #a16207); }
     .bc-file-star:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px; }
     .bc-files-list .bc-empty, .bc-files-list .bc-error, .bc-files-list .bc-sk { grid-column: 1 / -1; }
   `;
@@ -51,17 +59,24 @@
     return all;
   }
 
-  function iconFor(f) {
+  // Was an emoji table: a page, a picture frame, a clapperboard, a musical note,
+  // a memo, a bar chart, a vice and a paperclip. Eight glyphs from four
+  // different emoji sets, each rendering in its own colours at its own optical
+  // weight, down the left edge of a list whose only other ink was grey text.
+  function iconNameFor(f) {
     const ct = (f["content-type"] || f.content_type || "").toLowerCase();
-    if (ct.includes("pdf")) return "📄";
-    if (ct.startsWith("image")) return "🖼";
-    if (ct.startsWith("video")) return "🎬";
-    if (ct.startsWith("audio")) return "🎵";
-    if (ct.includes("word") || ct.includes("doc")) return "📝";
-    if (ct.includes("sheet") || ct.includes("excel")) return "📊";
-    if (ct.includes("zip") || ct.includes("compressed")) return "🗜";
-    return "📎";
+    if (ct.includes("pdf")) return "file-text";
+    if (ct.startsWith("image")) return "image";
+    if (ct.startsWith("video")) return "video";
+    if (ct.startsWith("audio")) return "audio";
+    if (ct.includes("word") || ct.includes("doc")) return "file-text";
+    if (ct.includes("sheet") || ct.includes("excel") || ct.includes("csv")) return "sheet";
+    if (ct.includes("zip") || ct.includes("compressed")) return "archive";
+    if (ct.includes("presentation") || ct.includes("powerpoint")) return "image";
+    return "paperclip";
   }
+
+  function iconFor(f) { return BC.icons.svg(iconNameFor(f), { size: 14 }); }
 
   function render(mount, settings) {
     const s = settings.files || {};
@@ -123,7 +138,7 @@
         <div class="bc-file">
           <span class="bc-file-ic">${iconFor(f)}</span>
           <a href="${BC.util.escapeHtml(f.url || f.html_url || "#")}" target="_blank" rel="noopener" title="${BC.util.escapeHtml(f.courseName || "")}">${BC.util.escapeHtml(f.display_name || "")}</a>
-          <button type="button" class="bc-file-star ${stars.has(String(f.id)) ? "on" : ""}" data-id="${BC.util.escapeHtml(f.id)}" aria-pressed="${stars.has(String(f.id)) ? "true" : "false"}" aria-label="Star ${BC.util.escapeHtml(f.display_name || "file")}">★</button>
+          <button type="button" class="bc-file-star ${stars.has(String(f.id)) ? "on" : ""}" data-id="${BC.util.escapeHtml(f.id)}" aria-pressed="${stars.has(String(f.id)) ? "true" : "false"}" aria-label="Star ${BC.util.escapeHtml(f.display_name || "file")}">${BC.icons.svg(stars.has(String(f.id)) ? "star-filled" : "star", { size: 14 })}</button>
         </div>
       `).join("");
     }

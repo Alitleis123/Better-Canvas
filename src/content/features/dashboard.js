@@ -121,7 +121,7 @@
       ${fillCell}
       ${spine}`;
     if (d.layout === "list") css += `${spine}
-      ${GRID} { display: flex !important; flex-direction: column !important; gap: 8px !important; }
+      ${GRID} { display: flex !important; flex-direction: column !important; gap: var(--bc-space-3, 8px) !important; }
       ${GRID} > * { width: 100% !important; }
       .ic-DashboardCard { display: flex !important; flex-direction: row !important; height: 90px !important; }
       .ic-DashboardCard__header { flex: 0 0 120px !important; }
@@ -133,8 +133,8 @@
       .ic-DashboardCard { max-height: 120px !important; }
       .ic-DashboardCard__header_image { height: 40px !important; }`;
     if (d.layout === "masonry") css += `${spine}
-      ${GRID} { columns: ${Math.max(2, Math.floor(1200/size))} auto !important; column-gap: 14px !important; display: block !important; }
-      .ic-DashboardCard { break-inside: avoid !important; margin-bottom: 14px !important; }`;
+      ${GRID} { columns: ${Math.max(2, Math.floor(1200/size))} auto !important; column-gap: var(--bc-space-6, 14px) !important; display: block !important; }
+      .ic-DashboardCard { break-inside: avoid !important; margin-bottom: var(--bc-space-6, 14px) !important; }`;
     return css;
   }
 
@@ -336,7 +336,7 @@
     const label = n + " item" + (n === 1 ? "" : "s") + " due in the next 24 hours";
     const b = document.createElement("span");
     b.className = "bc-badge due";
-    b.textContent = "⏰ " + n;
+    b.innerHTML = BC.icons.svg("clock", { size: 11 }) + '<span class="bc-num">' + n + "</span>";
     b.title = label;
     b.setAttribute("aria-label", label);   // the bare number conveys nothing alone
     strip.replaceChildren(b);
@@ -501,7 +501,7 @@
     BC.injector.setStyle("bc-dashboard-ui", layoutCss(d) + `
       .bc-inline-grade {
         position: absolute; top: 8px; right: 8px; z-index: 2;
-        padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+        padding: 2px var(--bc-space-3, 8px); border-radius: 999px; font-size: var(--bc-text-2xs, 11px); font-weight: 700;
         /* background + color are set from --bc-grade-* per band in JS */
         box-shadow: var(--bc-shadow-1, 0 1px 4px rgba(0,0,0,.2));
       }
@@ -510,12 +510,12 @@
         height: 100%; background: var(--bc-accent-stroke, var(--bc-accent, #0374b5)); width: 0%;
         transition: width var(--bc-dur-4, 400ms) var(--bc-ease-out, ease);
       }
-      .bc-badges { position: absolute; left: 6px; bottom: 6px; display: flex; gap: 4px; }
+      .bc-badges { position: absolute; left: 6px; bottom: 6px; display: flex; gap: var(--bc-space-1, 4px); }
       .bc-badge {
         font-size: var(--bc-text-3xs, 10px);
         background: var(--bc-surface-inverse, rgba(0,0,0,.65));
         color: var(--bc-text-inverse, #fff);
-        padding: 2px 6px; border-radius: var(--bc-radius-pill, 999px);
+        padding: 2px var(--bc-space-2, 6px); border-radius: var(--bc-radius-pill, 999px);
         font-variant-numeric: tabular-nums;
       }
       .bc-badge.due { background: var(--bc-warn, #a16207); color: var(--bc-warn-fg, #fff); }

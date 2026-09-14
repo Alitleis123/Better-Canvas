@@ -10,10 +10,10 @@
 
   const CSS = `
     .bc-tts-btn {
-      display: inline-flex; align-items: center; gap: 4px;
+      display: inline-flex; align-items: center; gap: var(--bc-space-1, 4px);
       background: transparent; border: 1px solid var(--bc-border, #e5e7eb);
-      border-radius: var(--bc-radius-md, 6px); padding: 2px 6px; font-size: 12px; cursor: pointer;
-      color: inherit; margin-left: 6px;
+      border-radius: var(--bc-radius-md, 6px); padding: 2px var(--bc-space-2, 6px); font-size: var(--bc-text-xs, 12px); cursor: pointer;
+      color: inherit; margin-left: var(--bc-space-2, 6px);
     }
     .bc-tts-btn.playing { background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); }
   `;
@@ -36,7 +36,7 @@
       btn.type = "button";
       btn.setAttribute("data-bc-node", "bc-tts-btn");   // declared below, so teardown removes it
       btn.setAttribute("aria-pressed", "false");
-      btn.textContent = "🔊 Speak";
+      btn.innerHTML = BC.icons.svg("speaker", { size: 13 }) + "<span>Speak</span>";
       btn.addEventListener("click", () => {
         try {
           if (window.speechSynthesis.speaking) {

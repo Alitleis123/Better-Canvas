@@ -45,13 +45,14 @@
     </section>
 
     <div class="bc-actions">
-      <button id="open-options" class="bc-btn bc-btn--primary">Open settings</button>
-      <button id="open-palette" class="bc-btn" title="Cmd/Ctrl+K on Canvas">Palette</button>
+      <button id="open-options" class="bc-btn bc-btn--primary" data-icon="settings">Open settings</button>
+      <button id="open-palette" class="bc-btn" data-icon="search" title="Cmd/Ctrl+K on Canvas">Palette</button>
     </div>
     <p class="bc-note">Private by design — nothing leaves your browser.</p>
 
     <script src="../shared/defaults.js"></script>
     <script src="../shared/themes.js"></script>
+    <script src="../shared/icons.js"></script>
     <script src="../content/core/util.js"></script>
     <!-- isDarkActive() needs BC.dt to evaluate a scheduled dark window; without
          it the popup silently reported "not dark" and rendered light while the
@@ -59,6 +60,8 @@
     <script src="../content/core/datetime.js"></script>
     <script src="../content/core/color.js"></script>
     <script src="../shared/tokens.js"></script>
+    <script src="../shared/skins.js"></script>
+    <script src="../shared/skin-catalog.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

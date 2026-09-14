@@ -50,29 +50,29 @@
   };
 
   const CSS = `
-    .bc-grade-tools { margin: 16px 0; }
-    .bc-grade-tools h3 { margin: 0 0 10px; font-size: 15px; }
-    .bc-gt-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .bc-grade-tools { margin: var(--bc-space-7, 16px) 0; }
+    .bc-grade-tools h3 { margin: 0 0 var(--bc-space-4, 10px); font-size: var(--bc-text-lg, 15px); }
+    .bc-gt-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--bc-space-5, 12px); }
     .bc-gt-card { padding: var(--bc-space-4, 10px); border-radius: var(--bc-radius-md, 8px); background: var(--bc-surface-3, #f7fafc); }
-    .bc-gt-total { font-size: 24px; font-weight: 800; }
-    .bc-gt-label { color: var(--bc-muted, #6b7280); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-    .bc-gt-goal { display: flex; align-items: center; gap: 6px; }
-    .bc-gt-goal input { padding: 4px; width: 68px; border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-sm, 4px); background: transparent; color: inherit; }
-    .bc-gt-donut { display: flex; align-items: center; gap: 8px; }
-    .bc-gt-legend li { list-style: none; font-size: 12px; }
-    .bc-gt-legend span { display: inline-block; width: 8px; height: 8px; border-radius: var(--bc-radius-sm, 2px); margin-right: 4px; }
-    .bc-gt-missing { color: var(--bc-danger, #b91c1c); font-size: var(--bc-text-xs, 12px); margin-top: 6px; }
-    .bc-gt-final { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
-    .bc-gt-final input { padding: 4px; width: 68px; border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-sm, 4px); background: transparent; color: inherit; }
-    .bc-gt-trend { margin-top: 12px; }
-    .bc-gt-trend-meta { display: flex; gap: 14px; font-size: 11px; color: var(--bc-muted, #6b7280); margin-top: 2px; }
-    .bc-rubric { margin: 0 0 16px; }
-    .bc-rubric h3 { margin: 0 0 8px; font-size: 15px; }
-    .bc-rubric-crit { margin: 10px 0; }
-    .bc-rubric-crit label { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; margin-bottom: 2px; }
+    .bc-gt-total { font-size: var(--bc-text-figure, 24px); font-weight: 800; }
+    .bc-gt-label { color: var(--bc-muted, #6b7280); font-size: var(--bc-text-xs, 12px); text-transform: uppercase; letter-spacing: .04em; }
+    .bc-gt-goal { display: flex; align-items: center; gap: var(--bc-space-2, 6px); }
+    .bc-gt-goal input { padding: var(--bc-space-1, 4px); width: 68px; border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-sm, 4px); background: transparent; color: inherit; }
+    .bc-gt-donut { display: flex; align-items: center; gap: var(--bc-space-3, 8px); }
+    .bc-gt-legend li { list-style: none; font-size: var(--bc-text-xs, 12px); }
+    .bc-gt-legend span { display: inline-block; width: 8px; height: 8px; border-radius: var(--bc-radius-sm, 2px); margin-right: var(--bc-space-1, 4px); }
+    .bc-gt-missing { color: var(--bc-danger, #b91c1c); font-size: var(--bc-text-xs, 12px); margin-top: var(--bc-space-2, 6px); }
+    .bc-gt-final { display: flex; gap: var(--bc-space-3, 8px); align-items: center; margin-top: var(--bc-space-3, 8px); }
+    .bc-gt-final input { padding: var(--bc-space-1, 4px); width: 68px; border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-sm, 4px); background: transparent; color: inherit; }
+    .bc-gt-trend { margin-top: var(--bc-space-5, 12px); }
+    .bc-gt-trend-meta { display: flex; gap: var(--bc-space-6, 14px); font-size: var(--bc-text-2xs, 11px); color: var(--bc-muted, #6b7280); margin-top: 2px; }
+    .bc-rubric { margin: 0 0 var(--bc-space-7, 16px); }
+    .bc-rubric h3 { margin: 0 0 var(--bc-space-3, 8px); font-size: var(--bc-text-lg, 15px); }
+    .bc-rubric-crit { margin: var(--bc-space-4, 10px) 0; }
+    .bc-rubric-crit label { display: flex; justify-content: space-between; gap: var(--bc-space-3, 8px); font-size: var(--bc-text-xs, 12px); margin-bottom: 2px; }
     .bc-rubric-crit input[type="range"] { width: 100%; accent-color: var(--bc-accent, #4f46e5); }
-    .bc-rubric-total { margin-top: 10px; font-weight: 700; }
-    .bc-rubric-impact { font-size: 12px; color: var(--bc-muted, #6b7280); margin-top: 2px; }
+    .bc-rubric-total { margin-top: var(--bc-space-4, 10px); font-weight: 700; }
+    .bc-rubric-impact { font-size: var(--bc-text-xs, 12px); color: var(--bc-muted, #6b7280); margin-top: 2px; }
   `;
 
   // No module-level Map. BC.api.assignmentGroups already goes through
@@ -226,7 +226,7 @@
           <div class="bc-gt-card">
             <div class="bc-gt-label">Weights</div>
             ${settings.grades.showWeightDonut ? donutSVG(groups, hasWeights) : ""}
-            ${settings.grades.showMissingWarning && missing.length ? `<div class="bc-gt-missing">⚠ ${missing.length} missing assignment${missing.length > 1 ? "s" : ""}</div>` : ""}
+            ${settings.grades.showMissingWarning && missing.length ? `<div class="bc-gt-missing">${BC.icons.svg("alert", { size: 12 })} ${missing.length} missing assignment${missing.length > 1 ? "s" : ""}</div>` : ""}
           </div>
         </div>
         ${settings.grades.showTrendChart ? trendSVG(hist) : ""}
@@ -237,7 +237,11 @@
       function refreshGoalStatus() {
         const g = parseFloat(goalInp.value);
         if (!isFinite(g) || total == null) { goalStatus.textContent = ""; return; }
-        goalStatus.textContent = total >= g ? "  ✓ on track" : "  ✗ below goal";
+        // innerHTML, because the mark is drawn now. A check and a cross were the
+        // two glyphs most likely to render as boxes in a condensed UI font.
+        goalStatus.innerHTML = total >= g
+          ? BC.icons.svg("check", { size: 12 }) + "<span>on track</span>"
+          : BC.icons.svg("close", { size: 12 }) + "<span>below goal</span>";
         goalStatus.style.color = total >= g ? "var(--bc-success)" : "var(--bc-danger)";
       }
       refreshGoalStatus();

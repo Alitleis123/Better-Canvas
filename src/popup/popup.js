@@ -29,8 +29,24 @@
     document.documentElement.classList.toggle("bc-dark", dark);
   }
 
+  // The popup's two buttons were the only chrome in the extension still relying
+  // on a bare word. `data-icon` keeps the markup declarative and the geometry in
+  // the shared set.
+  function paintIcons() {
+    for (const btn of document.querySelectorAll("[data-icon]")) {
+      const name = btn.getAttribute("data-icon");
+      if (!BC.icons || !BC.icons.has(name) || btn.querySelector("svg")) continue;
+      const ic = document.createElement("span");
+      ic.className = "bc-btn-ic";
+      ic.setAttribute("aria-hidden", "true");
+      ic.innerHTML = BC.icons.svg(name, { size: 14 });
+      btn.insertBefore(ic, btn.firstChild);
+    }
+  }
+
   function render() {
     paintTokens();
+    paintIcons();
     $("enabled").checked = settings.enabled;
     $("dashEnabled").checked = settings.dashboard.enabled;
     $("darkMode").value = settings.theming.darkMode;
@@ -72,7 +88,7 @@
     const origin = url.origin + "/*";
     chrome.tabs.sendMessage(tab.id, { type: "bc:ping" }, (resp) => {
       const active = !chrome.runtime.lastError && resp && resp.canvas;
-      if (active) { box.classList.add("is-active"); box.textContent = "Active on this Canvas page ✓"; return; }
+      if (active) { box.classList.add("is-active"); box.innerHTML = BC.icons.svg("check-circle", { size: 13 }) + "<span>Active on this Canvas page</span>"; return; }
       if (isInstructure) { box.textContent = "Canvas detected — reload the page if controls don't appear."; return; }
       chrome.permissions.contains({ origins: [origin] }, (has) => {
         box.textContent = has ? "Enabled here. Reload the page to activate." : "Using a custom school Canvas domain?";

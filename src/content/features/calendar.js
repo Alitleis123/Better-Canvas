@@ -64,11 +64,11 @@
       border-radius: var(--bc-radius-lg, 10px);
       padding: var(--bc-space-5, 12px); margin-bottom: var(--bc-space-5, 12px);
     }
-    .bc-mini-cal h4 { margin: 0 0 8px; font-size: 14px; }
+    .bc-mini-cal h4 { margin: 0 0 var(--bc-space-3, 8px); font-size: var(--bc-text-md, 14px); }
     .bc-mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
     .bc-mini-cell {
       aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center;
-      font-size: 12px; border-radius: var(--bc-radius-sm, 4px); background: var(--bc-surface-3, #f7fafc); color: var(--bc-text, inherit);
+      font-size: var(--bc-text-xs, 12px); border-radius: var(--bc-radius-sm, 4px); background: var(--bc-surface-3, #f7fafc); color: var(--bc-text, inherit);
       position: relative;
     }
     .bc-mini-cell.today { background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); }

@@ -42,7 +42,7 @@
     .bc-toast .bc-toast-msg { color: rgba(255,255,255,.92); margin-top: 2px; font-size: var(--bc-text-sm, 13px); }
     .bc-toast .bc-toast-close {
       background: none; border: 0; color: #fff; cursor: pointer;
-      font-size: 16px; line-height: 1; border-radius: var(--bc-radius-sm, 4px); padding: 0 3px;
+      font-size: var(--bc-text-xl, 16px); line-height: 1; border-radius: var(--bc-radius-sm, 4px); padding: 0 3px;
     }
     .bc-toast .bc-toast-close:hover { background: rgba(255,255,255,.16); }
     .bc-toast .bc-toast-close:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }

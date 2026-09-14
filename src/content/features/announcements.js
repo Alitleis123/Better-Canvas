@@ -16,8 +16,8 @@
       background: var(--bc-surface-3, #f7fafc); margin-bottom: var(--bc-space-2, 6px);
     }
     .bc-ann-item .bc-ann-title { font-weight: 600; }
-    .bc-ann-item .bc-ann-meta  { font-size: 12px; color: var(--bc-muted, #6b7280); }
-    .bc-ann-empty { color: var(--bc-muted, #6b7280); padding: 6px 0; }
+    .bc-ann-item .bc-ann-meta  { font-size: var(--bc-text-xs, 12px); color: var(--bc-muted, #6b7280); }
+    .bc-ann-empty { color: var(--bc-muted, #6b7280); padding: var(--bc-space-2, 6px) 0; }
   `;
 
   // Concurrency-limited like every other cross-course fan-out in the codebase.

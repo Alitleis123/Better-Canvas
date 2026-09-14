@@ -9,11 +9,11 @@
   BC.features = BC.features || {};
 
   const CSS = `
-    .bc-mod-bar { display: flex; align-items: center; gap: 8px; margin: 6px 12px 8px; }
+    .bc-mod-bar { display: flex; align-items: center; gap: var(--bc-space-3, 8px); margin: var(--bc-space-2, 6px) var(--bc-space-5, 12px) var(--bc-space-3, 8px); }
     .bc-mod-track { flex: 1; height: 6px; border-radius: 999px; background: var(--bc-surface-3, #e5e7eb); overflow: hidden; }
     .bc-mod-fill { height: 100%; background: var(--bc-accent, #0374b5); border-radius: 999px; transition: width .4s ease; }
     .bc-mod-fill.done { background: var(--bc-success, #047857); }
-    .bc-mod-label { font-size: 12px; color: var(--bc-muted, #6b7280); white-space: nowrap; }
+    .bc-mod-label { font-size: var(--bc-text-xs, 12px); color: var(--bc-muted, #6b7280); white-space: nowrap; }
     .bc-mod-summary {
       display: flex; align-items: center; gap: var(--bc-space-5, 12px);
       margin: var(--bc-space-3, 8px) 0;

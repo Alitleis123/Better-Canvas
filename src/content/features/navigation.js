@@ -52,7 +52,7 @@
     list.style.display = "flex"; list.style.flexDirection = "column";
 
     syncCustomLinks("bc-nav-custom", list, nav.customLinks,
-      "display:flex; align-items:center; gap:8px; padding:8px 10px; color:inherit; text-decoration:none;");
+      "display:flex; align-items:center; gap:var(--bc-space-3, 8px); padding:var(--bc-space-3, 8px) var(--bc-space-4, 10px); color:inherit; text-decoration:none;");
   }
 
   function applyCourseNav(nav) {
@@ -69,13 +69,13 @@
     list.style.display = "flex"; list.style.flexDirection = "column";
 
     syncCustomLinks("bc-course-custom", list, nav.customLinks,
-      "display:block; padding:6px 10px; color:inherit; text-decoration:none; border-radius:var(--bc-radius-md, 6px);");
+      "display:block; padding:var(--bc-space-2, 6px) var(--bc-space-4, 10px); color:inherit; text-decoration:none; border-radius:var(--bc-radius-md, 6px);");
   }
 
   function applyBreadcrumbs(mode) {
     let css = "";
     if (mode === "hidden") css = ".ic-app-crumbs { display: none !important; }";
-    else if (mode === "compact") css = ".ic-app-crumbs { font-size: 12px !important; padding: 4px 8px !important; }";
+    else if (mode === "compact") css = ".ic-app-crumbs { font-size: var(--bc-text-xs, 12px) !important; padding: var(--bc-space-1, 4px) var(--bc-space-3, 8px) !important; }";
     BC.injector.setStyle("bc-breadcrumbs", css);
   }
 

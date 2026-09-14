@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Better Canvas — icon sheet</title>
+<style>
+  body { margin: 0; padding: 24px; background: #f6f7fb; color: #1b2430;
+         font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  h1 { font-size: 15px; margin: 0 0 4px; }
+  p  { margin: 0 0 20px; color: #6b7280; }
+  .sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 4px; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 6px;
+          padding: 10px 4px; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; }
+  .cell code { font-size: 10px; color: #6b7280; text-align: center; word-break: break-all; }
+  .row { display: flex; align-items: flex-end; gap: 10px; }
+  /* The three sizes the UI actually renders at: in a row, in a tab rail, and big
+     enough to see the geometry. A path that reads at 48 and mushes at 16 is a
+     path that fails in the product. */
+  .s16 { color: #1b2430; }
+  .s24 { color: #1b2430; }
+  .s48 { color: #4f46e5; }
+  .dark { margin-top: 28px; padding: 20px; background: #16181d; border-radius: 12px; color: #e7e9ee; }
+  .dark .cell { background: #22252c; border-color: #343842; }
+  .dark .cell code { color: #9aa1ad; }
+  .missing { outline: 2px solid #b91c1c; }
+</style>
+</head>
+<body>
+<h1>Icon sheet</h1>
+<p>Every icon at 16 / 24 / 48px, light and dark. Red outline = empty render.</p>
+<div class="sheet" id="light"></div>
+<div class="dark"><div class="sheet" id="dark"></div></div>
+
+<script src="../../src/content/core/util.js"></script>
+<script src="../../src/shared/icons.js"></script>
+<script>
+  for (const host of [document.getElementById("light"), document.getElementById("dark")]) {
+    for (const name of BC.icons.names()) {
+      const cell = document.createElement("div");
+      cell.className = "cell";
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML =
+        '<span class="s16">' + BC.icons.svg(name, { size: 16 }) + "</span>" +
+        '<span class="s24">' + BC.icons.svg(name, { size: 24 }) + "</span>" +
+        '<span class="s48">' + BC.icons.svg(name, { size: 48 }) + "</span>";
+      if (!BC.icons.svg(name)) cell.classList.add("missing");
+      const code = document.createElement("code");
+      code.textContent = name;
+      cell.appendChild(row); cell.appendChild(code);
+      host.appendChild(cell);
+    }
+  }
+  document.title = "Icon sheet — " + BC.icons.names().length + " icons";
+</script>
+</body>
+</html>

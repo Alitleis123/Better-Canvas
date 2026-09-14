@@ -12,7 +12,7 @@
   const CSS = `
     .bc-focus #left-side, .bc-focus #right-side, .bc-focus .ic-app-header,
     .bc-focus .ic-app-crumbs, .bc-focus header { display: none !important; }
-    .bc-focus #main, .bc-focus #wrapper { margin: 0 !important; padding: 20px !important; max-width: 900px !important; }
+    .bc-focus #main, .bc-focus #wrapper { margin: 0 !important; padding: var(--bc-space-8, 20px) !important; max-width: 900px !important; }
 
     .bc-ruler {
       position: fixed; left: 0; right: 0; height: 30px;
@@ -100,12 +100,12 @@
       background: var(--bc-note-bg, #fffbe6);
       color: var(--bc-note-text, #1f1a05);
       border: 1px solid var(--bc-note-border, #f6d67a);
-      padding: 6px 8px; border-radius: var(--bc-radius-md, 6px);
+      padding: var(--bc-space-2, 6px) var(--bc-space-3, 8px); border-radius: var(--bc-radius-md, 6px);
       font-family: var(--bc-font-sans); font-size: var(--bc-text-sm, 13px); min-width: 140px;
       box-shadow: var(--bc-shadow-2, 0 4px 12px rgba(0,0,0,.14));
       resize: both; overflow: auto;
     }
-    .bc-note-head { display: flex; justify-content: space-between; align-items: center; font-size: var(--bc-text-2xs, 11px); margin-bottom: 4px; cursor: move; }
+    .bc-note-head { display: flex; justify-content: space-between; align-items: center; font-size: var(--bc-text-2xs, 11px); margin-bottom: var(--bc-space-1, 4px); cursor: move; }
     .bc-note textarea { width: 100%; min-height: 60px; border: 0; background: transparent; resize: none; outline: none; font-family: inherit; }
     .bc-note-x { background: none; border: 0; cursor: pointer; }
 
@@ -114,7 +114,7 @@
       font-size: var(--bc-text-2xs, 11px); color: var(--bc-muted, #6b7280);
       /* was rgba(255,255,255,.85) — a white pill floating in dark mode */
       background: var(--bc-surface-2, #fff);
-      padding: 2px 6px; border-radius: var(--bc-radius-sm, 4px);
+      padding: 2px var(--bc-space-2, 6px); border-radius: var(--bc-radius-sm, 4px);
       pointer-events: none; font-variant-numeric: tabular-nums;
     }
   `;
