@@ -47,7 +47,26 @@ chrome.runtime.onStartup.addListener(syncRegistration);
 if (chrome.permissions && chrome.permissions.onAdded) chrome.permissions.onAdded.addListener(syncRegistration);
 if (chrome.permissions && chrome.permissions.onRemoved) chrome.permissions.onRemoved.addListener(syncRegistration);
 
-// Popup-triggered re-sync.
+// One click, one destination. The toolbar button used to open a small popup
+// whose main control was a button that opened the real settings, so reaching any
+// actual setting took two clicks and a decision. There is no default_popup now:
+// the click lands here, and this opens the drawer in place on a Canvas tab, or
+// the full settings page anywhere else.
+//
+// The options page (not this worker) owns the custom-domain permission prompt,
+// because chrome.permissions.request needs a user gesture in a foreground
+// extension page and a service worker is neither.
+chrome.action.onClicked.addListener((tab) => {
+  const fallback = () => chrome.runtime.openOptionsPage();
+  if (!tab || tab.id == null) return fallback();
+  // The callback is required: on a tab with no content script this raises an
+  // unchecked lastError, and its absence is also how we detect that case.
+  chrome.tabs.sendMessage(tab.id, { type: "bc:openSettings" }, (resp) => {
+    if (chrome.runtime.lastError || !resp || !resp.ok) fallback();
+  });
+});
+
+// Re-sync after the options page grants a custom domain.
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || !msg.type) return;
   if (msg.type === "bc:syncRegistration") { syncRegistration().then(() => sendResponse({ ok: true })); return true; }

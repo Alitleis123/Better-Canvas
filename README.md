@@ -3,6 +3,7 @@
 The most feature-complete browser extension for Instructure Canvas — free forever, local-only, no accounts, no telemetry.
 
 - **Cross-browser.** Chrome (Manifest V3), Firefox, Zen.
+- **One click to settings.** The toolbar button opens the settings drawer on the Canvas page you are looking at, or the full settings page anywhere else. There is no intermediate popup.
 - **Same-origin only.** Every Canvas API call uses your existing session — nothing is sent off-domain.
 - **No paywalls, no accounts.** Every feature ships free.
 
@@ -57,7 +58,7 @@ the real engine, and `test/panel.test.js` holds them there.
 ## Features
 
 ### Skins
-Not a colour scheme — a whole look. A skin carries surface art, per-card art, nav treatment, type and palette, and drives the same `--bc-*` tokens everything else reads, so one click restyles the page, the drawer, the popup and the planner together.
+Not a colour scheme — a whole look. A skin carries surface art, per-card art, nav treatment, type and palette, and drives the same `--bc-*` tokens everything else reads, so one click restyles the page, the drawer, the planner and the options page together.
 - **10 built-in skins** — Matcha Strawberry, Forest Study, Harvest, Bubblegum, Blueprint, Phosphor, Paper, Frost, Dusk, Meadow.
 - **14 patterns generated at runtime** — gingham, lattice, plaid, stripes, grid, dots, polka, checks, floral, sprigs, waves, confetti, scallop, noise. Every one is a CSS gradient or an inline SVG built from two colours and a scale: **no image files ship**, a pattern recolours to any palette instead of needing one file per variant, it stays crisp at any zoom, and **nothing is fetched** — skins work offline and leak no request.
 - **Cards cycle through the skin's patterns**, so six cards read as six related faces rather than one texture smeared across the dashboard.
@@ -66,7 +67,7 @@ Not a colour scheme — a whole look. A skin carries surface art, per-card art, 
 - **Every built-in clears AA** for body text, hint text, links and accent labels — enforced by the suite, because a pretty theme nobody can read their assignments in is not shippable.
 
 ### Appearance (30+ knobs)
-- **One drawn icon set** — a single 16px grid at one stroke weight, shared by every settings row, the tab rail, the planner, the popup and every button. Nothing is a typed glyph, so nothing renders in the wrong colour or as a box when the host font lacks it.
+- **One drawn icon set** — a single 16px grid at one stroke weight, shared by every settings row, the tab rail, the planner and every button. Nothing is a typed glyph, so nothing renders in the wrong colour or as a box when the host font lacks it.
 - Dark mode: Off / On / Auto (system) / Scheduled window.
 - **Dark mode inside iframes** — SpeedGrader submissions, New Quizzes, and other embedded Canvas frames.
 - **6 dark palettes** (Neutral, Slate, Midnight, Nord, Dracula, Solarized) + **6 light palettes** + custom-background derivation.
@@ -202,7 +203,7 @@ In the Course tools tab.
 3. Open any `*.instructure.com` page. Better Canvas runs automatically.
 
 ### Custom school domains
-For non-instructure.com Canvas (e.g. `canvas.yourschool.edu`), click the toolbar popup on that site and grant permission. The background service worker registers the content scripts on your origin.
+For non-instructure.com Canvas (e.g. `canvas.yourschool.edu`), open that site, click the toolbar button, and grant permission on the page that opens. The background service worker then registers the content scripts on your origin.
 
 ---
 
@@ -230,7 +231,7 @@ src/
     themes.js                            preset themes + isDarkActive
     tokens.js                            the single design-token emitter, shared by the
                                          page, the drawer's shadow root, the options
-                                         page and the popup (+ the readability guard)
+                                         page and the options page (+ the readability guard)
     icons.js                             the icon set: one 16px grid, one stroke weight,
                                          currentColor. Geometry is verified by test/icons
     skins.js                             the skin engine: 14 runtime-generated patterns,
@@ -279,8 +280,7 @@ src/
     content.js         entry: applies registered features, wires observer + shortcuts + palette
   background/
     service-worker.js  register dynamic scripts on custom domains + badge + context menu
-  popup/               toolbar popup: master switch, dark/dash/reminders, palette, settings
-  options/             standalone options page hosting the shared settings UI
+  options/             the settings page: hosts the shared UI, plus the custom-domain prompt
 ```
 
 ### How it fits together

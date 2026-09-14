@@ -62,9 +62,25 @@ module.exports = {
 
   "every declared icon and page exists on disk"() {
     for (const p of Object.values(mv3.icons)) assert.ok(fs.existsSync(path.join(ROOT, p)), `missing ${p}`);
-    assert.ok(fs.existsSync(path.join(ROOT, mv3.action.default_popup)));
     assert.ok(fs.existsSync(path.join(ROOT, mv3.options_page)));
     assert.ok(fs.existsSync(path.join(ROOT, mv3.background.service_worker)));
+  },
+
+  "the toolbar button goes straight to the settings"() {
+    // There must be no default_popup in EITHER manifest. With one, the click
+    // opens a small panel whose main control is a button that opens the real
+    // settings, so reaching any actual setting costs two clicks and a decision,
+    // and chrome.action.onClicked never fires at all.
+    for (const [name, mf] of [["manifest.json", mv3], ["manifest.firefox.json", ff]]) {
+      assert.ok(!(mf.action && mf.action.default_popup),
+        name + " still declares a default_popup, so onClicked will not fire");
+    }
+    const sw = fs.readFileSync(path.join(ROOT, "src/background/service-worker.js"), "utf8");
+    assert.match(sw, /chrome\.action\.onClicked\.addListener/,
+      "with no popup, the worker must handle the click");
+    assert.match(sw, /bc:openSettings/, "the click must ask the tab to open the drawer");
+    assert.match(sw, /openOptionsPage\(\)/,
+      "and must fall back when the tab is not a running Canvas page");
   },
 
   "the service worker derives its script lists from the manifest"() {
@@ -89,6 +105,8 @@ module.exports = {
     sb.chrome.runtime.onInstalled = { addListener() {} };
     sb.chrome.runtime.onStartup = { addListener() {} };
     sb.chrome.contextMenus = { create() {}, onClicked: { addListener() {} } };
+    sb.chrome.action = Object.assign(sb.chrome.action || {}, { onClicked: { addListener() {} } });
+    sb.chrome.tabs = Object.assign(sb.chrome.tabs || {}, { sendMessage() {} });
     require("vm").runInContext(sw + "\n;globalThis.__manifestScripts = manifestScripts;", sb, { filename: "service-worker.js" });
     assert.deepEqual(sb.__manifestScripts(false), scriptsOf(mv3, false));
     assert.deepEqual(sb.__manifestScripts(true), scriptsOf(mv3, true));
@@ -151,23 +169,25 @@ module.exports = {
     }
   },
 
-  "the popup loads the shared modules it depends on"() {
-    const html = fs.readFileSync(path.join(ROOT, "src/popup/popup.html"), "utf8");
+  "the options page loads the shared modules it depends on"() {
+    const html = fs.readFileSync(path.join(ROOT, "src/options/options.html"), "utf8");
     const srcs = [...html.matchAll(/<script src="([^"]+)"/g)].map((m) => m[1]);
     for (const s of srcs) {
-      assert.ok(fs.existsSync(path.join(ROOT, "src/popup", s)), `popup.html references missing ${s}`);
+      assert.ok(fs.existsSync(path.join(ROOT, "src/options", s)), `options.html references missing ${s}`);
     }
-    // popup.js calls BC.tokens.staticCss() and BC.isDarkActive().
-    for (const need of ["../shared/defaults.js", "../shared/themes.js", "../shared/tokens.js"]) {
-      assert.ok(srcs.includes(need), `popup.html must load ${need}`);
+    // options.js calls BC.tokens.staticCss(), BC.tokens.applyRootAttrs() and
+    // BC.isDarkActive(); SettingsUI needs the state and component layers.
+    for (const need of ["../shared/defaults.js", "../shared/themes.js", "../shared/tokens.js",
+                        "../shared/settings/state.js", "../shared/settings/components.js",
+                        "../shared/settings/index.js"]) {
+      assert.ok(srcs.includes(need), `options.html must load ${need}`);
     }
   },
 
   "every surface that resolves dark mode can evaluate a schedule"() {
     // isDarkActive() falls back to false without BC.dt, so a surface missing
     // datetime.js renders light during a scheduled dark window with no error.
-    for (const [page, dir] of [["src/popup/popup.html", "src/popup"],
-                               ["src/options/options.html", "src/options"]]) {
+    for (const [page, dir] of [["src/options/options.html", "src/options"]]) {
       const html = fs.readFileSync(path.join(ROOT, page), "utf8");
       const srcs = [...html.matchAll(/<script src="([^"]+)"/g)].map((m) => m[1]);
       assert.ok(srcs.some((s) => s.endsWith("core/datetime.js")),

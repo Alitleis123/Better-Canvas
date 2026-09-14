@@ -407,7 +407,7 @@
 
   // ---- stylesheet emission ------------------------------------------------
   // A skin drives the EXISTING token layer rather than competing with it. That
-  // is what makes one skin restyle the drawer, the popup, the planner and the
+  // is what makes one skin restyle the drawer, the planner and the
   // options page at once: they already read --bc-*, so they need no knowledge
   // that skins exist at all.
   S.tokenCss = function (t) {
@@ -509,7 +509,7 @@
   // ---- preview ------------------------------------------------------------
   // A gallery row needs a thumbnail before anything is applied. Returning inline
   // style strings (not a DOM node) keeps this usable from the drawer's shadow
-  // root, the options page and the popup without three variants.
+  // root and the options page without two variants.
   S.swatchStyles = function (raw, count) {
     const t = S.normalize(raw);
     if (!t) return null;

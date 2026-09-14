@@ -1,7 +1,7 @@
 /*
  * Better Canvas — default settings schema.
  * Single source of truth. Loaded as a classic script by every surface
- * (content scripts, popup, options) and attaches to globalThis.BC.
+ * (content scripts, options page) and attaches to globalThis.BC.
  */
 (function () {
   "use strict";

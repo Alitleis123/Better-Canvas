@@ -3,7 +3,7 @@
  *
  * This lives in shared/ because four separate documents need byte-identical
  * tokens: the Canvas page (via theming.js), the settings drawer's shadow root,
- * the standalone options page, and the toolbar popup. Only theming.js is a
+ * and the standalone options page. Only theming.js is a
  * content script, so the emitter cannot live there. Before this existed there
  * were four disconnected colour systems and three of them never saw the user's
  * theme at all.
@@ -256,7 +256,7 @@
     },
 
     // scope: selector for the light/base block (default ":root").
-    // mode: "both" (default) | "light" | "dark" — the popup and options page render
+    // mode: "both" (default) | "light" | "dark" — the options page renders
     // a single mode, the Canvas page needs both.
     css(theming, opts) {
       const o = opts || {};
@@ -426,7 +426,7 @@
     // --bc-space-unit, rounded zeroes --bc-radius, motion zeroes every
     // --bc-dur-*, and the speed slider divides them. They live here because
     // tokens.js is what defines the rules that consume them, and because THREE
-    // documents need them and only one of them is a content script. The popup
+    // documents need them and only one of them is a content script. The options page
     // and the options page emitted the token CSS without ever setting these, so
     // density, square corners, the animation-speed slider and the user's own
     // reduced-motion toggle reached neither surface. Returns nothing and writes

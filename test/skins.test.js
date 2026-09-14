@@ -139,7 +139,7 @@ module.exports = {
   // ---- stylesheet emission ------------------------------------------------
 
   "css drives the existing token layer"() {
-    // This is what makes one skin restyle the drawer, popup, planner and options
+    // This is what makes one skin restyle the drawer, the planner and the options
     // page at once: they already read --bc-*, so they need no idea skins exist.
     const css = S.css(base());
     for (const tok of ["--bc-surface-1", "--bc-surface-2", "--bc-text", "--bc-muted",
@@ -458,7 +458,7 @@ module.exports = {
   },
 
   "every surface that loads the token layer also loads the engine"() {
-    for (const p of ["src/options/options.html", "src/popup/popup.html"]) {
+    for (const p of ["src/options/options.html"]) {
       const src = read(p);
       assert.match(src, /shared\/skins\.js/, p + " renders tokens but cannot resolve a skin");
       assert.ok(src.indexOf("shared/skins.js") < src.indexOf("shared/skin-catalog.js"), p + " load order");

@@ -252,16 +252,20 @@ module.exports = {
     }
   },
 
-  "the popup and the panel are the same product"() {
-    const pop = read("src/popup/popup.css");
-    for (const shared of ["bc-master", "bc-switch-thumb", "bc-pop-ic"]) {
-      assert.ok(pop.includes(shared), "the popup is missing " + shared);
+  "the options page is the only extension surface left"() {
+    // The toolbar button used to open a popup whose main control opened the real
+    // settings. With the click going straight to the settings, the popup had one
+    // unique job left -- the custom-domain permission prompt -- and that needs a
+    // foreground extension page anyway, so it moved here and the popup went.
+    const files = fs.readdirSync(path.join(ROOT, "src"));
+    assert.ok(!files.includes("popup"), "src/popup is back; the toolbar click should not need it");
+    const html = read("src/options/options.html");
+    assert.match(html, /id="bc-site"/, "the options page must host the custom-domain prompt");
+    const js = read("src/options/options.js");
+    assert.match(js, /chrome\.permissions\.request/,
+      "permissions.request needs a foreground extension page, and this is the only one");
+    for (const mf of ["manifest.json", "manifest.firefox.json"]) {
+      assert.doesNotMatch(read(mf), /popup/, mf + " still points at a popup");
     }
-    assert.match(read("src/popup/popup.html"), /data-icon="moon"/,
-      "the popup's rows must carry the same marks the panel's do");
-    // The rule, not the word: the file's header comment explains why the old
-    // one was removed, and matching that comment made this fail on its own note.
-    assert.doesNotMatch(pop, /@media[^{]*prefers-color-scheme/,
-      "the popup must follow the user's theme, not the OS");
   },
 };

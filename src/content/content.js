@@ -186,7 +186,7 @@
     requestAnimationFrame(() => { rafPending = false; BC.applyAll(BC.storage.current); });
   };
 
-  // Messages from popup / options page
+  // Messages from the toolbar button, the options page and the context menu
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg || !msg.type) return;
     if (msg.type === "bc:ping") {
@@ -194,8 +194,13 @@
       return;
     }
     if (msg.type === "bc:openSettings") {
-      BC.util.guard(() => BC.features.settingsPanel && BC.features.settingsPanel.open(), "openSettings");
-      sendResponse({ ok: true }); return;
+      // ok is the toolbar click's fallback signal, so it has to be honest: the
+      // content script also runs on instructure.com pages that are not Canvas,
+      // where there is no nav to hang a drawer off. Saying ok there would leave
+      // the click doing nothing at all.
+      const panel = BC.detect.isCanvas() && BC.features.settingsPanel;
+      if (panel) BC.util.guard(() => panel.open(), "openSettings");
+      sendResponse({ ok: !!panel }); return;
     }
     if (msg.type === "bc:openPalette") {
       BC.util.guard(() => BC.palette && BC.palette.open(), "openPalette");

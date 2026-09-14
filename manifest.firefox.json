@@ -93,7 +93,6 @@
     }
   ],
   "action": {
-    "default_popup": "src/popup/popup.html",
     "default_title": "Better Canvas",
     "default_icon": {
       "16": "icons/icon-16.png",

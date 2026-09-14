@@ -368,7 +368,7 @@ module.exports = {
   },
 
   "icons.js is registered everywhere the settings UI runs"() {
-    // The drawer, the options page and the popup all render the same controls.
+    // The drawer and the options page render the same controls from one set.
     // A missing script tag means every icon silently renders as nothing.
     for (const m of ["manifest.json", "manifest.firefox.json"]) {
       const js = JSON.parse(read(m)).content_scripts[0].js;
@@ -377,6 +377,5 @@ module.exports = {
         `${m} loads icons.js after the settings UI that uses it`);
     }
     assert.match(read("src/options/options.html"), /shared\/icons\.js/);
-    assert.match(read("src/popup/popup.html"), /shared\/icons\.js/);
   },
 };

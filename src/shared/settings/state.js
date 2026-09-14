@@ -116,7 +116,7 @@
       return true;
     }
 
-    // React to external changes (another tab, the popup, the options page).
+    // React to external changes (another tab, the options page).
     if (adapter.subscribe) {
       unsubAdapter = adapter.subscribe((incoming) => {
         // Our own write echoes back through here; suppressing it keeps the echo
