@@ -1941,8 +1941,12 @@
      tab rail, so at a 600px drawer it measured 552px and stayed in two-column
      mode while the body it was speaking for was only 332px wide. */
   @container bc-body (max-width: 380px) {
-    .bc-row { grid-template-columns: 28px minmax(0, 1fr); row-gap: var(--bc-space-3, 8px); }
-    .bc-row .bc-row-control { grid-column: 2 / -1; justify-content: flex-start; max-width: 100%; }
+    /* Not .bc-row-slim: its control is a single 40px switch, which fits beside a
+       label at any width this panel can reach. Stacking those too turned a
+       one-line toggle into two lines for most of the panel at a 1100px window,
+       which is the common laptop case. */
+    .bc-row:not(.bc-row-slim) { grid-template-columns: 28px minmax(0, 1fr); row-gap: var(--bc-space-3, 8px); }
+    .bc-row:not(.bc-row-slim) .bc-row-control { grid-column: 2 / -1; justify-content: flex-start; max-width: 100%; }
     .bc-select { max-width: 100%; }
   }
 

@@ -176,6 +176,23 @@ module.exports = {
     }
   },
 
+ "a narrow panel does not stack a row whose control is one switch"() {
+    // The stacking rule exists for sliders, selects and time pickers. A switch is
+    // 40px and fits beside a label at any width this panel can reach, and the
+    // blanket rule turned a one-line toggle into two lines for most of the panel
+    // at a 1100px window, which is the common laptop case.
+    const src = SRC();
+    const stack = src.match(/@container bc-body \(max-width: \d+px\) \{[\s\S]*?\n  \}/);
+    assert.ok(stack, "the narrow-panel rule is missing");
+    assert.match(stack[0], /\.bc-row:not\(\.bc-row-slim\)/,
+      "a switch row must be exempt from stacking");
+    const comp = read("src/shared/settings/components.js");
+    assert.match(comp, /bc-row-slim/, "nothing marks a switch-only row as slim");
+    // Read off the control, not declared per call site: there are ~70 of these.
+    assert.match(comp, /classList\.contains\("bc-switch"\)/,
+      "slimness must be derived from the control, not passed in by each caller");
+  },
+
   "the popup and the panel are the same product"() {
     const pop = read("src/popup/popup.css");
     for (const shared of ["bc-master", "bc-switch-thumb", "bc-pop-ic"]) {

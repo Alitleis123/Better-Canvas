@@ -75,7 +75,13 @@
     // Three columns -- mark, label, control -- instead of two. The mark column is
     // what gives a list of fourteen switches a rhythm; without it every row was
     // the same rectangle and the only way to find one was to read all of them.
-    const row = h("div.bc-row" + (wide ? ".bc-row-wide" : ""), null, [
+    // A row whose whole control is one switch is marked slim, so the narrow-panel
+    // rule that stacks sliders and time pickers leaves it alone. Read off the
+    // control rather than declared per call site: there are ~70 of these and a
+    // flag on each would be wrong somewhere.
+    const slim = !wide && control && control.classList &&
+                 control.classList.contains("bc-switch");
+    const row = h("div.bc-row" + (wide ? ".bc-row-wide" : slim ? ".bc-row-slim" : ""), null, [
       icon ? C.iconTile(icon) : h("span.bc-tile.bc-tile-blank", null),
       h("div.bc-row-label", null, [
         h("div.bc-row-title", null, label),
