@@ -351,9 +351,9 @@
       results.appendChild(list);
 
       const bulk = h("div.bc-bulk", null, [
-        S.button({ label: "Show all", onClick: () => store.set((x) => { for (const c of courses) { x.dashboard.courses[c.id] = { ...(x.dashboard.courses[c.id] || {}), hidden: false }; } }) }),
-        S.button({ label: "Reset colors", onClick: () => store.set((x) => { for (const c of courses) { if (x.dashboard.courses[c.id]) delete x.dashboard.courses[c.id].color; } }) }),
-        S.button({ label: "Reset nicknames", onClick: () => store.set((x) => { for (const c of courses) { if (x.dashboard.courses[c.id]) delete x.dashboard.courses[c.id].nickname; } }) }),
+        S.button({ label: "Unhide all", icon: "check", onClick: () => store.set((x) => { for (const c of courses) { x.dashboard.courses[c.id] = { ...(x.dashboard.courses[c.id] || {}), hidden: false }; } }) }),
+        S.button({ label: "Reset colours", icon: "palette", onClick: () => store.set((x) => { for (const c of courses) { if (x.dashboard.courses[c.id]) delete x.dashboard.courses[c.id].color; } }) }),
+        S.button({ label: "Reset names", icon: "refresh", onClick: () => store.set((x) => { for (const c of courses) { if (x.dashboard.courses[c.id]) delete x.dashboard.courses[c.id].nickname; } }) }),
       ]);
       results.appendChild(bulk);
     }
@@ -364,27 +364,45 @@
   }
 
   function renderCourseRow(store, c) {
+    const S = BC.SettingsComponents;
     const s = store.get();
     const cur = (s.dashboard.courses && s.dashboard.courses[c.id]) || {};
-    const wrap = h("div.bc-course-row", null);
-    // The "no colour set" swatch is theme-derived; it was a fixed pale indigo
-    // that read as a real colour choice and ignored dark mode entirely.
-    const swatch = h("span.bc-course-swatch", {
-      style: { background: cur.color || c.color || "var(--bc-accent-weak, rgba(79,70,229,.12))" },
+    const write = (patch) => store.set((x) => {
+      x.dashboard.courses[c.id] = Object.assign({}, x.dashboard.courses[c.id] || {}, patch);
     });
-    const name = el("input", { type: "text", class: "bc-text bc-course-name", placeholder: c.name, value: cur.nickname || "" });
-    name.addEventListener("input", () => store.set((x) => { x.dashboard.courses[c.id] = { ...(x.dashboard.courses[c.id] || {}), nickname: name.value }; }));
-    const color = el("input", { type: "color", value: cur.color || c.color || "#0374b5" });
-    color.addEventListener("input", () => { swatch.style.background = color.value; store.set((x) => { x.dashboard.courses[c.id] = { ...(x.dashboard.courses[c.id] || {}), color: color.value }; }); });
-    const hide = el("input", { type: "checkbox", checked: !!cur.hidden });
-    hide.addEventListener("change", () => store.set((x) => { x.dashboard.courses[c.id] = { ...(x.dashboard.courses[c.id] || {}), hidden: hide.checked }; }));
-    const bg = el("input", { type: "text", class: "bc-text bc-course-bg", placeholder: "background image URL (optional)", value: cur.bgImage || "" });
-    bg.addEventListener("input", () => store.set((x) => { x.dashboard.courses[c.id] = { ...(x.dashboard.courses[c.id] || {}), bgImage: bg.value.trim() }; }));
 
-    wrap.appendChild(swatch);
-    wrap.appendChild(name);
-    wrap.appendChild(color);
-    wrap.appendChild(h("label.bc-mini-check", null, [hide, "Hide"]));
+    // Five tracks, two of them 1fr, inside a ~300px row: the nickname field came
+    // out six characters wide and the background-image field read "backgro". Two
+    // lines instead, so the name gets the whole first line and the URL the whole
+    // second. The colour uses the same swatch as every other colour in the panel
+    // rather than a raw input, and Hide is the same switch as every other switch.
+    const wrap = h("div.bc-course-row", null);
+
+    const picker = el("input", { type: "color", value: cur.color || c.color || "#0374b5",
+      "aria-label": "Colour for " + c.name });
+    const swatch = h("label.bc-swatch.bc-course-swatch", { title: "Course colour" }, [picker]);
+    swatch.style.background = cur.color || c.color || "";
+    picker.addEventListener("input", () => { swatch.style.background = picker.value; write({ color: picker.value }); });
+
+    const name = el("input", { type: "text", class: "bc-text bc-course-name",
+      placeholder: c.name, value: cur.nickname || "", "aria-label": "Nickname for " + c.name });
+    name.addEventListener("input", () => write({ nickname: name.value }));
+
+    const hide = S.switch({
+      get: () => !!((store.get().dashboard.courses || {})[c.id] || {}).hidden,
+      set: (v) => write({ hidden: v }),
+      ariaLabel: "Hide " + c.name,
+    });
+
+    const bg = el("input", { type: "url", class: "bc-text bc-course-bg",
+      placeholder: "Card background image URL (optional)", value: cur.bgImage || "",
+      "aria-label": "Background image for " + c.name });
+    bg.addEventListener("input", () => write({ bgImage: bg.value.trim() }));
+
+    wrap.appendChild(h("div.bc-course-main", null, [
+      swatch, name,
+      h("span.bc-course-hide", null, [h("span.bc-course-hide-label", null, "Hide"), hide]),
+    ]));
     wrap.appendChild(bg);
     return wrap;
   }
@@ -590,7 +608,7 @@
     ]));
 
     return S.section({
-      title: "Recurring tasks",
+      title: "Recurring tasks", icon: "timer",
       description: "Daily, weekly or monthly. Each occurrence is ticked off on its own.",
       children,
     });
@@ -849,7 +867,7 @@
     ]);
 
     c.appendChild(S.section({
-      title: "Skins",
+      title: "Skins", icon: "palette",
       description: "A whole look — surface art, card art, nav and type, not just colours. Every pattern is drawn here, so a skin works offline and downloads nothing.",
       children: [
         h("div.bc-skin-grid", null,
@@ -1094,13 +1112,18 @@
       render: (it) => {
         const row = h("div.bc-navitem", null);
         row.appendChild(h("span.bc-navitem-label", null, it.label));
-        const cb = el("input", { type: "checkbox", checked: !hiddenSet.has(it.key) });
-        cb.addEventListener("change", () => store.set((x) => {
-          const h1 = new Set(x.navigation[scope].hidden || []);
-          if (cb.checked) h1.delete(it.key); else h1.add(it.key);
-          x.navigation[scope].hidden = Array.from(h1);
+        // The same switch as every other on/off in the panel. This was the last
+        // native checkbox left, so it rendered in the system blue against a warm
+        // accent, and the section above it already said "switch off to hide".
+        row.appendChild(S.switch({
+          get: () => !(new Set(store.get().navigation[scope].hidden || [])).has(it.key),
+          set: (on) => store.set((x) => {
+            const next = new Set(x.navigation[scope].hidden || []);
+            if (on) next.delete(it.key); else next.add(it.key);
+            x.navigation[scope].hidden = Array.from(next);
+          }),
+          ariaLabel: "Show " + it.label,
         }));
-        row.appendChild(h("label.bc-mini-check", null, [cb, "Show"]));
         return row;
       },
       onChange: (ids) => store.set((x) => { x.navigation[scope].order = ids; }),
@@ -1149,33 +1172,53 @@
   }
 
   function renderGpaEditor(mount, store, courses) {
-    const S = BC.SettingsComponents;
     mount.innerHTML = "";
     const s = store.get();
     const bands = (BC.GPA_SCALES[s.grades.gpaScale] || BC.GPA_SCALES["standard-4"]).bands;
     let total = 0, points = 0;
-    const table = h("table.bc-gpa", null);
-    const head = h("tr", null, [h("th", null, "Course"), h("th", null, "Score"), h("th", null, "Letter"), h("th", null, "Points"), h("th", null, "Credits")]);
-    table.appendChild(head);
+
+    // Was a bare <table>, which is a different visual language from every other
+    // panel here and wrapped each course name over three lines. Rows instead, on
+    // the same grid as the rest of the panel, with the name on one line and the
+    // figures in a tabular group that stays aligned down the column.
+    const list = h("div.bc-gpa", null, [
+      h("div.bc-gpa-head", null, [
+        h("span", null, "Course"),
+        h("span.bc-gpa-figs", null, [h("span", null, "Score"), h("span", null, "Grade"), h("span", null, "Pts")]),
+        h("span.bc-gpa-credlabel", null, "Credits"),
+      ]),
+    ]);
+
     for (const cr of courses) {
       const cred = s.grades.creditsByCourse[cr.id] != null ? s.grades.creditsByCourse[cr.id] : 3;
       let letter = "—", pts = 0;
-      if (cr.score != null) { const band = bands.find(b => cr.score >= b.min); letter = band.letter; pts = band.points; }
-      const row = h("tr" + (cr.concluded ? ".bc-concluded" : ""), null, [
-        h("td", null, cr.name),
-        h("td", null, cr.score == null ? "—" : (cr.score.toFixed(2) + "%")),
-        h("td", null, letter),
-        h("td", null, pts.toFixed(2)),
-        h("td", null, el("input", { type: "number", min: 0, step: 0.5, value: cred, class: "bc-number bc-gpa-cred",
-          oninput: (e) => store.set((x) => { x.grades.creditsByCourse[cr.id] = parseFloat(e.target.value) || 0; }) })),
-      ]);
-      table.appendChild(row);
+      if (cr.score != null) { const band = bands.find((b) => cr.score >= b.min); letter = band.letter; pts = band.points; }
+      const credInput = el("input", { type: "number", min: 0, step: 0.5, value: cred,
+        class: "bc-number bc-gpa-cred", "aria-label": "Credits for " + cr.name });
+      credInput.addEventListener("input", () => store.set((x) => {
+        x.grades.creditsByCourse[cr.id] = parseFloat(credInput.value) || 0;
+      }));
+      // title, because the name truncates: a course code plus a title does not
+      // fit a 300px column and wrapping it was what made each row three lines.
+      const nameEl = h("span.bc-gpa-name", { title: cr.name }, cr.name);
+      list.appendChild(h("div.bc-gpa-row" + (cr.concluded ? ".bc-concluded" : ""), null, [
+        nameEl,
+        h("span.bc-gpa-figs", null, [
+          h("span", null, cr.score == null ? "—" : cr.score.toFixed(1) + "%"),
+          h("span.bc-gpa-letter", { "data-grade": letter.charAt(0).toLowerCase() }, letter),
+          h("span", null, pts.toFixed(2)),
+        ]),
+        credInput,
+      ]));
       if (cr.score != null && cred > 0) { points += pts * cred; total += cred; }
     }
-    mount.appendChild(table);
+    mount.appendChild(list);
+
     const gpa = total > 0 ? (points / total).toFixed(3) : "—";
-    mount.appendChild(h("div.bc-gpa-total", null, "GPA: " + gpa + "  ·  " + total + " credit hours"));
-    mount.appendChild(h("p.bc-hint", null, "Set credit to 0 to exclude a course from the GPA."));
+    mount.appendChild(h("div.bc-gpa-total", null, [
+      h("span.bc-gpa-figure", null, gpa),
+      h("span.bc-gpa-total-sub", null, total + " credit hours · set credits to 0 to exclude a course"),
+    ]));
   }
 
   function renderNotifications(store) {
@@ -1437,7 +1480,7 @@
     const top = Object.entries(byCourse).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
     mount.appendChild(S.section({
-      title: "Time on Canvas — last 14 days",
+      title: "Time on Canvas — last 14 days", icon: "clock",
       children: total ? [
         h("div.bc-ins-total", null, fmtMin(total) + " total · " + fmtMin(Math.round(total / 14)) + "/day average"),
         h("div.bc-ins-days", null, days.map((d, i) => h("div.bc-ins-day", { title: d + " · " + fmtMin(perDay[i]) }, [
@@ -1456,7 +1499,7 @@
     const recent = sessions.filter((s) => (s.end || 0) >= weekAgo);
     const focusMin = recent.reduce((a, s) => a + (s.min || 0), 0);
     mount.appendChild(S.section({
-      title: "Pomodoro — last 7 days",
+      title: "Pomodoro — last 7 days", icon: "timer",
       children: recent.length ? [
         h("div.bc-ins-total", null, recent.length + " session" + (recent.length === 1 ? "" : "s") + " · " + fmtMin(focusMin) + " focused"),
         h("div", null, recent.slice(-8).reverse().map((s) => h("div.bc-ins-row", null, [
@@ -1494,7 +1537,7 @@
       })
       .filter(Boolean);
     mount.appendChild(S.section({
-      title: "Grade trends",
+      title: "Grade trends", icon: "trend",
       children: trendRows.length ? trendRows
         : [h("p.bc-hint", null, "Visit your course grade pages a few times to build up trend history.")],
     }));
@@ -2069,14 +2112,22 @@
   .bc-drag { cursor: grab; color: var(--muted); user-select: none; text-align: center; }
   .bc-sortable-item.bc-dragging { opacity: .5; }
 
-  .bc-course-row { display: grid; grid-template-columns: 20px 1fr 40px auto 1fr; gap: var(--bc-space-3, 8px); align-items: center; }
-  .bc-course-swatch { width: 18px; height: 18px; border-radius: 50%; }
-  .bc-course-name { min-width: 0; }
-  .bc-course-bg { min-width: 0; }
+  /* Two lines. The five-track grid handed two 1fr columns to a ~300px row, so
+     the nickname field was six characters wide and the image URL read "backgro". */
+  .bc-course-row { display: flex; flex-direction: column; gap: var(--bc-space-2, 6px); min-width: 0; }
+  .bc-course-main { display: flex; align-items: center; gap: var(--bc-space-3, 8px); min-width: 0; }
+  .bc-course-swatch { width: 26px; height: 26px; border-radius: var(--bc-radius-circle, 50%); }
+  .bc-course-name { flex: 1 1 auto; min-width: 0; }
+  .bc-course-bg { width: 100%; font-size: var(--bc-text-sm, 13px); }
+  .bc-course-hide { display: inline-flex; align-items: center; gap: var(--bc-space-2, 6px); flex: none; }
+  .bc-course-hide-label { font-size: var(--bc-text-xs, 12px); color: var(--muted); }
   .bc-mini-check { display: inline-flex; align-items: center; gap: var(--bc-space-1, 4px); font-size: var(--bc-text-xs, 12px); color: var(--muted); }
   .bc-bulk { display: flex; gap: var(--bc-space-2, 6px); margin-top: var(--bc-space-4, 10px); }
 
-  .bc-inline { display: inline-flex; gap: var(--bc-space-2, 6px); align-items: center; }
+  /* wrap, because several of these hold a field plus a select plus a label plus
+     a time input, which is wider than a ~330px card: the recurring-task form was
+     clipping "Due at 05:00 PM" against the card's right edge. */
+  .bc-inline { display: inline-flex; flex-wrap: wrap; gap: var(--bc-space-2, 6px); align-items: center; }
 
   .bc-theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--bc-space-4, 10px); }
   .bc-theme-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--bc-radius-lg, 10px); padding: var(--bc-space-4, 10px); cursor: pointer; text-align: left; color: inherit; }
@@ -2164,13 +2215,49 @@
   .bc-rec-title { font-weight: 600; }
   .bc-rec-meta { font-size: var(--bc-text-xs, 12px); color: var(--muted); }
   .bc-rec-days { display: flex; gap: var(--bc-space-4, 10px); flex-wrap: wrap; margin: var(--bc-space-1, 4px) 0; }
+  .bc-rec-form > .bc-inline { width: 100%; }
+  .bc-rec-form .bc-text { flex: 1 1 150px; min-width: 0; }
   .bc-rec-form { display: flex; flex-direction: column; gap: var(--bc-space-3, 8px); margin-top: var(--bc-space-4, 10px); padding-top: var(--bc-space-4, 10px); border-top: 1px dashed var(--border); }
   .bc-rec-form input[type=time], .bc-rec-form input[type=date] { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--bc-radius-md, 6px); background: var(--panel); color: inherit; font: inherit; }
 
-  .bc-gpa { width: 100%; border-collapse: collapse; margin-top: var(--bc-space-3, 8px); }
-  .bc-gpa th, .bc-gpa td { padding: var(--bc-space-2, 6px) var(--bc-space-3, 8px); text-align: left; border-bottom: 1px solid var(--border); font-size: var(--bc-text-sm, 13px); }
-  .bc-gpa-cred { width: 70px; }
-  .bc-gpa-total { margin-top: var(--bc-space-4, 10px); font-weight: 700; }
+  /* Rows, not a <table>. Same three-track shape as a settings row so the GPA
+     panel reads as part of the panel rather than as a report pasted into it. */
+  .bc-gpa { display: flex; flex-direction: column; margin-top: var(--bc-space-3, 8px); }
+  .bc-gpa-row, .bc-gpa-head {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto 68px;
+    align-items: center; gap: var(--bc-space-4, 10px);
+    padding: var(--bc-space-3, 8px) var(--bc-space-3, 8px);
+    margin: 0 calc(var(--bc-space-3, 8px) * -1);
+    border-radius: var(--bc-radius-md, 8px);
+  }
+  .bc-gpa-row:hover { background: var(--bc-surface-3, rgba(0,0,0,.035)); }
+  .bc-gpa-head {
+    font-size: var(--bc-text-2xs, 11px); font-weight: 700; color: var(--bc-text-subtle, var(--muted));
+    letter-spacing: var(--bc-tracking-caps, .04em); text-transform: uppercase;
+    padding-bottom: var(--bc-space-2, 6px);
+  }
+  /* One line with an ellipsis, and the full name in a title. A course code plus
+     a title does not fit this column, and wrapping it made every row 3 lines. */
+  .bc-gpa-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .bc-gpa-figs { display: grid; grid-template-columns: 52px 34px 40px; gap: var(--bc-space-2, 6px); text-align: right;
+                 font-variant-numeric: tabular-nums; font-size: var(--bc-text-sm, 13px); color: var(--muted); }
+  .bc-gpa-head .bc-gpa-figs { color: inherit; font-size: inherit; }
+  .bc-gpa-letter { font-weight: 700; color: var(--fg); }
+  /* The band colours are categorical, not semantic: a C is not a warning. */
+  .bc-gpa-letter[data-grade="a"] { color: var(--bc-grade-a, var(--fg)); }
+  .bc-gpa-letter[data-grade="b"] { color: var(--bc-grade-b, var(--fg)); }
+  .bc-gpa-letter[data-grade="c"] { color: var(--bc-grade-c, var(--fg)); }
+  .bc-gpa-letter[data-grade="d"] { color: var(--bc-grade-d, var(--fg)); }
+  .bc-gpa-letter[data-grade="f"] { color: var(--bc-grade-f, var(--fg)); }
+  .bc-gpa-credlabel { text-align: right; }
+  .bc-gpa-cred { width: 68px; }
+  .bc-gpa-total {
+    display: flex; align-items: baseline; gap: var(--bc-space-4, 10px); flex-wrap: wrap;
+    margin-top: var(--bc-space-5, 12px); padding-top: var(--bc-space-5, 12px);
+    border-top: 1px solid var(--border);
+  }
+  .bc-gpa-figure { font-size: var(--bc-text-figure, 24px); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .bc-gpa-total-sub { color: var(--muted); font-size: var(--bc-text-sm, 13px); }
   /* A token, not opacity: fading text that already sits at AA drops it below AA. */
   .bc-concluded td { color: var(--bc-text-subtle, var(--muted)); }
   `;

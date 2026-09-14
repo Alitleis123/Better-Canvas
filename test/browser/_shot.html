@@ -13,6 +13,7 @@
     m=skin    a skin on the dashboard  s=<skin id>
     m=plain   the dashboard, no panel
     dark=1    apply dark mode to whichever of the above you chose
+    y=<px>    scroll the drawer down, for a section below the fold
 -->
 <meta charset=utf-8><title>shot</title>
 <body style="margin:0;background:#e8e9ea">
@@ -26,6 +27,15 @@ document.getElementById('f').onload = async function () {
   if (mode === 'panel') {
     w.__bcPanel(q.get('w') ? +q.get('w') : null, dark);
     if (q.get('t')) w.__bcTab(q.get('t'));
+    // Scroll LAST and late. The course editor and the GPA table mount from a
+    // promise, so scrolling immediately clamps against a document that is still
+    // short and the shot lands well above where it was aimed.
+    if (q.get('y')) {
+      await new Promise((r) => setTimeout(r, 300));
+      const host = w.document.querySelector('[data-bc-node="bc-drawer"]');
+      const root = host && host.shadowRoot.querySelector('.root');
+      if (root) root.scrollTop = +q.get('y');
+    }
   } else if (mode === 'todo') {
     w.__bcTodo(q.get('p') || 'ring', dark);
   } else if (mode === 'skin') {

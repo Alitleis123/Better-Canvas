@@ -38,6 +38,19 @@ module.exports = {
     assert.deepEqual(bare.map(labelOf), [], "rows with no icon");
   },
 
+  "every section heading carries a mark too"() {
+    // A tab is six cards deep. A heading is findable by shape while scrolling
+    // past them; a line of 15px text is not. Four sections were missed the first
+    // time because the check only looked 180 characters ahead of S.section and
+    // their descriptions are longer than that, so the window is generous now.
+    const src = SRC();
+    const secs = [...src.matchAll(/S\.section\(\{([\s\S]{0,500}?)children:/g)];
+    assert.ok(secs.length > 40, "expected the whole panel; found " + secs.length + " sections");
+    const bare = secs.filter((m) => !/icon:/.test(m[1]))
+      .map((m) => (m[1].match(/title: ("[^"]*"|[^,\n]+)/) || [])[1]);
+    assert.deepEqual(bare, [], "sections with no heading icon");
+  },
+
   "every icon named in the panel exists"() {
     // A typo used to render an empty box silently, which is the same defect as
     // a missing glyph arriving by a different route.
@@ -161,22 +174,7 @@ module.exports = {
       "a select sized to its widest option will starve the label again");
   },
 
- "the build runs without PowerShell"() {
-    // build.ps1 is the only documented build and there is no pwsh on macOS, so
-    // dist/ silently stayed weeks stale while src/ moved.
-    const sh = read("build.sh");
-    for (const step of ["node --check", "node test/run.js", "manifest.firefox.json"]) {
-      assert.ok(sh.includes(step), "build.sh skips " + step);
-    }
-    const ps = read("build.ps1");
-    // The two must stay in step; both build the same two targets from the same
-    // two manifests.
-    for (const m of ["manifest.json", "manifest.firefox.json"]) {
-      assert.ok(sh.includes(m) && ps.includes(m), m + " is missing from one build script");
-    }
-  },
-
- "a narrow panel does not stack a row whose control is one switch"() {
+  "a narrow panel does not stack a row whose control is one switch"() {
     // The stacking rule exists for sliders, selects and time pickers. A switch is
     // 40px and fits beside a label at any width this panel can reach, and the
     // blanket rule turned a one-line toggle into two lines for most of the panel
@@ -189,8 +187,26 @@ module.exports = {
     const comp = read("src/shared/settings/components.js");
     assert.match(comp, /bc-row-slim/, "nothing marks a switch-only row as slim");
     // Read off the control, not declared per call site: there are ~70 of these.
-    assert.match(comp, /classList\.contains\("bc-switch"\)/,
+    assert.match(comp, /SLIM\.some\(\(c\) => control\.classList\.contains\(c\)\)/,
       "slimness must be derived from the control, not passed in by each caller");
+    // A recorded key chip is as narrow as a switch, and its rows all stacked at
+    // a 1200px window before it was added to the set.
+    assert.match(comp, /const SLIM = \[[^\]]*"bc-key"/, "a keybind chip must count as slim");
+  },
+
+  "the build runs without PowerShell"() {
+    // build.ps1 is the only documented build and there is no pwsh on macOS, so
+    // dist/ silently stayed weeks stale while src/ moved.
+    const sh = read("build.sh");
+    for (const step of ["node --check", "node test/run.js", "manifest.firefox.json"]) {
+      assert.ok(sh.includes(step), "build.sh skips " + step);
+    }
+    const ps = read("build.ps1");
+    // The two must stay in step; both build the same two targets from the same
+    // two manifests.
+    for (const m of ["manifest.json", "manifest.firefox.json"]) {
+      assert.ok(sh.includes(m) && ps.includes(m), m + " is missing from one build script");
+    }
   },
 
   "the popup and the panel are the same product"() {

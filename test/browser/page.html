@@ -220,11 +220,28 @@ window.__bcReady = (async () => {
       mk(108, "Algorithms: graph traversal set", cs, 5, 7, false),
     ];
   };
+  // Courses, not an empty array. The settings panel's course editor and GPA
+  // table only render rows once these resolve with something, so returning []
+  // meant both panels had never been seen at all: every screenshot of them was
+  // their "Loading courses..." state, and their CSS was never exercised.
+  const courseFixture = () => [
+    { id: "1", name: "ENGL2700 Creative Writing",   courseCode: "ENGL2700", color: "#b58a3c" },
+    { id: "2", name: "SOCL2320 Statistical Analysis", courseCode: "SOCL2320", color: "#4a9d7f" },
+    { id: "3", name: "COMM3750 Special Effects",    courseCode: "COMM3750", color: "#8e5ea8" },
+    { id: "4", name: "HIST1100 Modern History",     courseCode: "HIST1100", color: "#c0562e" },
+    { id: "5", name: "BIOL1105 Cell Biology",       courseCode: "BIOL1105", color: "#3d7ea6" },
+  ];
   BC.api = {
-    coursesWithScores: () => Promise.resolve([]),
-    activeCourses: () => Promise.resolve([]),
+    coursesWithScores: () => Promise.resolve(courseFixture().map((c, i) => ({
+      id: c.id, name: c.name, course_code: c.courseCode,
+      enrollments: [{ computed_current_score: [92.4, 88.1, 79.5, 95, 71.2][i] }],
+      concluded: i === 4,
+    }))),
+    activeCourses: () => Promise.resolve(courseFixture()),
     plannerItems: () => Promise.resolve(plannerFixture()),
-    dashboardCards: () => Promise.resolve([]),
+    dashboardCards: () => Promise.resolve(courseFixture().map((c) => ({
+      id: c.id, shortName: c.name, originalName: c.name, courseCode: c.courseCode, color: c.color,
+    }))),
     createPlannerNote: () => Promise.resolve({}),
     setPlannerComplete: () => Promise.resolve({}),
     TTL: 60000,

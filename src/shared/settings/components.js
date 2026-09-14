@@ -79,8 +79,14 @@
     // rule that stacks sliders and time pickers leaves it alone. Read off the
     // control rather than declared per call site: there are ~70 of these and a
     // flag on each would be wrong somewhere.
+    // Narrow controls, by class. A switch is 40px and a recorded key chip is
+    // ~90px; both sit beside a label at any width this panel reaches, and the
+    // stacking rule written for sliders and time pickers was costing each of
+    // them a second line. Measured, not guessed: the keybind rows all stacked at
+    // a 1200px window, which is where the body lands exactly on the threshold.
+    const SLIM = ["bc-switch", "bc-key"];
     const slim = !wide && control && control.classList &&
-                 control.classList.contains("bc-switch");
+                 SLIM.some((c) => control.classList.contains(c));
     const row = h("div.bc-row" + (wide ? ".bc-row-wide" : slim ? ".bc-row-slim" : ""), null, [
       icon ? C.iconTile(icon) : h("span.bc-tile.bc-tile-blank", null),
       h("div.bc-row-label", null, [

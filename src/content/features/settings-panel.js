@@ -90,14 +90,24 @@
       :host { all: initial; }
       * { box-sizing: border-box; }
       .root { height: 100%; overflow: auto; background: var(--bc-surface-1, #f6f7fb); }
+      /* Sits on the panel's own header, so it reads as the header's last button
+         rather than as a chip floating over it: same 30px box, same muted ink,
+         no border until hover. It was a bordered white square on a translucent
+         bar, which was the only piece of chrome still in the old style. */
       .bc-drawer-close {
-        position: absolute; top: 10px; right: 12px; z-index: 2;
-        width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
-        border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-md, 8px);
-        background: var(--bc-surface-2, #fff); color: var(--bc-text, #1b2430);
-        font: 15px/1 var(--bc-font-sans, sans-serif); cursor: pointer;
+        position: absolute; top: 15px; right: 14px; z-index: 4;
+        width: 30px; height: 30px; padding: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 1px solid transparent; border-radius: var(--bc-radius-md, 8px);
+        background: transparent; color: var(--bc-muted, #6b6155);
+        cursor: pointer;
+        transition: background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
+                    color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
       }
-      .bc-drawer-close:hover { background: var(--bc-surface-3, #f1f3f7); }
+      .bc-drawer-close:hover {
+        background: var(--bc-surface-3, #eee7dc);
+        color: var(--bc-text, #1d1a16);
+      }
       .bc-drawer-close:focus-visible {
         outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px;
       }
@@ -118,7 +128,7 @@
     closeBtn.className = "bc-drawer-close";
     closeBtn.setAttribute("aria-label", "Close settings");
     closeBtn.title = "Close settings";
-    closeBtn.innerHTML = BC.icons.svg("close", { size: 14 });
+    closeBtn.innerHTML = BC.icons.svg("close", { size: 16 });
     closeBtn.addEventListener("click", close);
     shadow.appendChild(closeBtn);
 
