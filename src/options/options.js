@@ -54,6 +54,7 @@
     const dark = BC.isDarkActive ? BC.isDarkActive(settings) : false;
     const root = document.documentElement;
     if (root.classList.contains("bc-dark") !== dark) root.classList.toggle("bc-dark", dark);
+    BC.tokens.applyRootAttrs(document.documentElement, settings.theming);
   }
 
   let current = BC.cloneDefaults();

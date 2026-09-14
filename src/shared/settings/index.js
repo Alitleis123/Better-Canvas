@@ -1735,7 +1735,8 @@
     position: sticky; top: 0; z-index: 3;
     display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto;
     align-items: center; gap: var(--bc-space-4, 10px);
-    padding: var(--bc-space-5, 12px) 46px var(--bc-space-5, 12px) var(--bc-pad-card, 24px);
+    padding: var(--bc-space-5, 12px) var(--bc-panel-gutter, var(--bc-pad-card, 24px))
+             var(--bc-space-5, 12px) var(--bc-pad-card, 24px);
     background: color-mix(in srgb, var(--bg) 88%, transparent);
     backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--border);

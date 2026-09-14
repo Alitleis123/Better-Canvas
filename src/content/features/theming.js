@@ -482,21 +482,16 @@
     // cards and left every Canvas content surface, table and link at its stock
     // colour -- which read as "the cards got a pattern", not as a theme.
     if (doc.classList.contains("bc-skin") !== !!skin) doc.classList.toggle("bc-skin", !!skin);
-    attr("data-bc-density", (skin && skin.density) || t.density || "default");
-    attr("data-bc-radius", String(skin ? skin.radius | 0 : t.radius | 0));
+    // Density, radius, rounded and motion belong to the token layer -- it is what
+    // defines the rules that read them -- and three documents need them while only
+    // this one is a content script. One definition, in tokens.js.
+    BC.tokens.applyRootAttrs(doc, t);
     attr("data-bc-focus", t.focusRing || "default");
     attr("data-bc-cursor", t.cursor || "default");
     attr("data-bc-hc", t.highContrast ? "1" : "0");
-    attr("data-bc-motion", (t.reducedMotion || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)) ? "0" : "1");
-    attr("data-bc-rounded", t.roundedUI ? "1" : "0");
 
     const filter = (t.colorBlind && t.colorBlind !== "off") ? BC.color.colorBlindFilter(t.colorBlind) : "";
     if (doc.style.filter !== filter) doc.style.filter = filter;
-
-    // Clamped: the durations are calc(Nms / speed), so a corrupted import setting
-    // this to 0 would produce division by zero across every animation.
-    const speed = String(BC.util.clamp(Number(t.animSpeed) || 1, 0.25, 4));
-    if (doc.style.getPropertyValue("--bc-anim-speed") !== speed) doc.style.setProperty("--bc-anim-speed", speed);
 
     const sw = (t.sidebarWidth && t.sidebarWidth > 0) ? t.sidebarWidth + "px" : "";
     if (doc.style.getPropertyValue("--bc-sidebar-w") !== sw) {

@@ -310,6 +310,11 @@
   --bc-pad-card: calc(var(--bc-space-unit) * 6);    /* 24px */
   --bc-pad-row:  calc(var(--bc-space-unit) * 3.5);  /* 14px */
   --bc-gap-card: calc(var(--bc-space-unit) * 4);    /* 16px */
+  /* Space a host reserves at the top-right of the settings header for chrome of
+     its own. Only the in-page drawer has any (a floating close button), so it
+     raises this; the options page and anything else gets the card padding and no
+     dead air. */
+  --bc-panel-gutter: var(--bc-pad-card);
 
   /* The spectrum. A fixed set of hues rather than theme colours, because the
      only thing that reads it maps hue to a VALUE — the rainbow progress style,
@@ -415,6 +420,32 @@
     --bc-dur-1: 0.01ms; --bc-dur-2: 0.01ms; --bc-dur-3: 0.01ms; --bc-dur-4: 0.01ms;
   }
 }`;
+    },
+
+    // The root switches that staticCss() itself reads: density scales
+    // --bc-space-unit, rounded zeroes --bc-radius, motion zeroes every
+    // --bc-dur-*, and the speed slider divides them. They live here because
+    // tokens.js is what defines the rules that consume them, and because THREE
+    // documents need them and only one of them is a content script. The popup
+    // and the options page emitted the token CSS without ever setting these, so
+    // density, square corners, the animation-speed slider and the user's own
+    // reduced-motion toggle reached neither surface. Returns nothing and writes
+    // only what differs, so it is safe to call on every tick.
+    applyRootAttrs(doc, theming) {
+      const t = theming || {};
+      const skin = (BC.skins && BC.skins.active) ? BC.skins.active({ theming: t }) : null;
+      const set = (k, v) => { if (doc.getAttribute(k) !== v) doc.setAttribute(k, v); };
+      set("data-bc-density", (skin && skin.density) || t.density || "default");
+      set("data-bc-rounded", t.roundedUI ? "1" : "0");
+      set("data-bc-radius", String(skin ? skin.radius | 0 : t.radius | 0));
+      const reduce = !!t.reducedMotion ||
+        (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches);
+      set("data-bc-motion", reduce ? "0" : "1");
+      // Clamped: the durations are calc(Nms / speed), so a corrupted import
+      // setting this to 0 would divide by zero across every animation.
+      const n = Number(t.animSpeed);
+      const speed = String(Math.min(4, Math.max(0.25, isFinite(n) && n ? n : 1)));
+      if (doc.style.getPropertyValue("--bc-anim-speed") !== speed) doc.style.setProperty("--bc-anim-speed", speed);
     },
 
     // Memo key so theming.js can skip rebuilding a multi-KB string on every tick.

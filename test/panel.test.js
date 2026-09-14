@@ -70,8 +70,15 @@ module.exports = {
     assert.ok(header, ".bc-header has no rule");
     assert.match(header[0], /grid-template-columns:[^;]*minmax\(0, 1fr\)/,
       "exactly one header track may take the slack, or the actions overflow again");
-    assert.match(header[0], /padding:[^;]*46px/,
-      "the header must reserve the corner the drawer's close button floats in");
+    // The gutter is a token, not a literal: only the in-page drawer floats a
+    // close button over this corner, and hardcoding 46px left the options page
+    // with that much dead air and its overflow menu adrift from the cards.
+    assert.match(header[0], /padding:[^;]*var\(--bc-panel-gutter/,
+      "the header must reserve its host's gutter, whatever that host needs");
+    assert.match(read("src/content/features/settings-panel.js"), /--bc-panel-gutter:\s*\d+px/,
+      "the drawer must claim the corner its close button floats in");
+    assert.match(BC.tokens.staticCss(), /--bc-panel-gutter:\s*var\(--bc-pad-card\)/,
+      "a host with no chrome of its own should get the card padding, not dead air");
   },
 
   "the tabs are grouped, and there are not seventeen of them"() {

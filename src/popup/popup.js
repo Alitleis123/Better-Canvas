@@ -27,6 +27,7 @@
     if (tag.textContent !== css) tag.textContent = css;
     const dark = BC.isDarkActive ? BC.isDarkActive(settings) : false;
     document.documentElement.classList.toggle("bc-dark", dark);
+    BC.tokens.applyRootAttrs(document.documentElement, settings.theming);
   }
 
   // `data-icon` keeps the markup declarative and the geometry in the shared set.

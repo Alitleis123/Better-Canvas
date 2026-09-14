@@ -87,7 +87,11 @@
     // --bc-* from :root and tracks the user's theme for free.
     const style = document.createElement("style");
     style.textContent = `
-      :host { all: initial; }
+      /* Only the drawer floats a close button over its header, so only the drawer
+         reserves that corner. The options page hosts the same UI with no close
+         button and was leaving 46px of dead air with its overflow menu adrift
+         from the cards below. */
+      :host { all: initial; --bc-panel-gutter: 46px; }
       * { box-sizing: border-box; }
       .root { height: 100%; overflow: auto; background: var(--bc-surface-1, #f6f7fb); }
       /* Sits on the panel's own header, so it reads as the header's last button
