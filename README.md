@@ -20,6 +20,7 @@ scale.
 | Chrome bars | 2 (the second overflowed its own right edge) | 1 |
 | Tabs | 17, flat | 13, in Look / Pages / Tools / You |
 | Rows carrying an icon | 0 of 125 | 128 of 128 |
+| Section headings carrying an icon | 0 of 46 | 48 of 48 |
 | Words of hint and section copy | 438 | 357 |
 | Narrowest label column, 360–900px | 26px at 600px | ≥ 144px at every width |
 | Deepest wrapped hint | 7 lines | 2 |
@@ -38,6 +39,14 @@ below its label, left-aligned under it. Rows whose control is a single switch ar
 exempt: a switch is 40px and fits beside a label at any width the panel reaches,
 and stacking those too cost a second line on most of the panel at a 1100px
 window.
+
+Everything below the shell got the same treatment, because half of it had
+never been rendered in a test at all: the course editor handed two `1fr` tracks
+to a 300px row, so its nickname field was six characters wide and its image-URL
+field read "backgro"; the GPA panel was a bordered `<table>` that wrapped every
+course name over three lines; the global-nav list was the last native checkbox
+in the product, rendering in system blue against a warm accent while its own
+caption said "switch off to hide".
 
 Numbers above are measured, not estimated — `test/browser/page.html` plus
 `__bcPanel(width)` and `__bcRowWidths()` report label widths and hint depth from
