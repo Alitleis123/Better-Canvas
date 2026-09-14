@@ -39,6 +39,8 @@ __bcTodo("segments")                          // fixture sidebar, in any of its
 __bcTodo("rainbow")                           // six progress styles
 __bcTodo("ring", { theming: { density: "compact" } })
 
+__bcSheetHealth()                             // does every sheet we inject
+                                              // actually parse to its END?
 __bcAudit()                                   // every element carrying text,
                                               // with its rendered colours and
                                               // contrast against what is
@@ -140,6 +142,11 @@ against a live Canvas instance is still a manual step.
 
 - `__bcAudit().filter(a => a.ratio < 4.5)` is empty, for every value of
   `darkTone` and a few accents
+- `Object.values(__bcSheetHealth()).every(s => s.ok)` — a parse error anywhere in
+  a sheet silently disables every rule after it, and nothing reports it. This is
+  how a selector-splitting bug came to disable 11,820 of 21,743 characters of
+  dark-mode CSS with the whole node suite green: the dashboard header kept a
+  white background and took light text at 1.22:1.
 - the course image is still an image: `getComputedStyle(document.querySelector('.ic-DashboardCard__header_image')).backgroundImage`
 - the course colour is unchanged: `.ic-DashboardCard__header_hero`
 - an authored box keeps its own background and gains legible ink: `.user_content .callout`

@@ -363,6 +363,34 @@ window.__bcSkin = function (id, extra) {
   return { skin: id, dark: BC.isDarkActive(s) };
 };
 
+// Does every stylesheet we inject actually PARSE to its end? Chrome discards the
+// remainder of a sheet at a parse error, so one bad selector silently disables
+// every rule after it and nothing anywhere reports a problem. This bisects each
+// sheet for the shortest prefix that already yields its full rule count: on a
+// healthy sheet that lands at the very end.
+//
+// It exists because a selector-splitting bug shredded
+// [style*="background-color: rgb(255, 255, 255)"] into an unterminated string,
+// and 11,820 of 21,743 characters stopped applying with a green node suite.
+window.__bcSheetHealth = function () {
+  const out = {};
+  for (const n of document.querySelectorAll("style[data-better-canvas]")) {
+    const text = n.textContent, key = n.getAttribute("data-better-canvas");
+    const probe = document.createElement("style");
+    document.head.appendChild(probe);
+    const count = (len) => {
+      probe.textContent = text.slice(0, len);
+      try { return probe.sheet.cssRules.length; } catch (e) { return -1; }
+    };
+    const full = count(text.length);
+    let lo = 0, hi = text.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (count(mid) >= full) hi = mid; else lo = mid + 1; }
+    probe.remove();
+    out[key] = { rules: full, len: text.length, lastGainAt: lo, ok: lo > text.length * 0.9 };
+  }
+  return out;
+};
+
 window.__bcClear = function () {
   BC.theming.clearLightSweep();
   if (BC.features.dashboard.unmount) BC.features.dashboard.unmount();
