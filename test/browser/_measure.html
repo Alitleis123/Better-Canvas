@@ -1,0 +1,50 @@
+<!doctype html><meta charset=utf-8><title>measure</title>
+<body style="margin:0;font:12px/1.6 ui-monospace,Menlo,monospace;white-space:pre-wrap;padding:10px">
+<pre id=out>measuring…</pre>
+<script>
+// The dashboard, measured at a range of viewport widths. An iframe is the only
+// way to vary the viewport without varying the screenshot, and the card grid is
+// laid out against the iframe's width, not the window's.
+const WIDTHS = [1280, 1440, 1680, 1920, 2240, 2560, 3000];
+const out = document.getElementById('out');
+const r_cols = (gs) => gs.gridTemplateColumns.split(" ").length;
+(async () => {
+  const rows = [];
+  for (const w of WIDTHS) {
+    const f = document.createElement('iframe');
+    f.style.cssText = "width:" + w + "px;height:900px;border:0;position:absolute;left:-99999px";
+    f.src = "/test/browser/page.html?t=" + Date.now() + "&w=" + w;
+    document.body.appendChild(f);
+    await new Promise((r) => { f.onload = r; });
+    const cw = f.contentWindow;
+    await cw.__bcReady;
+    cw.__bcApply({});
+    await new Promise((r) => setTimeout(r, 120));
+    const d = cw.document;
+    const grid = d.querySelector("[data-bc-cardgrid]");
+    const card = d.querySelector(".ic-DashboardCard");
+    const hero = d.querySelector(".ic-DashboardCard__header_hero, .ic-DashboardCard__header_image");
+    const body = d.querySelector(".ic-DashboardCard__header-content");
+    const gs = grid ? getComputedStyle(grid) : null;
+    const cr = card ? card.getBoundingClientRect() : null;
+    const hr = hero ? hero.getBoundingClientRect() : null;
+    rows.push({
+      vw: w,
+      cols: gs ? (gs.gridTemplateColumns.split(" ").length) : 0,
+      colW: gs ? gs.gridTemplateColumns.split(" ")[0] : "-",
+      gap: gs ? gs.gap : "-",
+      card: cr ? Math.round(cr.width) + "x" + Math.round(cr.height) : "-",
+      cardAspect: cr ? (cr.width / cr.height).toFixed(2) : "-",
+      heroH: hr ? Math.round(hr.height) : "-",
+      heroShare: (cr && hr) ? Math.round(hr.height / cr.height * 100) + "%" : "-",
+      bodyPad: body ? getComputedStyle(body).padding : "-",
+      // Constant-width tracks cannot absorb leftover space, so it lands at the
+      // end of the row. Bounded by one column; worth knowing how big.
+      trailing: grid ? Math.round(grid.clientWidth - (cr ? (r_cols(gs) * cr.width + (r_cols(gs) - 1) * parseFloat(gs.gap)) : 0)) : "-",
+    });
+    f.remove();
+  }
+  out.textContent = rows.map((r) => JSON.stringify(r)).join("\n");
+  document.title = "ready";
+})();
+</script>

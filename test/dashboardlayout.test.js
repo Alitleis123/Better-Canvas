@@ -295,4 +295,62 @@ module.exports = {
     assert.match(block, /font-variant-numeric: tabular-nums/,
       "course codes are figures and should align");
   },
+
+  // Reported as the dashboard being well spaced on one monitor and cramped on
+  // another. Measured across seven viewport widths from 1280 to 3000, the card
+  // came out 299, 260, 253, 301, 256, 262 and 250 px wide, not even
+  // monotonically, because the column was minmax(size, 1fr) and 1fr takes
+  // whatever is left over. Canvas's own artwork is a flat 146px at every card
+  // width, so its aspect ratio moved from 1.71 to 2.06 with it, and card height
+  // jumped between 281 and 300 purely on whether the title wrapped.
+  //
+  // After: 250x316, aspect 0.79, artwork 140px at 44% of the card, at every one
+  // of those widths. Only the column count changes.
+  "a course card is the same card at every viewport width"() {
+    const src = read("src/content/features/dashboard.js");
+
+    // The grid track must not hand the leftover space to the card.
+    const track = src.match(/const track = `([^`]+)`/);
+    assert.ok(track, "the card grid track is not defined in one place");
+    assert.ok(!/1fr/.test(track[1]),
+      "a 1fr column makes the card width a function of the viewport: " + track[1]);
+    assert.match(track[1], /repeat\(auto-fill/, "the grid should still pack by available width");
+    // And every layout that uses a grid must use that one definition.
+    const gridRules = [...src.matchAll(/grid-template-columns: ([^!]+)!important/g)].map((m) => m[1].trim());
+    for (const g of gridRules) {
+      assert.ok(/\$\{track\}/.test(g), "a layout restates its columns instead of using track: " + g);
+    }
+
+    // The artwork scales with the card rather than being a fixed slab.
+    assert.match(src, /aspect-ratio: 16 \/ 9 !important/,
+      "the card artwork needs a ratio, or its proportions move with the viewport");
+    assert.match(src, /-webkit-line-clamp: 2 !important/,
+      "the title must clamp, or a long course name makes a taller card");
+    assert.match(src, /min-height: calc\(var\(--bc-text-lg[^)]*\)[^;]*\)/,
+      "the title must also RESERVE its two lines, or a short name makes a shorter card");
+
+    // The gutter belongs to the spacing scale like everything else we ship.
+    assert.ok(!/gap: 16px !important/.test(src),
+      "the card gutter should come from the spacing scale, not a magic 16px");
+  },
+
+  // The list layout has never shown a course name. Canvas puts the text link
+  // INSIDE .ic-DashboardCard__header, and the layout treated that header as the
+  // artwork with flex: 0 0 120px, so the link stacked under the hero and the
+  // 90px card clipped it away. The row is the header now, with the artwork as
+  // its first item and the link as its second.
+  "a list row shows the course, not just its colour"() {
+    const src = read("src/content/features/dashboard.js");
+    const list = src.match(/if \(d\.layout === "list"\) css \+= `([\s\S]*?)`;/);
+    assert.ok(list, "the list layout is missing");
+    const css = list[1];
+    assert.match(css, /\.ic-DashboardCard__header \{[^}]*display: flex/,
+      "the header holds both the artwork and the link, so it has to be the row");
+    assert.match(css, /\.ic-DashboardCard__header_image[^{]*\{[^}]*flex: 0 0 \d+px/,
+      "the artwork is what gets the fixed width, not the header");
+    assert.match(css, /\.ic-DashboardCard__link \{[^}]*flex: 1 1 auto/,
+      "the link takes the rest of the row");
+    assert.ok(!/\.ic-DashboardCard__header \{ flex: 0 0 120px/.test(css),
+      "sizing the header as the artwork is what clipped the text");
+  },
 };

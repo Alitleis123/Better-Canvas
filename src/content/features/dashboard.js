@@ -46,6 +46,57 @@
 
   function layoutCss(d) {
     const size = { s: 200, m: 250, l: 320 }[d.cardSize || "m"] || 250;
+    // A FIXED track, not minmax(size, 1fr). With 1fr the column takes whatever
+    // is left over, so the card width swung with the viewport and not even
+    // monotonically: measured across 1280 to 3000 it went 299, 260, 253, 301,
+    // 256, 262, 250. Every one of those is a different card, which is why the
+    // dashboard read as well spaced on one monitor and cramped on another.
+    //
+    // Fixed rather than merely capped, because a cap still has to round down to
+    // a whole number of columns and that costs density: at 1.15x the chosen size
+    // a 1440px window dropped from four cards per row to three. Measured over
+    // the same seven widths, a fixed track keeps the original column counts
+    // (3, 4, 5, 5, 7, 8, 10) and leaves an average of 85px at the end of a row
+    // against 170px for the capped version. It is also what Canvas itself does,
+    // so the grid stays native.
+    //
+    // min(100%, size) as the floor so a container narrower than one card gets a
+    // track that fits it rather than one that overflows.
+    const track = `repeat(auto-fill, minmax(min(100%, ${size}px), ${size}px))`;
+
+    // The card's own proportions, shared by every layout that shows a card face.
+    // Canvas fixes the artwork at 146px tall at every card width, so its aspect
+    // ratio changed with the viewport (1.71 at a 250px card, 2.06 at 301px) and
+    // its share of the card jumped between 49% and 52%. An aspect-ratio scales
+    // with the card instead, so the face is identical at every size.
+    const cardShape = `
+      .ic-DashboardCard__header_image, .ic-DashboardCard__header_hero {
+        height: auto !important;
+        aspect-ratio: 16 / 9 !important;
+      }
+      /* Two lines, always. Card height jumped between 281px and 300px purely on
+         whether the title wrapped, so a row of cards was uneven for a reason
+         that has nothing to do with the course. Reserving two lines and clamping
+         to two makes every card the same height whatever it is called. */
+      .ic-DashboardCard__header-title, .ic-DashboardCard__header-title span {
+        display: -webkit-box !important;
+        -webkit-box-orient: vertical !important;
+        -webkit-line-clamp: 2 !important;
+        overflow: hidden !important;
+      }
+      .ic-DashboardCard__header-title {
+        min-height: calc(var(--bc-text-lg, 15px) * var(--bc-leading-tight, 1.25) * 2) !important;
+      }
+      /* Canvas pads the body 10px 12px, which is thin against a 250px card and
+         is the other half of what reads as bad spacing. On the scale, so the
+         density setting reaches it. */
+      .ic-DashboardCard__header-content, .ic-DashboardCard__link {
+        padding: var(--bc-pad-row, 14px) !important;
+      }
+      .ic-DashboardCard__action-container {
+        padding: var(--bc-space-3, 8px) var(--bc-pad-row, 14px) var(--bc-pad-row, 14px) !important;
+        gap: var(--bc-space-5, 12px) !important;
+      }`;
     const rad = (d.cardRadius|0) + "px";
     let css = `
       .ic-DashboardCard { border-radius: ${rad} !important; overflow: hidden; }
@@ -116,24 +167,65 @@
     // dead space to the right of each one.
     const fillCell = `${GRID} > [data-bc-carditem] { width: 100% !important; }
       ${GRID} > [data-bc-carditem] .ic-DashboardCard, ${GRID} > .ic-DashboardCard { width: 100% !important; }`;
-    if (d.layout === "grid") css += `${GRID} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 16px !important; align-items: start !important; }
-      ${spanRow}
-      ${fillCell}
-      ${spine}`;
-    if (d.layout === "list") css += `${spine}
-      ${GRID} { display: flex !important; flex-direction: column !important; gap: var(--bc-space-3, 8px) !important; }
-      ${GRID} > * { width: 100% !important; }
-      .ic-DashboardCard { display: flex !important; flex-direction: row !important; height: 90px !important; }
-      .ic-DashboardCard__header { flex: 0 0 120px !important; }
-      .ic-DashboardCard__action-container { display: none !important; }`;
-    if (d.layout === "compact") css += `${GRID} { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 12px !important; align-items: start !important; }
+    if (d.layout === "grid") css += `${GRID} { display: grid !important; grid-template-columns: ${track} !important; gap: var(--bc-space-7, 16px) !important; align-items: start !important; }
       ${spanRow}
       ${fillCell}
       ${spine}
+      ${cardShape}`;
+    if (d.layout === "list") css += `${spine}
+      ${GRID} { display: flex !important; flex-direction: column !important; gap: var(--bc-space-3, 8px) !important; }
+      ${GRID} > * { width: 100% !important; }
+      /* The text link is INSIDE __header, not beside it. This layout used to put
+         flex: 0 0 120px on __header and treat it as the artwork, which left
+         the link stacked underneath the hero and clipped away entirely by the
+         90px card: a list row has never shown a course name. __header is the
+         row, the artwork is its first item and the link is its second. */
+      .ic-DashboardCard { display: flex !important; flex-direction: row !important; height: 90px !important; }
+      .ic-DashboardCard__header {
+        display: flex !important; flex-direction: row !important;
+        align-items: stretch !important; flex: 1 1 auto !important;
+        height: 100% !important; min-width: 0 !important;
+      }
+      .ic-DashboardCard__header_image, .ic-DashboardCard__header_hero {
+        flex: 0 0 120px !important; height: auto !important; aspect-ratio: auto !important;
+      }
+      .ic-DashboardCard__link {
+        flex: 1 1 auto !important; min-width: 0 !important;
+        display: flex !important; flex-direction: column !important; justify-content: center !important;
+        padding: var(--bc-space-4, 10px) var(--bc-pad-row, 14px) !important;
+      }
+      .ic-DashboardCard__header-content { padding: 0 !important; background: none !important; }
+      /* One line in a 90px row, and no reserved second line to push it out. */
+      .ic-DashboardCard__header-title, .ic-DashboardCard__header-title span {
+        display: -webkit-box !important; -webkit-box-orient: vertical !important;
+        -webkit-line-clamp: 1 !important; overflow: hidden !important;
+      }
+      .ic-DashboardCard__header-title { min-height: 0 !important; }
+      .ic-DashboardCard__header-term { display: none !important; }
+      .ic-DashboardCard__action-container { display: none !important; }`;
+    if (d.layout === "compact") css += `${GRID} { display: grid !important; grid-template-columns: ${track} !important; gap: var(--bc-space-5, 12px) !important; align-items: start !important; }
+      ${spanRow}
+      ${fillCell}
+      ${spine}
+      ${cardShape}
       .ic-DashboardCard { max-height: 120px !important; }
-      .ic-DashboardCard__header_image { height: 40px !important; }`;
+      /* Compact trades the artwork for density, so it keeps a strip rather than
+         a 16/9 face -- but a ratio, not a magic 40px, so the strip stays
+         proportional to the card. */
+      .ic-DashboardCard__header_image, .ic-DashboardCard__header_hero { aspect-ratio: 8 / 1 !important; }
+      /* And one title line, not two reserved: the shared card shape's reserve
+         plus two metadata lines overflowed the 120px cap and clipped the term
+         mid-glyph. Density is the whole point of this layout. */
+      .ic-DashboardCard__header-title, .ic-DashboardCard__header-title span { -webkit-line-clamp: 1 !important; }
+      .ic-DashboardCard__header-title { min-height: 0 !important; }
+      .ic-DashboardCard__header-term { display: none !important; }
+      .ic-DashboardCard__header-content, .ic-DashboardCard__link { padding: var(--bc-space-4, 10px) var(--bc-space-5, 12px) !important; }`;
     if (d.layout === "masonry") css += `${spine}
-      ${GRID} { columns: ${Math.max(2, Math.floor(1200/size))} auto !important; column-gap: var(--bc-space-6, 14px) !important; display: block !important; }
+      ${cardShape}
+      /* column-width, not a count computed from a hardcoded 1200: the count made
+         the column width depend on the viewport exactly the way the grid's 1fr
+         did, so masonry had the same inconsistency. */
+      ${GRID} { columns: ${size}px auto !important; column-gap: var(--bc-space-6, 14px) !important; display: block !important; }
       .ic-DashboardCard { break-inside: avoid !important; margin-bottom: var(--bc-space-6, 14px) !important; }`;
     return css;
   }
