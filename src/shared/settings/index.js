@@ -100,6 +100,7 @@
       const navGroups = h("div.bc-nav-groups", null);
       nav.appendChild(navGroups);
       const body  = h("main.bc-body", null);
+      const empty = h("p.bc-search-empty.bc-hidden", null);
       shell.appendChild(nav); shell.appendChild(body);
       shellWrap.appendChild(shell);
       app.appendChild(shellWrap);
@@ -206,7 +207,7 @@
         }
         // Controls in the outgoing tab detach here; C.bindings.sync prunes them
         // lazily on its next pass via isConnected, so there's nothing to unwire.
-        body.replaceChildren(head, panel);
+        body.replaceChildren(head, panel, empty);
         applySearch(searchQuery);
       }
 
@@ -218,10 +219,23 @@
         for (const row of body.querySelectorAll(".bc-row")) {
           row.classList.toggle("bc-hidden", !!query && !(row.textContent || "").toLowerCase().includes(query));
         }
+        let shown = 0;
         for (const sec of body.querySelectorAll(".bc-section")) {
-          const anyVisible = !!sec.querySelector(".bc-row:not(.bc-hidden)");
-          sec.classList.toggle("bc-hidden", !!query && !anyVisible);
+          // A section built out of rows is judged by its rows. Several are not:
+          // the skin gallery, the theme grids, the GPA table and the charts are
+          // whole panels. Judging those by "has a visible row" hid every one of
+          // them for ANY query, so searching "skin" on the Themes tab hid the
+          // skin gallery -- the search was hiding exactly what was asked for.
+          const hasRows = !!sec.querySelector(".bc-row");
+          const hit = hasRows
+            ? !!sec.querySelector(".bc-row:not(.bc-hidden)")
+            : (sec.textContent || "").toLowerCase().includes(query);
+          sec.classList.toggle("bc-hidden", !!query && !hit);
+          if (!query || hit) shown++;
         }
+        // Say so, rather than leaving the tab heading above an empty void.
+        empty.classList.toggle("bc-hidden", !query || shown > 0);
+        empty.textContent = query ? 'Nothing in this tab matches "' + searchQuery.trim() + '".' : "";
       }
 
       store.subscribe((state, kind) => {
@@ -1894,6 +1908,12 @@
   }
   .bc-tab-title { margin: 0; font-size: var(--bc-text-2xl, 20px); font-weight: 700; letter-spacing: -.015em; }
   .bc-tab-sub { margin: 2px 0 0; color: var(--muted); font-size: var(--bc-text-sm, 13px); text-wrap: pretty; }
+  .bc-search-empty {
+    margin: 0; padding: var(--bc-pad-card, 24px); text-align: center;
+    color: var(--muted); font-size: var(--bc-text-sm, 13px);
+    background: var(--panel); border: 1px dashed var(--border);
+    border-radius: var(--bc-radius-xl, 14px);
+  }
 
   /* ---- sections --------------------------------------------------------- */
   .bc-body { min-width: 0; container-type: inline-size; container-name: bc-body; }

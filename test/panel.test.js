@@ -150,6 +150,42 @@ module.exports = {
       "the store must hand the components layer a reader for construction-time state");
   },
 
+  "search does not hide the thing it was asked for"() {
+    // Several sections are whole panels rather than lists of rows: the skin
+    // gallery, the theme grids, the GPA table, the charts. Judging those by
+    // "does it still have a visible row" hid every one of them for ANY query,
+    // so typing "skin" on the Themes tab hid the skin gallery.
+    const src = SRC();
+    const fn = src.match(/function applySearch\(q\) \{[\s\S]*?\n      \}/);
+    assert.ok(fn, "applySearch not found");
+    assert.match(fn[0], /hasRows\s*\n?\s*\?/,
+      "a rowless section must be matched on its own text, not on its rows");
+    assert.match(fn[0], /sec\.textContent/,
+      "a rowless section needs some way to match");
+  },
+
+  "a search that matches nothing says nothing matched"() {
+    const src = SRC();
+    assert.match(src, /bc-search-empty/, "there is no empty state for search");
+    const fn = src.match(/function applySearch\(q\) \{[\s\S]*?\n      \}/);
+    assert.match(fn[0], /empty\.classList\.toggle\("bc-hidden"/,
+      "the empty state must be driven by the query, not left on screen");
+    // It has to outlive a tab switch, which replaces the body wholesale.
+    assert.match(src, /body\.replaceChildren\(head, panel, empty\)/,
+      "the empty state must be re-attached when the tab changes");
+  },
+
+  "opening the drawer focuses something the user can see"() {
+    // The trap takes the first tabbable in DOM order, and that is now the master
+    // switch's visually hidden checkbox: a 1x1 box, so the focus ring landed
+    // somewhere invisible.
+    const panel = read("src/content/features/settings-panel.js");
+    const call = panel.match(/BC\.ui\.focusTrap\(shadow, \{[\s\S]*?\}\)/);
+    assert.ok(call, "the drawer does not install a focus trap");
+    assert.match(call[0], /initial:[^,]*\.bc-search/,
+      "the drawer must aim its initial focus at a visible control");
+  },
+
   "a tab that fails to render says so"() {
     // A throwing renderer left the PREVIOUS tab's body mounted while the rail
     // highlighted the new one, so the panel silently showed the wrong page.
@@ -158,7 +194,7 @@ module.exports = {
     assert.ok(show, "showTab not found");
     assert.match(show[0], /try \{[\s\S]*?tab\.render\([\s\S]*?\} catch/,
       "showTab must not let a renderer throw past it");
-    assert.match(show[0], /body\.replaceChildren\(head, panel\)/,
+    assert.match(show[0], /body\.replaceChildren\(head, panel/,
       "the body must be swapped once, after the panel is known to exist");
   },
 

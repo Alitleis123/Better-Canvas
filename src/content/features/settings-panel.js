@@ -411,7 +411,16 @@
     setExpanded(true);
     lockPageScroll();
     schedulePreview();
-    if (BC.ui && BC.ui.focusTrap) trap = BC.ui.focusTrap(shadow, { returnTo: document.getElementById("bc-open-settings") });
+    // Aim the initial focus. The trap otherwise takes the first tabbable in DOM
+    // order, and that is now the master switch's visually hidden checkbox -- a
+    // 1x1 box, so opening the drawer put the focus ring somewhere invisible.
+    // The search field is both visible and the most useful place to land.
+    if (BC.ui && BC.ui.focusTrap) {
+      trap = BC.ui.focusTrap(shadow, {
+        initial: shadow.querySelector(".bc-search") || undefined,
+        returnTo: document.getElementById("bc-open-settings"),
+      });
+    }
   }
 
   function close() {
