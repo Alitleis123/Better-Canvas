@@ -1,78 +1,156 @@
 /* Popup styling. Consumes the shared design tokens that popup.js emits, so the
-   toolbar panel finally tracks the user's theme — accent, palette, radius, and font
+   toolbar panel tracks the user's theme — accent, palette, radius, and font
    stack. It previously declared its own third set of hardcoded variables plus a
-   prefers-color-scheme block and ignored the theme entirely. Fallbacks keep it
-   legible if tokens haven't been painted yet. */
+   prefers-color-scheme block and ignored the theme entirely.
+
+   It also now shares the settings panel's language rather than approximating it:
+   the same icon tile, the same switch, the same warm card. The popup and the
+   drawer are the only two surfaces most people ever see, and they used to look
+   like two different extensions. */
 * { box-sizing: border-box; }
 body {
-  width: 320px; margin: 0; padding: 14px;
-  font-family: var(--bc-font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  width: 340px; margin: 0; padding: var(--bc-space-5, 12px);
+  font-family: var(--bc-font-sans, ui-rounded, "SF Pro Rounded", system-ui, sans-serif);
   font-size: var(--bc-text-md, 14px);
-  line-height: var(--bc-leading-body, 1.4);
-  background: var(--bc-surface-2, #ffffff);
-  color: var(--bc-text, #1f2937);
-  accent-color: var(--bc-accent, #4f46e5);
+  line-height: var(--bc-leading-body, 1.45);
+  background: var(--bc-surface-1, #f5f1ea);
+  color: var(--bc-text, #1d1a16);
+  accent-color: var(--bc-accent, #a8452c);
 }
 :focus-visible {
-  outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5));
+  outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #a8452c));
   outline-offset: 2px;
 }
+.bc-sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
 
-.bc-pop-header { display: flex; align-items: center; gap: var(--bc-space-4, 10px); margin-bottom: var(--bc-space-5, 12px); }
+/* ---- header ------------------------------------------------------------ */
+.bc-pop-header {
+  display: flex; align-items: center; gap: var(--bc-space-3, 8px);
+  margin-bottom: var(--bc-space-5, 12px);
+}
 .bc-pop-logo {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; border-radius: var(--bc-radius-lg, 10px);
-  background: var(--bc-accent, #4f46e5); color: var(--bc-accent-contrast, #fff);
-  font-weight: 800; font-size: var(--bc-text-sm, 13px);
+  width: 30px; height: 30px; flex: none;
+  border-radius: var(--bc-radius-md, 8px);
+  background: var(--bc-accent, #a8452c); color: var(--bc-accent-contrast, #fff);
+  font-weight: 800; font-size: var(--bc-text-xs, 12px); letter-spacing: .02em;
 }
-.bc-pop-header h1 { font-size: var(--bc-text-lg, 15px); margin: 0; }
-.bc-ver { font-size: var(--bc-text-2xs, 11px); color: var(--bc-muted, #6b7280); margin: 0; }
+.bc-pop-title { min-width: 0; flex: 1; }
+.bc-pop-header h1 { font-size: var(--bc-text-lg, 15px); font-weight: 650; letter-spacing: -.01em; margin: 0; }
+.bc-ver { font-size: var(--bc-text-3xs, 10px); color: var(--bc-muted, #6b6155); margin: 0; font-variant-numeric: tabular-nums; }
 
+/* Same pill as the settings header, so the one control that turns everything
+   off looks identical in both places. */
+.bc-master {
+  display: inline-flex; align-items: center; gap: var(--bc-space-2, 6px);
+  padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px);
+  border-radius: var(--bc-radius-pill, 999px);
+  background: var(--bc-surface-3, rgba(0,0,0,.05));
+  font-size: var(--bc-text-xs, 12px); font-weight: 600;
+  color: var(--bc-muted, #6b6155); cursor: pointer; white-space: nowrap;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.bc-master.bc-on { color: var(--bc-accent-text, var(--bc-accent, #a8452c)); background: var(--bc-accent-weak, rgba(168,69,44,.12)); }
+
+/* ---- site status ------------------------------------------------------- */
 .bc-site {
+  display: flex; align-items: center; gap: var(--bc-space-2, 6px); flex-wrap: wrap;
   font-size: var(--bc-text-xs, 12px);
   padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px);
   border-radius: var(--bc-radius-md, 8px);
-  background: var(--bc-surface-4, rgba(0,0,0,.04));
-  color: var(--bc-muted, #6b7280);
-  margin-bottom: var(--bc-space-5, 12px);
+  background: var(--bc-surface-3, rgba(0,0,0,.04));
+  color: var(--bc-muted, #6b6155);
+  margin-bottom: var(--bc-space-4, 10px);
 }
-.bc-site.is-active {
-  background: var(--bc-success-bg, #d1fae5);
-  color: var(--bc-success, #065f46);
-}
+.bc-site.is-active { background: var(--bc-success-bg, #ecfdf5); color: var(--bc-success, #047857); }
 .bc-site button {
-  margin-top: var(--bc-space-3, 8px); width: 100%; padding: 7px;
-  border: none; border-radius: var(--bc-radius-md, 6px);
-  background: var(--bc-accent, #4f46e5); color: var(--bc-accent-contrast, #fff);
+  margin-top: var(--bc-space-2, 6px); width: 100%; padding: 7px;
+  border: none; border-radius: var(--bc-radius-md, 8px);
+  background: var(--bc-accent, #a8452c); color: var(--bc-accent-contrast, #fff);
   cursor: pointer; font-family: inherit; font-weight: var(--bc-weight-semibold, 600);
 }
 
-.bc-section { display: flex; flex-direction: column; gap: var(--bc-space-3, 8px); margin-bottom: var(--bc-space-6, 14px); }
-.bc-toggle, .bc-row {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: var(--bc-space-4, 10px); padding: var(--bc-space-2, 6px) 0;
+/* ---- rows -------------------------------------------------------------- */
+.bc-card {
+  background: var(--bc-surface-2, #fffdf9);
+  border: 1px solid var(--bc-border, #e3dacc);
+  border-radius: var(--bc-radius-lg, 12px);
+  padding: var(--bc-space-3, 8px);
+  margin-bottom: var(--bc-space-4, 10px);
+}
+/* Same three tracks as a settings row: mark, label, control. */
+.bc-row {
+  display: grid; grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center; gap: var(--bc-space-3, 8px);
+  padding: var(--bc-space-3, 8px);
+  border-radius: var(--bc-radius-md, 8px);
   cursor: pointer;
+  transition: background-color 90ms ease;
 }
-.bc-row select {
-  padding: var(--bc-space-1, 4px) var(--bc-space-2, 6px);
-  border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-md, 6px);
-  background: var(--bc-surface-2, #fff); color: inherit; font: inherit;
+.bc-row:hover { background: var(--bc-surface-3, rgba(0,0,0,.04)); }
+.bc-row-label { font-weight: 600; }
+.bc-pop-ic {
+  width: 26px; height: 26px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--bc-radius-md, 8px);
+  background: var(--bc-surface-3, rgba(0,0,0,.05));
+  color: var(--bc-muted, #6b6155);
+  transition: background-color 90ms ease, color 90ms ease;
 }
-.bc-toggle input { width: 18px; height: 18px; }
+.bc-row:hover .bc-pop-ic { background: var(--bc-accent-weak, rgba(168,69,44,.12)); color: var(--bc-accent-text, var(--bc-accent, #a8452c)); }
 
+.bc-select {
+  padding: var(--bc-space-2, 6px) var(--bc-space-3, 8px);
+  border: 1px solid var(--bc-border, #e3dacc); border-radius: var(--bc-radius-md, 8px);
+  background: var(--bc-surface-2, #fffdf9); color: inherit; font: inherit;
+  font-size: var(--bc-text-sm, 13px); cursor: pointer;
+}
+
+/* The settings panel's switch, to the pixel — it was a bare 18px checkbox here. */
+.bc-switch {
+  position: relative; width: 38px; height: 22px; flex: none; display: inline-block;
+  border-radius: 999px; background: var(--bc-border-strong, var(--bc-border, #d8cbb8));
+  transition: background 160ms ease; cursor: pointer;
+}
+.bc-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+/* pointer-events:none is load-bearing: the thumb is a later positioned sibling,
+   so without it the knob paints above the input and swallows the click. */
+.bc-switch-thumb {
+  position: absolute; top: 2.5px; left: 2.5px; width: 17px; height: 17px;
+  background: var(--bc-surface-2, #fff); border-radius: 50%;
+  box-shadow: var(--bc-shadow-1, 0 1px 2px rgba(0,0,0,.15));
+  transition: transform 160ms cubic-bezier(.22,.61,.36,1); pointer-events: none;
+}
+.bc-switch input:checked + .bc-switch-thumb { transform: translateX(16px); }
+.bc-switch:has(input:checked) { background: var(--bc-accent, #a8452c); }
+.bc-switch input:focus-visible + .bc-switch-thumb {
+  box-shadow: 0 1px 2px rgba(0,0,0,.15), 0 0 0 3px color-mix(in srgb, var(--bc-accent, #a8452c) 45%, transparent);
+}
+
+/* ---- actions ----------------------------------------------------------- */
 .bc-actions { display: flex; gap: var(--bc-space-2, 6px); }
 .bc-btn {
-  flex: 1; padding: var(--bc-space-3, 8px);
+  flex: 1; padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px);
   display: inline-flex; align-items: center; justify-content: center; gap: var(--bc-space-2, 6px);
-  border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-md, 8px);
-  background: var(--bc-surface-2, #fff); color: var(--bc-text, #1f2937);
-  cursor: pointer; font-family: inherit; font-weight: var(--bc-weight-semibold, 600);
+  border: 1px solid var(--bc-border, #e3dacc); border-radius: var(--bc-radius-md, 8px);
+  background: var(--bc-surface-2, #fffdf9); color: var(--bc-text, #1d1a16);
+  cursor: pointer; font-family: inherit; font-size: var(--bc-text-sm, 13px);
+  font-weight: var(--bc-weight-semibold, 600);
+  transition: background-color 90ms ease;
 }
 /* The icon rides with the label rather than sitting on the text baseline. */
 .bc-btn-ic { display: inline-flex; line-height: 0; flex: 0 0 auto; }
-.bc-btn:hover { background: var(--bc-surface-4, rgba(0,0,0,.04)); }
+.bc-btn:hover { background: var(--bc-surface-3, rgba(0,0,0,.05)); }
 .bc-btn--primary {
-  background: var(--bc-accent, #4f46e5); color: var(--bc-accent-contrast, #fff); border: none;
+  background: var(--bc-accent, #a8452c); color: var(--bc-accent-contrast, #fff);
+  border-color: var(--bc-accent, #a8452c);
 }
-.bc-btn--primary:hover { background: var(--bc-accent-hover, var(--bc-accent, #4f46e5)); }
-.bc-note { font-size: var(--bc-text-2xs, 11px); color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); text-align: center; margin: var(--bc-space-4, 10px) 0 0; }
+.bc-btn--primary:hover { background: var(--bc-accent-hover, var(--bc-accent, #a8452c)); }
+.bc-btn--icon { flex: 0 0 auto; width: 38px; padding: var(--bc-space-3, 8px); }
+.bc-note {
+  font-size: var(--bc-text-3xs, 10px); color: var(--bc-text-subtle, var(--bc-muted, #6b6155));
+  text-align: center; margin: var(--bc-space-4, 10px) 0 0;
+}

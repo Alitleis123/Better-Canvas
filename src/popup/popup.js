@@ -29,19 +29,31 @@
     document.documentElement.classList.toggle("bc-dark", dark);
   }
 
-  // The popup's two buttons were the only chrome in the extension still relying
-  // on a bare word. `data-icon` keeps the markup declarative and the geometry in
-  // the shared set.
+  // `data-icon` keeps the markup declarative and the geometry in the shared set.
+  // A row gets a tile (same one the settings panel uses); a button gets a bare
+  // glyph beside its label.
   function paintIcons() {
-    for (const btn of document.querySelectorAll("[data-icon]")) {
-      const name = btn.getAttribute("data-icon");
-      if (!BC.icons || !BC.icons.has(name) || btn.querySelector("svg")) continue;
+    for (const node of document.querySelectorAll("[data-icon]")) {
+      const name = node.getAttribute("data-icon");
+      if (!BC.icons || !BC.icons.has(name) || node.querySelector("svg")) continue;
+      const isRow = node.classList.contains("bc-row");
       const ic = document.createElement("span");
-      ic.className = "bc-btn-ic";
+      ic.className = isRow ? "bc-pop-ic" : "bc-btn-ic";
       ic.setAttribute("aria-hidden", "true");
-      ic.innerHTML = BC.icons.svg(name, { size: 14 });
-      btn.insertBefore(ic, btn.firstChild);
+      ic.innerHTML = BC.icons.svg(name, { size: isRow ? 15 : 14 });
+      node.insertBefore(ic, node.firstChild);
     }
+  }
+
+  // The master switch is a pill that says On or Off, matching the settings
+  // header. It used to be an unlabelled 18px checkbox next to a sentence.
+  function paintMaster() {
+    const pill = document.querySelector(".bc-master");
+    const label = $("master-label");
+    if (!pill || !label) return;
+    const on = $("enabled").checked;
+    pill.classList.toggle("bc-on", on);
+    label.textContent = on ? "On" : "Off";
   }
 
   function render() {
@@ -51,10 +63,11 @@
     $("dashEnabled").checked = settings.dashboard.enabled;
     $("darkMode").value = settings.theming.darkMode;
     $("notifsIn").checked = !!(settings.notifications && settings.notifications.inPage);
+    paintMaster();
     const v = document.querySelector(".bc-ver"); if (v) v.textContent = "v" + (BC.VERSION || "");
   }
 
-  $("enabled").addEventListener("change", (e) => { settings.enabled = e.target.checked; save(); });
+  $("enabled").addEventListener("change", (e) => { settings.enabled = e.target.checked; paintMaster(); save(); });
   $("dashEnabled").addEventListener("change", (e) => { settings.dashboard.enabled = e.target.checked; save(); });
   $("darkMode").addEventListener("change", (e) => { settings.theming.darkMode = e.target.value; save(); });
   $("notifsIn").addEventListener("change", (e) => { settings.notifications.inPage = e.target.checked; save(); });
@@ -82,16 +95,16 @@
     const box = $("site-status");
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !tab.url) { box.textContent = "No active tab."; return; }
-    let url; try { url = new URL(tab.url); } catch { box.textContent = "This page can't be customized."; return; }
-    if (!/^https?:$/.test(url.protocol)) { box.textContent = "Open a Canvas page to use Better Canvas."; return; }
+    let url; try { url = new URL(tab.url); } catch { box.textContent = "Not a page we can change."; return; }
+    if (!/^https?:$/.test(url.protocol)) { box.textContent = "Open a Canvas page."; return; }
     const isInstructure = /(^|\.)instructure\.com$/.test(url.hostname);
     const origin = url.origin + "/*";
     chrome.tabs.sendMessage(tab.id, { type: "bc:ping" }, (resp) => {
       const active = !chrome.runtime.lastError && resp && resp.canvas;
-      if (active) { box.classList.add("is-active"); box.innerHTML = BC.icons.svg("check-circle", { size: 13 }) + "<span>Active on this Canvas page</span>"; return; }
-      if (isInstructure) { box.textContent = "Canvas detected — reload the page if controls don't appear."; return; }
+      if (active) { box.classList.add("is-active"); box.innerHTML = BC.icons.svg("check-circle", { size: 13 }) + "<span>Running on this page</span>"; return; }
+      if (isInstructure) { box.textContent = "Canvas found — reload the page."; return; }
       chrome.permissions.contains({ origins: [origin] }, (has) => {
-        box.textContent = has ? "Enabled here. Reload the page to activate." : "Using a custom school Canvas domain?";
+        box.textContent = has ? "Enabled here — reload to start." : "Is this your school's Canvas?";
         const btn = document.createElement("button");
         btn.textContent = has ? "Reload page" : "Enable on " + url.hostname;
         btn.addEventListener("click", () => {
