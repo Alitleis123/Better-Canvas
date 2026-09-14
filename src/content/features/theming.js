@@ -453,8 +453,9 @@
     const attr = (k, v) => { if (doc.getAttribute(k) !== v) doc.setAttribute(k, v); };
     const wantAccent = !!(BC.color.normalizeHex(t.accentColor) || (lp && lp.accent));
     if (doc.hasAttribute("data-bc-accent") !== wantAccent) doc.toggleAttribute("data-bc-accent", wantAccent);
-    attr("data-bc-density", t.density || "default");
-    attr("data-bc-radius", String(t.radius | 0));
+    const skin = BC.skins && BC.skins.active ? BC.skins.active(settings) : null;
+    attr("data-bc-density", (skin && skin.density) || t.density || "default");
+    attr("data-bc-radius", String(skin ? skin.radius | 0 : t.radius | 0));
     attr("data-bc-focus", t.focusRing || "default");
     attr("data-bc-cursor", t.cursor || "default");
     attr("data-bc-hc", t.highContrast ? "1" : "0");
@@ -509,6 +510,11 @@
     if (sig !== lastSig) { lastSig = sig; lastCss = buildCss(settings); }
     BC.injector.setStyle("bc-theming", lastCss);
 
+    // After bc-theming, never before: setStyle appends its tag last on change,
+    // and the skin's token block has to win over the palette it replaces.
+    const skin = BC.skins && BC.skins.active ? BC.skins.active(settings) : null;
+    BC.injector.setStyle("bc-skin", skin ? BC.skins.css(skin) : "");
+
     applyRootState(settings);
 
     // Only meaningful in dark mode; clear the marks the moment it is turned off
@@ -530,7 +536,7 @@
   });
 
   BC.registry.register({
-    id: "theming", styles: ["bc-static", "bc-theming"], nodes: ["bc-logo-text"], apply,
+    id: "theming", styles: ["bc-static", "bc-theming", "bc-skin"], nodes: ["bc-logo-text"], apply,
     // Teardown removes our stylesheets, so the memo has to be invalidated or a
     // re-enable would skip rebuilding them. (The root-level inline state is cleared
     // centrally in content.js's teardown.)

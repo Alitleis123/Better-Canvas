@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Skin engine — pattern and catalog proof sheet</title>
+<style>
+  body { margin: 0; padding: 24px; font: 14px/1.5 system-ui, sans-serif; background: #14161a; color: #e8eaed; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.sub { margin: 0 0 24px; color: #9aa0a8; }
+  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: #9aa0a8; margin: 32px 0 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+  .cell { border: 1px solid #2a2e35; border-radius: 10px; overflow: hidden; background: #1b1e23; }
+  .art { height: 96px; }
+  .cap { padding: 7px 10px; font-size: 12px; color: #c3c8cf; border-top: 1px solid #2a2e35; }
+  /* A skin card mimics the dashboard it actually themes: nav rail, page field,
+     and the real card cycle, so the proof sheet shows the composition rather
+     than six swatches in a row. */
+  .skins { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 18px; }
+  .skin { border: 1px solid #2a2e35; border-radius: 12px; overflow: hidden; }
+  .mock { display: flex; height: 190px; }
+  .rail { width: 42px; flex: none; }
+  .page { flex: 1; padding: 10px; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 8px; }
+  .mcard { border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; }
+  .mart { height: 58%; }
+  .mbody { flex: 1; display: flex; align-items: center; padding: 0 7px; font-size: 10px; }
+  .meta { padding: 9px 12px; display: flex; align-items: center; gap: 8px; background: #1b1e23; border-top: 1px solid #2a2e35; }
+  .dot { width: 13px; height: 13px; border-radius: 50%; flex: none; }
+  .nm { font-weight: 600; }
+  .tag { margin-left: auto; font-size: 11px; color: #9aa0a8; }
+  .warn { color: #ff8080; }
+</style>
+</head>
+<body>
+<h1>Skin engine proof sheet</h1>
+<p class="sub">Every pattern and every catalog skin, rendered by the real engine. Nothing here is fetched: each tile is a CSS gradient or an inline SVG built at runtime.</p>
+<div id="out"></div>
+
+<script src="../../src/content/core/util.js"></script>
+<script src="../../src/content/core/color.js"></script>
+<script src="../../src/shared/skins.js"></script>
+<script src="../../src/shared/skin-catalog.js"></script>
+<script>
+(function () {
+  const out = document.getElementById("out");
+  const S = BC.skins;
+
+  function section(title) {
+    const h = document.createElement("h2");
+    h.textContent = title;
+    out.appendChild(h);
+  }
+
+  // ---- every pattern, one hue, so the shapes are what differ ----
+  section("Patterns — one hue, default scale");
+  const g = document.createElement("div");
+  g.className = "grid";
+  for (const kind of S.PATTERN_KINDS) {
+    if (kind === "none") continue;
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    const art = document.createElement("div");
+    art.className = "art";
+    art.style.cssText = S.patternCss({ kind, fg: "#8fb0d8", bg: "#20242b", scale: 1 });
+    const cap = document.createElement("div");
+    cap.className = "cap";
+    cap.textContent = kind;
+    cell.append(art, cap);
+    g.appendChild(cell);
+  }
+  out.appendChild(g);
+
+  // ---- scale sweep on one pattern, to prove the knob does something ----
+  section("Scale — floral at 0.5 / 1 / 2 / 4");
+  const g2 = document.createElement("div");
+  g2.className = "grid";
+  for (const scale of [0.5, 1, 2, 4]) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    const art = document.createElement("div");
+    art.className = "art";
+    art.style.cssText = S.patternCss({ kind: "floral", fg: "#d98a9e", bg: "#2a1f24", scale });
+    const cap = document.createElement("div");
+    cap.className = "cap";
+    cap.textContent = "scale " + scale;
+    cell.append(art, cap);
+    g2.appendChild(cell);
+  }
+  out.appendChild(g2);
+
+  // ---- the catalog, as dashboards ----
+  section("Catalog — " + BC.SKIN_CATALOG.length + " skins as mock dashboards");
+  const g3 = document.createElement("div");
+  g3.className = "skins";
+  for (const raw of BC.SKIN_CATALOG) {
+    const t = S.normalize(raw);
+    const sw = S.swatchStyles(raw, 4);
+    const wrap = document.createElement("div");
+    wrap.className = "skin";
+
+    const mock = document.createElement("div");
+    mock.className = "mock";
+    const rail = document.createElement("div");
+    rail.className = "rail";
+    rail.style.cssText = sw.nav;
+    const page = document.createElement("div");
+    page.className = "page";
+    page.style.cssText = sw.page;
+    sw.cards.forEach((cardStyle, i) => {
+      const c = document.createElement("div");
+      c.className = "mcard";
+      c.style.background = t.panel;
+      const art = document.createElement("div");
+      art.className = "mart";
+      art.style.cssText = cardStyle;
+      const body = document.createElement("div");
+      body.className = "mbody";
+      body.style.color = t.text;
+      body.textContent = ["PSYC 101", "ENGL 101", "MUS 210", "CS 3000"][i];
+      c.append(art, body);
+      page.appendChild(c);
+    });
+    mock.append(rail, page);
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    const dot = document.createElement("div");
+    dot.className = "dot";
+    dot.style.background = t.accent;
+    const nm = document.createElement("span");
+    nm.className = "nm";
+    nm.textContent = t.name;
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    // The contrast figure belongs on the proof sheet, not just in the suite: a
+    // skin that is pretty and unreadable should be visibly flagged here.
+    const r = BC.color.contrastRatio(t.text, t.panel);
+    tag.textContent = (t.dark ? "dark" : "light") + " · text " + r.toFixed(1) + ":1";
+    if (r < 4.5) tag.className = "tag warn";
+    meta.append(dot, nm, tag);
+
+    wrap.append(mock, meta);
+    g3.appendChild(wrap);
+  }
+  out.appendChild(g3);
+})();
+</script>
+</body>
+</html>

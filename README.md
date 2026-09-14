@@ -10,7 +10,17 @@ The most feature-complete browser extension for Instructure Canvas — free fore
 
 ## Features
 
+### Skins
+Not a colour scheme — a whole look. A skin carries surface art, per-card art, nav treatment, type and palette, and drives the same `--bc-*` tokens everything else reads, so one click restyles the page, the drawer, the popup and the planner together.
+- **10 built-in skins** — Matcha Strawberry, Forest Study, Harvest, Bubblegum, Blueprint, Phosphor, Paper, Frost, Dusk, Meadow.
+- **14 patterns generated at runtime** — gingham, lattice, plaid, stripes, grid, dots, polka, checks, floral, sprigs, waves, confetti, scallop, noise. Every one is a CSS gradient or an inline SVG built from two colours and a scale: **no image files ship**, a pattern recolours to any palette instead of needing one file per variant, it stays crisp at any zoom, and **nothing is fetched** — skins work offline and leak no request.
+- **Cards cycle through the skin's patterns**, so six cards read as six related faces rather than one texture smeared across the dashboard.
+- **Course colours: replace or tint.** A skin can own the card colour, or keep Canvas's course colour and let the pattern tint it — for people who navigate by colour.
+- **Import / export as JSON.** A built-in, a pasted file and an edited fork are the same kind of object on the same code path. Editing a built-in forks it rather than mutating shipped data.
+- **Every built-in clears AA** for body text, hint text, links and accent labels — enforced by the suite, because a pretty theme nobody can read their assignments in is not shippable.
+
 ### Appearance (30+ knobs)
+- **One drawn icon set** — a single 16px grid at one stroke weight, shared by the settings rail, the planner, the popup and every button. Nothing is a typed glyph, so nothing renders in the wrong colour or as a box when the host font lacks it.
 - Dark mode: Off / On / Auto (system) / Scheduled window.
 - **Dark mode inside iframes** — SpeedGrader submissions, New Quizzes, and other embedded Canvas frames.
 - **6 dark palettes** (Neutral, Slate, Midnight, Nord, Dracula, Solarized) + **6 light palettes** + custom-background derivation.
@@ -37,12 +47,14 @@ The most feature-complete browser extension for Instructure Canvas — free fore
 Three modes:
 - **Canvas default** — untouched.
 - **Clean circles** — CSS restyle of the native list.
-- **Planner widget** — completion **ring**, week nav, course filter, groupings (day/course/priority/tag/none), views (list/**kanban**/time-block), custom accent, star / snooze, personal tasks.
+- **Planner widget** — week nav, course filter, groupings (day/course/priority/tag/none), views (list/**kanban**/time-block), custom accent, star / snooze, personal tasks.
+- **Five layouts** — Comfortable (boxed rows), **Compact** (hairline-separated, for a full week in a small sidebar), **Cards** (each task an object), **Minimal** (no boxes; hierarchy from type alone), **Timeline** (a rail with a node per task that fills in as you finish). One attribute drives all five, so no layout can drift into a different feature set — and none of them hides a control.
+- **Six progress indicators** — ring (showing what's *left*, not a percentage), line bar, per-task segments, a **rainbow** whose hue tracks how far along you are, plain text, or none. Picked from swatches that draw themselves, not a dropdown.
 - **Kanban board** with drag-and-drop status columns; dropping on Done completes the Canvas item.
 - **Time-block view** — drag tasks onto a 7am to 10pm day grid to schedule them.
 - **Recurring tasks** (daily / weekly with weekday mask / monthly), **subtasks**, **tags**, and **priorities** with an item-detail popover.
 - **Streaks** with configurable **grace days** + monthly **repairs** (fixes the #1 Tasks-for-Canvas complaint).
-- **Pomodoro** timer with a persistent dock widget, task binding, and a local session log — survives reloads.
+- **Pomodoro** timer with a persistent dock widget, **pause/resume**, task binding, and a local session log — survives reloads.
 
 ### Grades & GPA
 - **Grade tools panel** on every course grades page: current score, goal tracker, "grade needed on final" solver, **weight donut**, **missing-assignments** warning.
@@ -168,6 +180,13 @@ src/
     tokens.js                            the single design-token emitter, shared by the
                                          page, the drawer's shadow root, the options
                                          page and the popup (+ the readability guard)
+    icons.js                             the icon set: one 16px grid, one stroke weight,
+                                         currentColor. Geometry is verified by test/icons
+    skins.js                             the skin engine: 14 runtime-generated patterns,
+                                         validation for untrusted skins, and the stylesheet
+                                         emitter that drives the token layer
+    skin-catalog.js                      the 10 built-in skins. Pure data — adding one is
+                                         adding an object, no code and no assets
     settings/
       state.js                           undo/redo store, subscribe, adapter
       components.js                      Switch/Select/Slider/Sortable/Tags/Links/Keybind…
@@ -186,6 +205,7 @@ src/
       navigation.js    global/course nav + breadcrumbs + course tabs
       dashboard.js     cards, layouts, badges, inline grade, sparkline, hover preview
       todo.js          planner widget + kanban + time-block + recurring + streaks + Pomodoro
+                       (six progress-indicator styles; every length on the spacing scale)
       grades.js        what-if, weight donut, final solver, trend chart, rubric predictor
       notifications.js due-soon + goal + announcement scans + in-page + browser toasts
       files.js         cross-course files library
@@ -263,6 +283,11 @@ good enough to exercise the injector and observer against an actual tree.
 | `shortcuts` | combos, chords, typing guards, rebinding |
 | `security` | escaping, URL scheme gating, no eval, no external endpoints |
 | `a11y` | focus management, roles and labels, reduced motion, contrast pairings |
+| `icons` | icon geometry: painted bounds, optical centring, size, one grid, no typed glyphs |
+| `skins` | pattern determinism and escaping, nothing fetched, untrusted-skin validation, every built-in's contrast, the apply wiring |
+| `progress` | every progress style's maths at 0%, 100% and an empty window; the ring migration |
+| `pomodoro` | pause/resume arithmetic: no drift across cycles, no countdown while frozen |
+| `widgetcss` | planner markup and stylesheet agree; no dead rules; spacing and type come off the scale |
 | `darksweep` | every exclusion the light-surface sweep makes, and its bounds |
 | `dashboardlayout` | card container derivation across both Canvas DOM shapes |
 | `robustness` | async failure paths, unhandled rejections, error containment |

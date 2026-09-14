@@ -113,6 +113,12 @@
   // isDarkActive — canonical source of truth used by every surface.
   BC.isDarkActive = function (settings) {
     if (!settings || !settings.theming) return false;
+    // An active skin carries its own light/dark declaration and overrides the
+    // darkMode setting entirely. Without this a dark skin under darkMode:"off"
+    // would paint dark surfaces while .bc-dark stayed absent, and every rule
+    // keyed on that class would render for the wrong mode.
+    const skin = BC.skins && BC.skins.active ? BC.skins.active(settings) : null;
+    if (skin) return skin.dark;
     const mode = settings.theming.darkMode;
     if (mode === "on") return true;
     if (mode === "off") return false;
