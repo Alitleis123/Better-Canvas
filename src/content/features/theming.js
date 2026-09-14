@@ -141,6 +141,19 @@
       border-radius: var(--bc-radius) !important;
     }
 
+    /* Sidebar width. --bc-sidebar-w was written to :root and read by NOTHING, so
+       the Appearance tab's control had never changed a pixel. Gated on the
+       attribute rather than on a var() fallback, because width: var(--x, auto)
+       would force auto on every page that has not set one and break Canvas's own
+       layout. */
+    :root[data-bc-sidebar] #right-side-wrapper,
+    :root[data-bc-sidebar] .ic-app-main-content__secondary {
+      width: var(--bc-sidebar-w) !important;
+      flex: 0 0 var(--bc-sidebar-w) !important;
+      max-width: none !important;
+    }
+    :root[data-bc-sidebar] #right-side { width: 100% !important; }
+
     /* Focus ring */
     :root[data-bc-focus="bold"] *:focus-visible { outline: 3px solid var(--bc-accent, #4f46e5) !important; outline-offset: 2px; }
     :root[data-bc-focus="high-contrast"] *:focus-visible { outline: 3px solid #ffeb3b !important; outline-offset: 2px; box-shadow: 0 0 0 4px #000 !important; }
@@ -512,6 +525,7 @@
       if (sw) doc.style.setProperty("--bc-sidebar-w", sw);
       else doc.style.removeProperty("--bc-sidebar-w");
     }
+    if (doc.hasAttribute("data-bc-sidebar") !== !!sw) doc.toggleAttribute("data-bc-sidebar", !!sw);
 
     // Text-mode logo replacement is a real node, so it can't live in a stylesheet.
     const existing = document.getElementById("bc-logo-text");

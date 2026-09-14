@@ -377,4 +377,29 @@ module.exports = {
     assert.match(dash, /\.ic-DashboardCard \{ border-radius: \$\{rad\}/,
       "the dashboard must still set the card radius from its own setting");
   },
+
+  // A setting that writes a CSS custom property nobody reads is a control that
+  // silently does nothing. theming.sidebarWidth wrote --bc-sidebar-w to :root
+  // and no rule anywhere consumed it, so the Appearance tab's "Sidebar width"
+  // had never moved a pixel. Nothing would ever have surfaced that: the write
+  // succeeds, the value is correct, and the page just ignores it.
+  "every custom property we write from JS is read by some rule"() {
+    const files = [];
+    const walk = (dir) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) walk(p);
+        else if (e.name.endsWith(".js") || e.name.endsWith(".css")) files.push(p);
+      }
+    };
+    walk(path.join(ROOT, "src"));
+    const all = files.map((f) => fs.readFileSync(f, "utf8")).join("\n");
+
+    const written = new Set();
+    for (const m of all.matchAll(/setProperty\(\s*["`](--bc-[a-z0-9-]+)["`]/g)) written.add(m[1]);
+    assert.ok(written.size >= 5, "expected several JS-written properties; found " + written.size);
+
+    const dead = [...written].filter((v) => all.split("var(" + v).length - 1 === 0);
+    assert.deepEqual(dead, [], "custom properties written but never read: " + dead.join(", "));
+  },
 };

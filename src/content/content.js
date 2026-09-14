@@ -113,7 +113,7 @@
 
   const ROOT_ATTRS = [
     "data-bc-accent", "data-bc-density", "data-bc-radius", "data-bc-focus",
-    "data-bc-cursor", "data-bc-hc", "data-bc-motion", "data-bc-rounded",
+    "data-bc-cursor", "data-bc-hc", "data-bc-motion", "data-bc-rounded", "data-bc-sidebar",
   ];
 
   function teardown() {
