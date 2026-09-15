@@ -226,7 +226,8 @@
     // reads as a smudge across the top of every card, so it is not emitted.
     const arts = [art];
     const wantsChip = (opts.showGrade && opts.grades.get(String(card.id)) != null) ||
-                      (opts.showBadges && opts.due.get(String(card.id)));
+                      (opts.showBadges && opts.due.get(String(card.id))) ||
+                      (opts.showSparkline && (opts.history[String(card.id)] || []).length >= 2);
     if (wantsChip) arts.push(el("div", { class: "bc-dc-scrim", "aria-hidden": "true" }));
 
     // The grade and the due-count ride ON the art, where there is always room,
@@ -258,6 +259,23 @@
     }
 
     const kids = [el("div", { class: "bc-dc-artwrap" }, arts), body];
+
+    // The grade trend. The Canvas-card path drew this from the same local
+    // history and our renderer did not, so "Grade trend sparkline" sat in the
+    // settings panel doing nothing at all once we owned the cards. It rides on
+    // the art, beside the grade chip it explains, rather than in the body where
+    // it would push the title.
+    if (opts.showSparkline) {
+      const hist = (opts.history[String(card.id)] || [])
+        .map((h) => Number(h && h.score)).filter((n) => isFinite(n));
+      if (hist.length >= 2 && BC.ui.sparkline) {
+        const svg = BC.ui.sparkline(hist, { width: 76, height: 20, label: "Grade trend for " + name });
+        if (svg) {
+          const sp = el("span", { class: "bc-dc-spark", "aria-hidden": "true" }, [svg]);
+          arts.push(sp);
+        }
+      }
+    }
 
     if (opts.showProgress) {
       const p = opts.progress.get(String(card.id));
@@ -373,7 +391,11 @@
        brightness at all, and per-image sampling is not something CSS can do. */
     [data-bc-node="${NODE}"] .bc-dc-scrim {
       position: absolute; inset: 0;
-      background: linear-gradient(to bottom, rgba(0,0,0,.34) 0%, rgba(0,0,0,0) 46%);
+      /* Dark at BOTH ends, clear through the middle. The chip and the due badge
+         ride the top and the sparkline rides the bottom, so a top-only gradient
+         left the trend line unprotected on pale artwork. */
+      background: linear-gradient(to bottom, rgba(0,0,0,.34) 0%, rgba(0,0,0,0) 42%,
+                                             rgba(0,0,0,0) 62%, rgba(0,0,0,.34) 100%);
       pointer-events: none;
     }
     [data-bc-node="${NODE}"] .bc-dc-chip,
@@ -388,6 +410,14 @@
       backdrop-filter: blur(6px);
     }
     [data-bc-node="${NODE}"] .bc-dc-chip { right: 8px; }
+    /* Bottom-left of the art: the chip is top-right, so the two never collide
+       however long either gets. */
+    [data-bc-node="${NODE}"] .bc-dc-spark {
+      position: absolute; left: 8px; bottom: 8px;
+      line-height: 0; pointer-events: none;
+      color: #fff; opacity: .9;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,.55));
+    }
     [data-bc-node="${NODE}"] .bc-dc-due { left: 8px; background: var(--bc-accent, #b4341f); }
 
     [data-bc-node="${NODE}"] .bc-dc-body {
@@ -606,6 +636,8 @@
       showGrade: !!d.showInlineGrade,
       showBadges: !!d.showBadges,
       showProgress: !!d.showProgressBar,
+      showSparkline: !!d.showSparkline,
+      history: (BC.storage.local && BC.storage.local.gradeHistory) || {},
       grades: (BC.dashboard && BC.dashboard.scores) || new Map(),
       due: (BC.dashboard && BC.dashboard.dueSoon) || new Map(),
       progress: (BC.dashboard && BC.dashboard.progress) || new Map(),

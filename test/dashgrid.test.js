@@ -179,6 +179,27 @@ module.exports = {
       "and reserved without drawing a misleading empty track");
   },
 
+  "the grade trend is drawn, not just offered in the settings panel"() {
+    // The Canvas-card path drew this from BC.storage.local.gradeHistory. Our
+    // renderer did not, so "Grade trend sparkline" sat in the panel doing
+    // nothing at all from the moment we took over the cards -- found by sweeping
+    // every dashboard setting for one that changes no pixels.
+    assert.match(SRC, /if \(opts\.showSparkline\)/, "the setting has to be read");
+    assert.match(SRC, /BC\.storage\.local && BC\.storage\.local\.gradeHistory/,
+      "and read from the same history the old path used");
+    assert.match(SRC, /hist\.length >= 2/, "one point is not a trend");
+    assert.match(SRC, /class: "bc-dc-spark"/);
+  },
+
+  "anything riding on the artwork is protected at both ends"() {
+    // The chip and the due badge ride the top and the sparkline rides the
+    // bottom. A top-only scrim left the trend line unreadable on pale artwork.
+    const i = SRC.indexOf(".bc-dc-scrim {");
+    const block = SRC.slice(i, SRC.indexOf("}", i));
+    assert.match(block, /rgba\(0,0,0,\.34\) 0%/, "top");
+    assert.match(block, /rgba\(0,0,0,\.34\) 100%/, "and bottom");
+  },
+
   "the art is derived only from the course id, so it never moves"() {
     assert.match(SRC, /hash\(String\(card\.id \|\| card\.assetString \|\| card\.shortName \|\| ""\)\)/,
       "anything viewport- or order-dependent would repaint the card on resize");
