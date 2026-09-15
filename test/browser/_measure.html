@@ -5,9 +5,8 @@
 // The dashboard, measured at a range of viewport widths. An iframe is the only
 // way to vary the viewport without varying the screenshot, and the card grid is
 // laid out against the iframe's width, not the window's.
-const WIDTHS = [1280, 1440, 1512, 1728, 1920, 2240, 2560, 3000];
+const WIDTHS = [1440, 1512, 1710, 1800, 1920, 2240, 2560, 3000];
 const out = document.getElementById('out');
-const r_cols = (gs) => gs.gridTemplateColumns.split(" ").length;
 (async () => {
   const rows = [];
   for (const w of WIDTHS) {
@@ -19,40 +18,35 @@ const r_cols = (gs) => gs.gridTemplateColumns.split(" ").length;
     const cw = f.contentWindow;
     await cw.__bcReady;
     cw.__bcApply({});
-    await new Promise((r) => setTimeout(r, 120));
+    // dashgrid paints on the apply that follows its fetch, which is debounced.
+    await new Promise((r) => setTimeout(r, 400));
     const d = cw.document;
-    const grid = d.querySelector("[data-bc-cardgrid]");
-    const card = d.querySelector(".ic-DashboardCard");
-    const hero = d.querySelector(".ic-DashboardCard__header_hero, .ic-DashboardCard__header_image");
-    const body = d.querySelector(".ic-DashboardCard__header-content");
+    const grid = d.querySelector('[data-bc-node="bc-dashgrid"]');
+    const cards = grid ? [...grid.querySelectorAll(".bc-dc")] : [];
+    const r0 = cards.length ? cards[0].getBoundingClientRect() : null;
+    const tops = [...new Set(cards.map((c) => Math.round(c.getBoundingClientRect().y)))];
+    const row1 = cards.filter((c) => Math.round(c.getBoundingClientRect().y) === tops[0]);
+    const widths = [...new Set(cards.map((c) => Math.round(c.getBoundingClientRect().width)))];
+    const heights = [...new Set(row1.map((c) => Math.round(c.getBoundingClientRect().height)))];
+    // Where the metadata sits, across a row. One value means it lines up.
+    const terms = [...new Set(row1.map((c) => {
+      const t = c.querySelector(".bc-dc-term");
+      return t ? Math.round(t.getBoundingClientRect().y - c.getBoundingClientRect().y) : -1;
+    }))];
     const gs = grid ? getComputedStyle(grid) : null;
-    const cr = card ? card.getBoundingClientRect() : null;
-    const hr = hero ? hero.getBoundingClientRect() : null;
+    const gw = grid ? grid.getBoundingClientRect().width : 0;
+    const cols = row1.length;
     rows.push({
       vw: w,
-      cols: gs ? gs.gridTemplateColumns.split(" ").filter((t) => parseFloat(t) > 0).length : 0,
-      colW: gs ? gs.gridTemplateColumns.split(" ")[0] : "-",
-      gridW: grid ? Math.round(grid.getBoundingClientRect().width) : "-",
-      mainW: (() => { const m = d.querySelector(".ic-Layout-contentMain"); return m ? Math.round(m.getBoundingClientRect().width) : "-"; })(),
-      // Do the header, the grid and the page content end at the same x?
-      rightEdges: (() => {
-        const xs = [".ic-Dashboard-header__layout", "[data-bc-cardgrid]", "#grades_summary"]
-          .map((s) => { const e = d.querySelector(s); return e ? Math.round(e.getBoundingClientRect().right) : null; })
-          .filter((x) => x != null);
-        return xs.join("/");
-      })(),
-      gap: gs ? gs.gap : "-",
-      card: cr ? Math.round(cr.width) + "x" + Math.round(cr.height) : "-",
-      cardAspect: cr ? (cr.width / cr.height).toFixed(2) : "-",
-      heroH: hr ? Math.round(hr.height) : "-",
-      heroShare: (cr && hr) ? Math.round(hr.height / cr.height * 100) + "%" : "-",
-      bodyPad: body ? getComputedStyle(body).padding : "-",
-      heroAspect: hr ? (hr.width / hr.height).toFixed(2) : "-",
-      rowLeftover: (grid && cr) ? Math.round(grid.getBoundingClientRect().width -
-        (Math.floor((grid.getBoundingClientRect().width + 16) / (cr.width + 16)) * (cr.width + 16) - 16)) : "-",
-      // Constant-width tracks cannot absorb leftover space, so it lands at the
-      // end of the row. Bounded by one column; worth knowing how big.
-      trailing: grid ? Math.round(grid.clientWidth - (cr ? (r_cols(gs) * cr.width + (r_cols(gs) - 1) * parseFloat(gs.gap)) : 0)) : "-",
+      cols,
+      cardW: widths.length === 1 ? widths[0] : widths,
+      cardH: heights.length === 1 ? heights[0] : heights,
+      termY: terms.length === 1 ? terms[0] : terms,
+      gridW: Math.round(gw),
+      // Constant-width tracks cannot absorb leftover space and leave a ragged
+      // gutter at the end of every row. 1fr inside a capped container should
+      // leave none at all: this is the number that proves it.
+      trailing: Math.round(gw - (cols * (r0 ? r0.width : 0) + (cols - 1) * parseFloat(gs.gap || 16))),
     });
     f.remove();
   }

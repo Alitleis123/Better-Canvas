@@ -195,9 +195,30 @@ window.__bcReady = (async () => {
     },
   };
   BC.registry = { register(def) { BC.features = BC.features || {}; BC.features[def.id] = def; } };
-  const _bag = () => ({ once(k, fn) { fn(); }, timeout(fn, ms) { setTimeout(fn, ms); },
-                        interval(fn, ms) { return setInterval(fn, ms); },
-                        listen(t, e, h) { t.addEventListener(e, h); } });
+  // Bags are kept BY ID and `once` really does run once, because that is what
+  // the real lifecycle does. The old stub returned a fresh object per call with
+  // `once(k, fn) { fn(); }`, which is not a simplification of `once` -- it is the
+  // opposite of it. Any feature that uses once() to arm a loader exactly once per
+  // page visit had that loader re-armed on every apply, so its load state was
+  // reset forever and it could never reach "done". That is invisible while
+  // BC.requestApply is a no-op, and becomes a feature that simply never renders
+  // the moment it is not.
+  const _bags = new Map();
+  const _bag = (id) => {
+    let b = _bags.get(id);
+    if (!b) {
+      const marks = new Set();
+      b = {
+        once(k, fn) { if (marks.has(k)) return false; marks.add(k); fn(); return true; },
+        timeout(fn, ms) { setTimeout(fn, ms); },
+        interval(fn, ms) { return setInterval(fn, ms); },
+        listen(t, e, h) { t.addEventListener(e, h); },
+        clear() { marks.clear(); },
+      };
+      _bags.set(id, b);
+    }
+    return b;
+  };
   BC.lifecycle = { pageBag: _bag, bag: _bag };
   BC.detect = { context: () => ({ page: "dashboard", courseId: null, path: "/" }) };
   // A planner window with the shape Canvas actually returns, so the widget has
@@ -247,9 +268,51 @@ window.__bcReady = (async () => {
     }))),
     activeCourses: () => Promise.resolve(courseFixture()),
     plannerItems: () => Promise.resolve(plannerFixture()),
-    dashboardCards: () => Promise.resolve(courseFixture().map((c) => ({
-      id: c.id, shortName: c.name, originalName: c.name, courseCode: c.courseCode, color: c.color,
-    }))),
+    // Shaped like a real /api/v1/dashboard/dashboard_cards row, and deliberately
+    // covering the cases a real dashboard has and the old fixture did not: a
+    // title short enough to sit on one line next to two-line neighbours, and a
+    // course with NO colour and NO image, which on a real dashboard rendered as
+    // an identity-less black slab.
+    dashboardCards: () => Promise.resolve([
+      { id: "1", shortName: "ENGL2700 55077 Creative Writing SEC 01 Summer 2026",
+        courseCode: "ENGL2700.55077.202650", color: "#b58a3c", term: { name: "Summer 2026" },
+        image: "data:image/svg+xml;utf8," + encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#8a6a2c"/><text x="20" y="110" font-size="54" fill="#f6e3b8">POE</text></svg>'),
+        links: [{ cssClass: "announcements", path: "#", label: "Announcements" },
+                { cssClass: "files", path: "#", label: "Files" }] },
+      { id: "2", shortName: "SOCL2320 33716 Statistical Analysis in Sociology",
+        courseCode: "SOCL2320.33716.202630", color: "#4a9d7f", term: { name: "Spring 2026" },
+        links: [{ cssClass: "announcements", path: "#", label: "Announcements" },
+                { cssClass: "assignments", path: "#", label: "Assignments", icon: "unread" },
+                { cssClass: "discussions", path: "#", label: "Discussions" },
+                { cssClass: "files", path: "#", label: "Files" }] },
+      { id: "3", shortName: "COMM3750 51076 Specl Effects/Postprod for TV",
+        courseCode: "COMM3750.51076.202650", color: "#8e5ea8", term: { name: "Summer 2026" },
+        links: [{ cssClass: "announcements", path: "#", label: "Announcements" },
+                { cssClass: "assignments", path: "#", label: "Assignments" }] },
+      { id: "4", shortName: "OOD", courseCode: "CS3100.MERGED.202610",
+        term: { name: "Fall 2025" },
+        links: [{ cssClass: "announcements", path: "#", label: "Announcements" },
+                { cssClass: "files", path: "#", label: "Files" }] },
+      { id: "5", shortName: "CS1210 38891 Professional Development for Khoury Co-Op",
+        courseCode: "CS1210.38891.202630", color: "#2f6a4f", term: { name: "Spring 2026" },
+        links: [{ cssClass: "announcements", path: "#", label: "Announcements" }] },
+      { id: "6", shortName: "SOCL1101 12425 Introduction to Sociology",
+        courseCode: "SOCL1101.12425.202610", term: { name: "Fall 2025" },
+        links: [{ cssClass: "assignments", path: "#", label: "Assignments" }] },
+      { id: "7", shortName: "MATH1365 40780 Intro to Math Reasoning SEC 33",
+        courseCode: "MATH1365.40780.202530", term: { name: "Spring 2025" }, links: [] },
+      { id: "8", shortName: "CS3540 41436 Game Programming SEC 01",
+        courseCode: "CS3540.41436.202540", color: "#8c3b3b", term: { name: "Summer 2025" },
+        image: "data:image/svg+xml;utf8," + encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#5d2626"/><text x="18" y="108" font-size="30" fill="#e8b4b4">GAME PROG</text></svg>'),
+        links: [{ cssClass: "announcements", path: "#", label: "Announcements" },
+                { cssClass: "assignments", path: "#", label: "Assignments" },
+                { cssClass: "discussions", path: "#", label: "Discussions" }] },
+      { id: "9", shortName: "BIOL1105 Cell Biology", courseCode: "BIOL1105.10021.202630",
+        color: "#3d7ea6", term: { name: "Spring 2026" },
+        links: [{ cssClass: "files", path: "#", label: "Files" }] },
+    ]),
     createPlannerNote: () => Promise.resolve({}),
     setPlannerComplete: () => Promise.resolve({}),
     TTL: 60000,
@@ -268,11 +331,27 @@ window.__bcReady = (async () => {
   // The real kit, not a stub: the planner's skeleton, empty and error states are
   // its components, and the whole point of this page is seeing what ships.
   await load("../../src/content/core/ui.js");
-  BC.requestApply = () => {};
+  // dashgrid paints on the apply that FOLLOWS its fetch resolving, so a no-op
+  // here left the harness showing Canvas's fallback cards forever.
+  //
+  // Debounced, like the real one. A synchronous stub is not a smaller version of
+  // applyAll, it is a different thing: every loader that resolves calls back into
+  // apply, which starts the next loader, whose stub promise resolves on the same
+  // microtask -- so the queue never drains and the page hangs with the main
+  // thread busy. The real requestApply coalesces onto a timer, which is exactly
+  // what stops that, so the stub has to as well.
+  let _pending = 0;
+  BC.requestApply = () => {
+    clearTimeout(_pending);
+    _pending = setTimeout(() => {
+      if (window.__bcLastSettings) window.__bcApply(window.__bcLastSettings);
+    }, 0);
+  };
   BC.diag = { push() {}, entries: [] };
 
   await load("../../src/content/features/theming.js");
   await load("../../src/content/features/dashboard.js");
+  await load("../../src/content/features/dashgrid.js");
   await load("../../src/content/core/toast.js");
   await load("../../src/content/features/productivity.js");
   await load("../../src/content/features/todo.js");
@@ -289,11 +368,13 @@ window.__bcReady = (async () => {
 })();
 
 window.__bcApply = function (overrides) {
+  window.__bcLastSettings = overrides || {};
   const s = BC.mergeDefaults(Object.assign({ version: BC.SETTINGS_VERSION }, overrides || {}));
   const ctx = { page: "dashboard", courseId: null, path: "/" };
   BC.storage.current = s;
   BC.features.theming.apply(s, ctx);
   BC.features.dashboard.apply(s, ctx);
+  if (BC.features.dashgrid) BC.features.dashgrid.apply(s, ctx);
   if (BC.features.productivity) BC.features.productivity.apply(s, ctx);
   // apply() throttles the sweep; run it directly so a test does not have to wait.
   BC.theming.sweepLightSurfaces();

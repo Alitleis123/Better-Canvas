@@ -773,6 +773,17 @@
     }
   }
 
+  // What dashgrid needs and should not fetch twice. The loaders below are the
+  // only writers; this is a read-only window onto them, published so our own
+  // renderer can put a grade, a due count and a progress bar on its cards
+  // without a second round trip for data already in hand.
+  BC.dashboard = {
+    get scores() { return scoresMap; },
+    get dueSoon() { return dueSoonByCourse; },
+    get progress() { return plannerCountByCourse; },
+    get query() { return query; },
+  };
+
   function apply(settings, ctx) {
     if (ctx.page !== "dashboard") {
       BC.injector.setStyle("bc-dashboard-ui", "");
@@ -794,11 +805,19 @@
     const widgetCss = widgetsCss(d.widgets || {}) + (d.hideSidebar ? "\n#right-side, #right-side-wrapper { display: none !important; }\n#main { margin-right: 0 !important; }" : "");
     BC.injector.setStyle("bc-dashboard-widgets", widgetCss);
 
+    // With our own renderer on, Canvas's grid is hidden and every rule layoutCss
+    // emits would be styling something nobody can see -- so it is not emitted,
+    // and the per-card overlays below are skipped too. Everything else here
+    // (the course search, the GPA card, the sidebar's rhythm) is page chrome
+    // rather than card chrome and still applies.
+    const own = d.ownCards !== false;
+    if (own) unmarkCardGrid();
+
     // layout CSS
     // The card count shapes the grid, so it has to be read BEFORE the sheet is
     // written rather than after.
     const cardNodes = document.querySelectorAll(".ic-DashboardCard");
-    BC.injector.setStyle("bc-dashboard-ui", layoutCss(d, cardNodes.length) + `
+    BC.injector.setStyle("bc-dashboard-ui", (own ? "" : layoutCss(d, cardNodes.length)) + `
       .bc-inline-grade {
         position: absolute; top: 8px; right: 8px; z-index: 2;
         padding: 2px var(--bc-space-3, 8px); border-radius: 999px; font-size: var(--bc-text-2xs, 11px); font-weight: 700;
@@ -864,8 +883,16 @@
     if (d.widgets && d.widgets.gpa) ensureGpaCard(settings);
     else BC.injector.removeNode("bc-gpa-card");
 
+    // The filter box is page chrome, not card chrome: it sits above the grid and
+    // both renderers read it. It has to be mounted BEFORE the no-cards guard
+    // below, or a dashboard whose cards our own renderer is drawing -- so Canvas
+    // has none -- loses its search box.
+    if (d.courseSearch) ensureCourseSearch();
+    else BC.injector.removeNode("bc-course-search");
+
     // course cards
     if (d.autoHideConcluded) maybeFetchConcluded(true);
+    if (own) return;                 // dashgrid owns the cards from here down
     const cards = cardNodes;
     if (!cards.length) { unmarkCardGrid(); return; }
     markCardGrid(Array.from(cards));
@@ -887,9 +914,6 @@
       if (c) setOrder(c);
     }
     for (const [id, card] of cardsById) if (!ordered.has(id)) setOrder(card);
-
-    if (d.courseSearch) ensureCourseSearch();
-    else BC.injector.removeNode("bc-course-search");
 
     // Apply per-card overrides
     for (const [id, card] of cardsById) {

@@ -48,6 +48,7 @@
         "src/content/features/cosmetics.js",
         "src/content/features/navigation.js",
         "src/content/features/dashboard.js",
+        "src/content/features/dashgrid.js",
         "src/content/features/todo.js",
         "src/content/features/grades.js",
         "src/content/features/notifications.js",

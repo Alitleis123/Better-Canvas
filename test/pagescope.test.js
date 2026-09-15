@@ -87,7 +87,7 @@ module.exports = {
     const scopes = declaredScopes();
     const scoped = Object.entries(scopes).filter(([, p]) => p).map(([id]) => id).sort();
     assert.deepEqual(scoped, [
-      "announcements", "calendar", "dashboard", "discussions", "files", "grades",
+      "announcements", "calendar", "dashboard", "dashgrid", "discussions", "files", "grades",
       "instructor", "modules", "onboarding", "quizsaver", "semester", "syllabus",
     ]);
   },
@@ -95,7 +95,7 @@ module.exports = {
   "each scoped feature declares the page its own guard checks"() {
     const scopes = declaredScopes();
     const expected = {
-      dashboard: ["dashboard"], files: ["dashboard"], announcements: ["dashboard"],
+      dashboard: ["dashboard"], dashgrid: ["dashboard"], files: ["dashboard"], announcements: ["dashboard"],
       calendar: ["dashboard"], semester: ["dashboard"], onboarding: ["dashboard"],
       modules: ["modules"], discussions: ["discussions"], syllabus: ["assignments"],
       grades: ["grades", "assignment"], instructor: ["course", "assignments"],

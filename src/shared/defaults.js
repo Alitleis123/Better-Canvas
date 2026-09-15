@@ -79,6 +79,10 @@
     dashboard: {
       enabled: true,
       autoHideConcluded: true,
+      // Render the cards ourselves instead of overriding Canvas's. Off puts
+      // Canvas's own grid back, overrides and all, for anyone whose Canvas is
+      // customised in a way our renderer does not model.
+      ownCards: true,
       layout: "grid",              // grid | list | masonry | compact
       cardSize: "m",               // s | m | l
       // Cards per row, at most. 0 lifts the cap and lets the grid fill the

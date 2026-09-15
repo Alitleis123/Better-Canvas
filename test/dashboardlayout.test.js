@@ -73,11 +73,16 @@ function dashboard({ wrapped, heading }) {
   return { sb, doc, container, cards, headingEl };
 }
 
+// Every test in this file exercises the path that overrides Canvas's OWN cards:
+// markCardGrid, the course-colour stamp, layoutCss. That path is the fallback
+// now -- dashboard.ownCards defaults to true and dashgrid renders the cards
+// instead -- so it has to be asked for explicitly here. The default itself is
+// asserted below, so this cannot quietly drift into testing nothing.
 const settings = (over) => {
   const sb = createSandbox();
   loadCore(sb);
   const s = sb.BC.cloneDefaults();
-  Object.assign(s.dashboard, over || {});
+  Object.assign(s.dashboard, { ownCards: false }, over || {});
   return s;
 };
 
@@ -87,6 +92,34 @@ function applyDashboard(env, s) {
 }
 
 module.exports = {
+  "our own renderer owns the cards by default"() {
+    const sb = createSandbox();
+    loadCore(sb);
+    assert.equal(sb.BC.cloneDefaults().dashboard.ownCards, true,
+      "dashgrid is the dashboard; the Canvas-override path is the fallback");
+  },
+
+  "with our own renderer on, Canvas's cards are left alone"() {
+    // Two layouts fighting over one page is what the override path was. When
+    // dashgrid owns the grid, none of the Canvas-card marks may be written.
+    const env = dashboard({ wrapped: false });
+    applyDashboard(env, settings({ ownCards: true }));
+    assert.equal(env.doc.querySelectorAll("[data-bc-cardgrid]").length, 0);
+    assert.equal(env.doc.querySelectorAll("[data-bc-carditem]").length, 0);
+    const tag = env.doc.querySelector('style[data-better-canvas="bc-dashboard-ui"]');
+    const css = tag ? tag.textContent : "";
+    assert.ok(!/data-bc-cardgrid/.test(css),
+      "layoutCss must not be emitted for a grid nobody can see");
+  },
+
+  "the filter box survives our own renderer taking the cards"() {
+    // It mounts above the grid and both renderers read it, so it has to be
+    // mounted before the "Canvas has no cards" guard rather than after.
+    const env = dashboard({ wrapped: false });
+    applyDashboard(env, settings({ ownCards: true, courseSearch: true }));
+    assert.equal(env.doc.querySelectorAll('[data-bc-node="bc-course-search"]').length, 1);
+  },
+
   "the card container is found even when each card sits in its own wrapper"() {
     // This is the shape that broke: .ic-DashboardCard__box is the per-card
     // wrapper, so styling it as the grid made every card a one-column grid and

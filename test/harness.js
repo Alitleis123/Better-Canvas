@@ -39,7 +39,18 @@ function makeElement(tag) {
     removeAttribute(k) { delete this.attributes[k]; },
     hasAttribute(k) { return k in this.attributes; },
     toggleAttribute(k, f) { const on = f === undefined ? !(k in this.attributes) : !!f; on ? (this.attributes[k] = "") : delete this.attributes[k]; return on; },
-    appendChild(c) { this.children.push(c); this.childNodes.push(c); c.parentNode = this; c.parentElement = this; c.isConnected = true; return c; },
+    appendChild(c) {
+      // A fragment splices its children in and is itself never inserted, which
+      // is the whole reason to build a list in one. Pushing it as a node would
+      // put an element called "#document-fragment" into the tree and drop every
+      // card inside it out of every query.
+      if (c && c.nodeType === 11) {
+        for (const k of c.children.slice()) this.appendChild(k);
+        c.children.length = 0; c.childNodes.length = 0;
+        return c;
+      }
+      this.children.push(c); this.childNodes.push(c); c.parentNode = this; c.parentElement = this; c.isConnected = true; return c;
+    },
     insertBefore(c, ref) {
       const i = ref ? el.children.indexOf(ref) : -1;
       if (i < 0) return el.appendChild(c);
@@ -213,6 +224,15 @@ function makeDocument() {
     createElement: makeElement,
     createElementNS: (ns, tag) => makeElement(tag),
     createTextNode: (t) => ({ nodeType: 3, textContent: String(t), parentElement: null }),
+    // A fragment is just a parentless bag of children that empties itself into
+    // whatever it is appended to. Building a list off-document and appending it
+    // once is ordinary DOM practice, so a harness without this quietly forces
+    // features to write less good code to stay testable.
+    createDocumentFragment: () => {
+      const frag = makeElement("#document-fragment");
+      frag.nodeType = 11;
+      return frag;
+    },
     querySelector: (s) => queryAll(documentElement, s)[0] || null,
     querySelectorAll: (s) => queryAll(documentElement, s),
     getElementById: (id) => descendants(documentElement, []).find((e) => e.id === id || e.attributes.id === id) || null,
