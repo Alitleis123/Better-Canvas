@@ -63,8 +63,9 @@
     });
     a.innerHTML = `<div class="menu-item-icon-container" aria-hidden="true">
       <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
-        <rect x="4" y="4" width="18" height="18" rx="3" fill="currentColor" opacity="0.85"/>
-        <text x="13" y="17" text-anchor="middle" font-size="10" fill="white" font-weight="800">BC</text>
+        <rect x="4.75" y="4.75" width="16.5" height="16.5" rx="3.25" stroke="currentColor" stroke-width="1.5"/>
+        <text x="13" y="17.5" text-anchor="middle" font-size="9.5" font-weight="700"
+              font-family="system-ui, -apple-system, sans-serif" fill="currentColor">BC</text>
       </svg></div>
       <div class="menu-item__text">Better Canvas</div>`;
     a.addEventListener("click", (e) => { e.preventDefault(); open(); });

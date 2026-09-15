@@ -44,6 +44,98 @@
   // which is why the cards stacked in a single column.
   const GRID = "[data-bc-cardgrid]";
 
+  // ---- the measure, snapped to whole columns --------------------------------
+  //
+  // The cap only ever bound at the TOP end. Below it the grid's 1fr tracks
+  // poured the leftover space into the cards, so the "same card at every screen
+  // size" the cap promises was true of the widths it was measured at and false
+  // of the ones between them: 307px at a 1280 window, 266 at 1440, 284 at 1512,
+  // and exactly 250 from 1710 up. A third of a card of swing, on the one
+  // dimension the whole design is built around.
+  //
+  // So the measure is snapped DOWN to a whole number of columns at EVERY width.
+  // The remainder becomes page margin, which the centred row already splits
+  // evenly, rather than being handed to the cards.
+  //
+  // This cannot be CSS. It needs the column count, and a container query cannot
+  // size the element it queries. What it can be is one ResizeObserver, and the
+  // thing it observes matters: the content column is what we are resizing, so
+  // watching it feeds its own output back into its input. Worse, the clamp is
+  // one-way -- once max-width pinned the column narrow, widening the window
+  // left it pinned, because the observation could never exceed the clamp. The
+  // ROW is the stable reference: its width comes from the page, and the sidebar
+  // beside it has a width of its own that no rule of ours touches.
+  let snapRO = null;
+  let snapFrame = 0;
+
+  function snapMeasure(d, own) {
+    const doc = document.documentElement;
+    const clear = () => doc.style.removeProperty("--bc-dash-measure");
+    const maxCols = Math.max(0, Math.min(12, d.maxColumns == null ? 5 : d.maxColumns | 0));
+    if (!maxCols) return clear();          // 0 means fill the window, on purpose
+
+    const gm = own && BC.dashgrid && BC.dashgrid.metrics ? BC.dashgrid.metrics(d) : null;
+    const w = gm ? gm.w : ({ s: 200, m: 250, l: 320 }[d.cardSize || "m"] || 250);
+    const g = gm ? gm.gutter : 16;
+
+    const row = document.querySelector(".ic-Layout-columns, #main");
+    if (!row) return clear();
+    const rs = getComputedStyle(row);
+    let avail = row.clientWidth - (parseFloat(rs.paddingLeft) || 0) - (parseFloat(rs.paddingRight) || 0);
+
+    // The sidebar's OUTER width, margins included. Canvas has spaced this column
+    // with a flex gap on some versions and a margin on the sidebar on others,
+    // and reading only one of them overestimates the room by the other.
+    const aside = d.hideSidebar ? null
+      : document.querySelector("#right-side-wrapper, .ic-app-main-content__secondary");
+    if (aside && aside.offsetParent !== null) {
+      const as = getComputedStyle(aside);
+      avail -= aside.getBoundingClientRect().width
+        + (parseFloat(as.marginLeft) || 0) + (parseFloat(as.marginRight) || 0)
+        + (parseFloat(rs.columnGap) || 0);
+    }
+    if (!(avail > 0)) return clear();
+
+    let n = Math.floor((avail + g) / (w + g));
+    n = Math.max(1, Math.min(maxCols, n));
+    // Only write when the answer CHANGES. Re-setting the same value still
+    // invalidates layout, and since a new measure can lengthen the page enough
+    // to add or remove a scrollbar -- which changes the row's width, which is
+    // what we observe -- an unconditional write turns the observer into a loop
+    // that the browser reports as "ResizeObserver loop completed with
+    // undelivered notifications". Snapping is a fixed point, so comparing first
+    // makes the second pass a no-op and the loop terminates.
+    const next = n * w + (n - 1) * g + "px";
+    if (doc.style.getPropertyValue("--bc-dash-measure") !== next) {
+      doc.style.setProperty("--bc-dash-measure", next);
+    }
+  }
+
+  // Re-snap on resize. Nothing in the extension watched the window before this,
+  // so dragging a window between monitors kept whatever measure it booted with.
+  function watchMeasure(d, own) {
+    snapMeasure(d, own);
+    const row = document.querySelector(".ic-Layout-columns, #main");
+    if (!row || typeof ResizeObserver === "undefined") return;
+    if (snapRO) snapRO.disconnect();
+    // Deferred to the next frame rather than run inside the delivery. Writing a
+    // measure from within the callback resizes the thing being observed in the
+    // same cycle, which browsers report on the page's console as "ResizeObserver
+    // loop completed with undelivered notifications" -- harmless, but it is our
+    // noise in somebody else's console, on every dashboard visit.
+    snapRO = new ResizeObserver(() => {
+      if (snapFrame) return;
+      snapFrame = requestAnimationFrame(() => { snapFrame = 0; snapMeasure(d, own); });
+    });
+    snapRO.observe(row);
+  }
+
+  function unwatchMeasure() {
+    if (snapRO) { snapRO.disconnect(); snapRO = null; }
+    if (snapFrame) { cancelAnimationFrame(snapFrame); snapFrame = 0; }
+    document.documentElement.style.removeProperty("--bc-dash-measure");
+  }
+
   function layoutCss(d, cardCount, own) {
     const size = { s: 200, m: 250, l: 320 }[d.cardSize || "m"] || 250;
 
@@ -128,9 +220,13 @@
       : `${size}px`;
     const track = `repeat(auto-fit, minmax(min(100%, ${fillMin}), 1fr))`;
 
+    // Every rule below reads the snapped measure and falls back to the cap, so a
+    // browser with no ResizeObserver, or a Canvas layout snapMeasure cannot find
+    // a row in, gets exactly the behaviour that shipped before the snap.
+    const M = `min(100%, var(--bc-dash-measure, ${measure}))`;
     const shell = !maxCols ? "" : `
       .ic-Dashboard-header__layout, #DashboardCard_Container, ${GRID} {
-        max-width: ${measure} !important;
+        max-width: ${M} !important;
       }
       /* The rest of the column gets the same measure so prose and announcements
          below the cards end where the cards do instead of running the width of a
@@ -139,8 +235,29 @@
          cost the fifth column. The page keeps a gutter -- .ic-Layout-columns has
          one -- so zeroing this one costs nothing but the double inset. */
       .ic-Layout-contentMain {
-        max-width: ${measure} !important;
+        max-width: ${M} !important;
         padding-inline: 0 !important;
+      }
+      /* ...and then the WHOLE row gets centred, sidebar included.
+         Capping the content column alone is only half a layout. It pins the
+         cards to the left edge and leaves the sidebar pinned to the right, so
+         the wider the monitor the bigger the hole between them: measured at
+         294px on a 24" and 934px on a 27", which is most of a second dashboard
+         of nothing. The cap was doing its job -- five columns on all three
+         monitors -- and the page still looked broken.
+
+         The content column asks for exactly the measure and is allowed to
+         shrink; the sidebar already refuses to. So above the measure the pair
+         is narrower than the row and justify-content: center puts the free
+         space on BOTH sides, and below it the column shrinks first and the
+         layout is what it always was. Centring this way needs no arithmetic
+         about how wide Canvas's sidebar is -- which is 320px on Canvas and
+         280px in the replica, and would have been a guess wrong by 40px on one
+         of them, every time. */
+      .ic-Layout-columns { justify-content: center !important; }
+      .ic-Layout-contentWrapper {
+        flex: 0 1 ${M} !important;
+        min-width: 0 !important;
       }`;
 
     // The card's own proportions, shared by every layout that shows a card face.
@@ -803,10 +920,11 @@
     if (ctx.page !== "dashboard") {
       BC.injector.setStyle("bc-dashboard-ui", "");
       BC.injector.setStyle("bc-dashboard-widgets", "");
+      unwatchMeasure();
       return;
     }
     const d = settings.dashboard || {};
-    if (!d.enabled) return;
+    if (!d.enabled) { unwatchMeasure(); return; }
 
     // pageBag marks clear on SPA navigation, so this re-arms the loaders exactly
     // once per page visit. The underlying BC.api calls are TTL-cached, so
@@ -826,6 +944,7 @@
     // (the course search, the GPA card, the sidebar's rhythm) is page chrome
     // rather than card chrome and still applies.
     const own = d.ownCards !== false;
+    watchMeasure(d, own);
     if (own) unmarkCardGrid();
 
     // layout CSS

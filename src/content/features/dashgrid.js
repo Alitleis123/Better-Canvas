@@ -493,7 +493,7 @@
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(min(100%, ${w}px), 1fr));
       gap: ${gap}px;
-      ${cap ? `max-width: ${cap}px;` : ""}
+      ${cap ? `max-width: min(100%, var(--bc-dash-measure, ${cap}px));` : ""}
       margin: 0 0 var(--bc-space-7, 16px);
       align-items: stretch;
       container-type: inline-size;
@@ -700,7 +700,19 @@
       border-top: 1px solid var(--bc-border-subtle, var(--bc-border, #e5e7eb));
       background: var(--bc-surface-3, #f7fafc);
     }
-    [data-bc-node="${NODE}"] .bc-dc-links.is-empty { min-height: 28px; }
+    /* A card with no quick links still gets the strip, so a row of cards keeps
+       one rhythm. It has to be the height a POPULATED strip resolves to, and a
+       hardcoded 28px was not it: the real one is a 28px icon inside 6px of
+       padding over a 1px border, which comes to 41. The 13px difference did not
+       show up as a short footer -- the row forces one height -- it showed up
+       INSIDE the card, as a body 13px taller whose auto margin pushed the course
+       code, title and term down by 13px against every neighbour in the row.
+       A zero-width spacer of the icon's own height means the box is measured by
+       exactly the rules that measure a real one, so the two cannot drift again
+       when the padding token or the icon size changes. */
+    [data-bc-node="${NODE}"] .bc-dc-links.is-empty::before {
+      content: ""; display: block; width: 0; height: 28px;
+    }
     [data-bc-node="${NODE}"] .bc-dc-ln {
       position: relative; z-index: 2;
       display: inline-flex; align-items: center; justify-content: center;
@@ -744,6 +756,14 @@
     }` : ""}
 
     /* ---- list ---- */
+    /* One card height for the WHOLE grid, not one per row. align-items: stretch
+       only equalises cards that share a row, so a course with a one-line title
+       on the last row drew a card 19px shorter than the eight above it. 1fr rows
+       on an auto-height grid all resolve to the tallest, which is the only
+       reading of "every card is the same card" that survives a second row.
+       Grid layout only: list rows are one card each, and masonry's whole premise
+       is rows that do not agree. */
+    [data-bc-node="${NODE}"][data-layout="grid"] { grid-auto-rows: 1fr; }
     [data-bc-node="${NODE}"][data-layout="list"] { grid-template-columns: 1fr; max-width: none; gap: var(--bc-space-3, 8px); }
     [data-bc-node="${NODE}"][data-layout="list"] .bc-dc { flex-direction: row; align-items: stretch; }
     [data-bc-node="${NODE}"][data-layout="list"] .bc-dc-artwrap {

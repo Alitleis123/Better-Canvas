@@ -179,9 +179,14 @@
     :root[data-bc-cursor="large"] { cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><polygon points='0,0 0,28 8,20 12,28 16,26 12,18 22,18' fill='black' stroke='white' stroke-width='2'/></svg>") 0 0, auto !important; }
     :root[data-bc-cursor="precise"], :root[data-bc-cursor="precise"] * { cursor: crosshair !important; }
 
-    /* High contrast */
+    /* High contrast. The contrast boost itself is NOT here: it is a filter, and
+       so is colour-blind correction, and an element has exactly one filter. The
+       colour-blind one is written inline, which outranks any rule this sheet
+       could carry, so declaring the boost here meant switching colour-blind
+       mode on silently switched high contrast off. Both are accessibility
+       settings and somebody who needs one may well need the other. They are
+       composed together in applyAttrs instead. */
     :root[data-bc-hc="1"] * { text-shadow: none !important; }
-    :root[data-bc-hc="1"] { filter: contrast(1.15); }
 
     /* Reduced motion */
     :root[data-bc-motion="0"] *, :root[data-bc-motion="0"] *::before, :root[data-bc-motion="0"] *::after {
@@ -534,7 +539,12 @@
     attr("data-bc-cursor", t.cursor || "default");
     attr("data-bc-hc", t.highContrast ? "1" : "0");
 
-    const filter = (t.colorBlind && t.colorBlind !== "off") ? BC.color.colorBlindFilter(t.colorBlind) : "";
+    // One filter property, two settings that want it. Composed in that order:
+    // correct the hue first, then push the contrast of what came out.
+    const fx = [];
+    if (t.colorBlind && t.colorBlind !== "off") fx.push(BC.color.colorBlindFilter(t.colorBlind));
+    if (t.highContrast) fx.push("contrast(1.15)");
+    const filter = fx.join(" ");
     if (doc.style.filter !== filter) doc.style.filter = filter;
 
     const sw = (t.sidebarWidth && t.sidebarWidth > 0) ? t.sidebarWidth + "px" : "";

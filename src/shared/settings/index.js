@@ -300,7 +300,7 @@
           control: S.select({ get: () => d.cardSize, set: (v) => store.set((x) => { x.dashboard.cardSize = v; }),
             options: [{value:"s",label:"Small"},{value:"m",label:"Medium"},{value:"l",label:"Large"}] }) }),
         S.row({ label: "Cards per row", icon: "columns",
-          hint: "Caps the dashboard's width, so a laptop and an external monitor lay out the same.",
+          hint: "Every monitor lays the dashboard out the same.",
           control: S.select({
             get: () => String(d.maxColumns == null ? 5 : d.maxColumns),
             set: (v) => store.set((x) => { x.dashboard.maxColumns = +v; }),
@@ -1201,12 +1201,12 @@
     const sw = (k) => S.switch({ get: () => g[k], set: (v) => store.set((x) => { x.grades[k] = v; }) });
 
     c.appendChild(S.section({ title: "On the grades page", icon: "bars", children: [
-      S.row({ label: "Grade tools panel", icon: "target", hint: "Goal tracker, what-if scores, and what you need on the final.",
+      S.row({ label: "Grade tools panel", icon: "target", hint: "Goals, what-if scores, and the final you need.",
         control: sw("panelEnabled") }),
       S.row({ label: "Trend chart", icon: "trend", control: sw("showTrendChart") }),
       S.row({ label: "Weight donut", icon: "circle", control: sw("showWeightDonut") }),
       S.row({ label: "Missing-work warning", icon: "alert", control: sw("showMissingWarning") }),
-      S.row({ label: "Rubric predictor", icon: "checklist", hint: "On an assignment, slide each criterion to see the projected score.",
+      S.row({ label: "Rubric predictor", icon: "checklist", hint: "Slide each criterion for a projected score.",
         control: sw("rubricPredictor") }),
     ]}));
 
@@ -1455,7 +1455,7 @@
     c.appendChild(S.section({ title: "Writing", icon: "paperclip", children: [
       S.row({ label: "Auto-save drafts", icon: "save", hint: "Every Canvas text box, restored next visit.", control: sw("autoSaveDrafts") }),
       S.row({ label: "Word and character count", icon: "sheet", control: sw("wordCount") }),
-      S.row({ label: "Quiz draft saver", icon: "alert", hint: "Keeps your answers locally so a crash can't wipe them. It never answers or submits.", control: sw("quizDraftSaver") }),
+      S.row({ label: "Quiz draft saver", icon: "alert", hint: "Saved locally. Never answers or submits.", control: sw("quizDraftSaver") }),
     ]}));
     return c;
   }
@@ -1617,10 +1617,10 @@
       title: "Better Canvas " + (BC.VERSION || ""), icon: "info",
       children: [
         S.row({ label: "Everything stays here", icon: "save",
-          hint: "No account, no server, no telemetry. Settings live in this browser.",
+          hint: "No account, no server, no telemetry.",
           control: h("span.bc-hint", null, "Local") }),
-        S.row({ label: "Canvas is read with your own session", icon: "mortarboard",
-          hint: "Same-origin requests only. Nothing is sent off-domain.",
+        S.row({ label: "Read with your own session", icon: "mortarboard",
+          hint: "Nothing leaves the domain.",
           control: h("span.bc-hint", null, "Same-origin") }),
         S.row({ label: "Start over", icon: "refresh",
           control: S.button({ label: "Reset everything", icon: "trash", variant: "danger",
@@ -2024,7 +2024,15 @@
      fixed, the label takes the slack, the control takes what it needs. */
   .bc-row {
     display: grid;
-    grid-template-columns: 28px minmax(0, 1fr) auto;
+    /* The label track has a FLOOR, not just a share. minmax(0, 1fr) gives the
+       label whatever the control leaves, which is fine when the control is
+       capped and wrong when the row is narrow: at a 520px drawer the tab rail
+       still takes its 200px, leaving a 252px body, and every single-switch row
+       -- deliberately exempt from stacking, because a 40px switch fits beside a
+       label at any sane width -- handed the label 114px and wrapped "Round our
+       own controls too" over three lines. The exemption was right; the track
+       was what let the label pay for it. */
+    grid-template-columns: 28px minmax(144px, 1fr) auto;
     align-items: center;
     gap: var(--bc-space-4, 10px);
     padding: var(--bc-pad-row, 14px) var(--bc-space-4, 10px);
@@ -2079,6 +2087,16 @@
     .bc-row:not(.bc-row-slim) { grid-template-columns: 28px minmax(0, 1fr); row-gap: var(--bc-space-3, 8px); }
     .bc-row:not(.bc-row-slim) .bc-row-control { grid-column: 2 / -1; justify-content: flex-start; max-width: 100%; }
     .bc-select { max-width: 100%; }
+  }
+
+  /* And below THIS, the switch rows stack too. A 144px label plus the mark, the
+     gaps and a 40px switch needs about 280px of body; under that the floor above
+     would win and the switch would hang off the edge. This is the only width at
+     which stacking a single switch is the lesser evil, which is why it is a
+     second query rather than a relaxation of the first. */
+  @container bc-body (max-width: 280px) {
+    .bc-row-slim { grid-template-columns: 28px minmax(0, 1fr); row-gap: var(--bc-space-3, 8px); }
+    .bc-row-slim .bc-row-control { grid-column: 2 / -1; justify-content: flex-start; max-width: 100%; }
   }
 
   /* ---- choice: options that draw themselves ---------------------------- */

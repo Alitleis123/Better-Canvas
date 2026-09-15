@@ -21,6 +21,11 @@ const assert = {
   match(s, re, msg) { if (!re.test(s)) throw new Error(msg || `expected ${re} to match ${JSON.stringify(String(s).slice(0, 200))}`); },
   noMatch(s, re, msg) { if (re.test(s)) throw new Error(msg || `expected ${re} NOT to match ${JSON.stringify(String(s).slice(0, 200))}`); },
 };
+// Some test files require() node's assert instead of using this one, so both
+// spellings of the negative match are in circulation. A file that picks the
+// wrong one fails with "not a function" rather than with its own message, which
+// reads like a broken test rather than a missing alias.
+assert.doesNotMatch = assert.noMatch;
 global.assert = assert;
 
 const files = fs.readdirSync(__dirname).filter((f) => f.endsWith(".test.js")).sort();

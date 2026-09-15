@@ -271,6 +271,27 @@ module.exports = {
     }
   },
 
+  "the mark in Canvas's nav is drawn in currentColor only"() {
+    // It was a currentColor rectangle with the letters "BC" painted on it in
+    // white. Canvas's global nav is a dark rail whose currentColor IS white, so
+    // the rect and the letters were the same colour and the mark rendered as a
+    // blank white square -- on the one control that opens the whole extension.
+    // Nothing caught it because nothing tested this element at all, and the
+    // replica's header is a light horizontal bar where the bug does not appear.
+    //
+    // Anything that hardcodes a colour here is making an assumption about a
+    // background Canvas owns and re-themes per institution. currentColor is the
+    // only paint that cannot be wrong.
+    const src = read("src/content/features/settings-panel.js");
+    const svg = (src.match(/<svg[\s\S]*?<\/svg>/) || [])[0];
+    assert.ok(svg, "the nav trigger still draws a mark");
+    const paints = [...svg.matchAll(/(?:fill|stroke)="([^"]+)"/g)].map((m) => m[1]);
+    assert.ok(paints.length, "the mark paints something");
+    const hardcoded = paints.filter((p) => p !== "currentColor" && p !== "none");
+    assert.deepEqual(hardcoded, [],
+      "the nav mark must paint in currentColor or not at all; found " + hardcoded.join(", "));
+  },
+
   "the options page is the only extension surface left"() {
     // The toolbar button used to open a popup whose main control opened the real
     // settings. With the click going straight to the settings, the popup had one

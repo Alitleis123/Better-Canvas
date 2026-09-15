@@ -1,0 +1,65 @@
+<!doctype html>
+<!--
+  Measure the harness at an ARBITRARY width and return the answer as TEXT.
+
+  _eval.html answers questions too, but it pins its frame at 1280px and prints
+  into pixels, so "what does the dashboard do on a 27in monitor" needed a
+  screenshot and an eyeball. This page takes the width as a parameter and is
+  read with Chrome's --dump-dom, so a measurement is one command and the answer
+  is a string a script can diff.
+
+    _probe.html?w=2560&h=1440&q=m=plain&n=7&c=<uri-encoded expression>
+
+    w,h   the viewport the inner page believes it has. An iframe lays out at
+          its own CSS width regardless of the window, which is the whole point:
+          a 2560px measurement does not need a 2560px display.
+    q     the _shot.html query, so the probe measures the state a capture would
+          photograph rather than a separate approximation of it.
+    c     evaluated in page.html's window, after _shot.html reports ready.
+          __bcPanel, __bcAudit, __bcApply and BC are all in scope.
+
+  Sets document.title to "done" when the result is in the DOM, so a driver can
+  tell a finished measurement from a hung one.
+-->
+<meta charset=utf-8><title>probe</title>
+<body style="margin:0;font:12px/1.45 ui-monospace,Menlo,monospace">
+<pre id=out>running…</pre>
+<script>
+const q = new URLSearchParams(location.search);
+const W = +q.get('w') || 1440, H = +q.get('h') || 900;
+const out = document.getElementById('out');
+const log = [];
+window.onerror = (m) => log.push("TOP ERR " + m);
+
+const fr = document.createElement('iframe');
+fr.style.cssText = `width:${W}px;height:${H}px;border:0;display:block`;
+fr.src = "/test/browser/_shot.html?" + (q.get('q') || 'm=plain');
+document.body.appendChild(fr);
+
+// _shot.html sets its own title to "ready" once the surface is applied AND
+// settled. Polling that is the only honest signal: its work is async and the
+// iframe's load event fires long before the grid exists.
+fr.onload = async () => {
+  const shot = fr.contentWindow;
+  for (let i = 0; i < 400; i++) {
+    if (shot.document.title === "ready") break;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  if (shot.document.title !== "ready") log.push("WARN: shot never reported ready");
+  const inner = shot.document.getElementById('f');
+  const page = inner && inner.contentWindow;
+  if (!page) { log.push("no inner page"); return finish(); }
+  page.onerror = (m, s, l) => log.push("PAGE ERR " + m + " @" + s + ":" + l);
+  try { await page.__bcReady; } catch (e) { log.push("ready failed: " + e.message); }
+  const code = decodeURIComponent(q.get('c') || '1');
+  try {
+    const r = await page.eval(code);
+    log.push(typeof r === "string" ? r : JSON.stringify(r, null, 1));
+  } catch (e) { log.push("EVAL ERR: " + e.message + "\n" + e.stack); }
+  finish();
+};
+function finish() {
+  out.textContent = log.join("\n");
+  document.title = "done";
+}
+</script>

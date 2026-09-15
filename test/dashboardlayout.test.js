@@ -405,8 +405,22 @@ module.exports = {
       assert.match(rule, /padding-inline: 0 !important/,
         "a cap on the padded content column must zero that padding too");
     }
-    assert.match(shellSrc, /\$\{GRID\}[\s\S]{0,60}max-width: \$\{measure\} !important/,
+    assert.match(shellSrc, /\$\{GRID\}[\s\S]{0,60}max-width: \$\{M\} !important/,
       "the grid itself must carry the measure");
+    // And the measure is the SNAPPED one, with the cap as its fallback. The cap
+    // alone bound only at the top end: below it the 1fr tracks handed the
+    // leftover to the cards, which drew a 250px card at 307px on a 1280 window
+    // and 284 at 1512 while the test above was green, because it only ever
+    // checked the widths at and above the cap.
+    assert.match(src, /const M = `min\(100%, var\(--bc-dash-measure, \$\{measure\}\)\)`/,
+      "the measure has to fall back to the cap when nothing has snapped it");
+    assert.match(src, /snapRO = new ResizeObserver/,
+      "and something has to re-snap it when the window changes");
+    // Observing the content column would feed its own width back into its own
+    // measurement, and the clamp is one-way: once max-width pinned the column
+    // narrow, widening the window could never lift it again.
+    assert.match(src, /snapRO\.observe\(row\)/,
+      "the snap must observe the ROW, not the column it resizes");
     // And every layout that uses a grid must use that one definition.
     const gridRules = [...src.matchAll(/grid-template-columns: ([^!]+)!important/g)].map((m) => m[1].trim());
     for (const g of gridRules) {

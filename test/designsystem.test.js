@@ -135,6 +135,11 @@ module.exports = {
     for (const extra of ["--bc-d-bg", "--bc-d-bg2", "--bc-d-bg3", "--bc-d-border",
                          "--bc-d-text", "--bc-d-muted", "--bc-d-link",
                          "--bc-density", "--bc-todo-accent", "--bc-sidebar-w",
+                         // The dashboard measure, snapped to a whole number of
+                         // columns by a ResizeObserver. It is a measurement of
+                         // the page, not a design decision, so the token layer
+                         // has nothing to say about it.
+                         "--bc-dash-measure",
                          "--bc-pattern-ink", "--bc-ruler-tint", "--bc-note-bg",
                          "--bc-note-border", "--bc-note-text", "--bc-course",
                          // One colour per card and one per planner row, so
@@ -265,8 +270,18 @@ module.exports = {
     assert.ok(tracks, ".bc-row must declare its tracks explicitly");
     assert.noMatch(tracks[1], /^\s*1fr\s+auto\s*$/,
       "a max-content control column starves the label; the row must not be that grid again");
-    assert.match(tracks[1], /minmax\(0,\s*1fr\)/,
-      "the label track takes the slack and may shrink; anything else starves it again");
+    // 1fr as the MAXIMUM, so the label still takes the slack, and a pixel floor
+    // as the minimum, so it cannot be squeezed below it. minmax(0, 1fr) was the
+    // previous answer and it only solved half the problem: the label took the
+    // slack, but a row whose control was exempt from stacking -- a single 40px
+    // switch -- still handed the label 114px at a 520px drawer, because a floor
+    // of 0 is not a floor.
+    const track = (tracks[1].match(/minmax\(([^)]*)\)/) || [])[1];
+    assert.ok(track, "the label track must be a minmax so it can both shrink and take the slack");
+    const [min, max] = track.split(",").map((s) => s.trim());
+    assert.equal(max, "1fr", "the label track must take the slack");
+    assert.ok(/^(\d+)px$/.test(min) && +min.slice(0, -2) >= 120,
+      "the label track needs a real pixel floor, not " + min);
     // A control too wide to share the line gets the whole line UNDER the label,
     // left-aligned. The old fallback let it wrap while keeping margin-left:auto,
     // which parked it against the right edge with nothing above it to align to.

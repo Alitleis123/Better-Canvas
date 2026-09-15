@@ -35,6 +35,42 @@ module.exports = {
     }
   },
 
+  "high contrast and colour-blind correction do not cancel each other"() {
+    // An element has ONE filter property, and both of these settings want it.
+    // Colour-blind correction wrote its filter inline, which outranks any rule
+    // a stylesheet can carry, so the high-contrast boost -- declared in CSS --
+    // was silently discarded the moment colour-blind mode came on. Two
+    // accessibility settings, and somebody who needs one may well need both.
+    const sb = createSandbox();
+    const bc = loadCore(sb);
+    sb.window.addEventListener = () => {};
+    load(sb, "src/content/core/lifecycle.js");
+    load(sb, "src/content/core/injector.js");
+    load(sb, "src/content/features/theming.js");
+    const filterFor = (over) => {
+      const s = JSON.parse(JSON.stringify(bc.defaults));
+      Object.assign(s.theming, over);
+      bc.features.theming.apply(s, { page: "dashboard", path: "/" });
+      return sb.document.documentElement.style.filter || "";
+    };
+
+    const hc = filterFor({ highContrast: true, colorBlind: "off" });
+    assert.match(hc, /contrast\(/, "high contrast on its own must boost contrast");
+
+    const cb = filterFor({ highContrast: false, colorBlind: "deuteranopia" });
+    assert.match(cb, /deuteranopia/, "colour-blind mode on its own must apply its matrix");
+
+    const both = filterFor({ highContrast: true, colorBlind: "deuteranopia" });
+    assert.match(both, /deuteranopia/, "colour-blind correction must survive high contrast");
+    assert.match(both, /contrast\(/, "high contrast must survive colour-blind correction");
+
+    // And the CSS must not declare the boost a second time: two sources for one
+    // property is exactly how the first one came to be dropped.
+    assert.doesNotMatch(read("src/content/features/theming.js"),
+      /data-bc-hc="1"\]\s*\{[^}]*filter:/,
+      "the contrast boost belongs in the composed inline filter, not in a rule");
+  },
+
   "the file star is a real button with a pressed state"() {
     const src = read("src/content/features/files.js");
     assert.match(src, /<button type="button" class="bc-file-star/);

@@ -93,9 +93,16 @@ window.__bcLiveReady = (async () => {
   for (const src of entry.js) await load(src);
 
   // The API needs a live Canvas; everything else is real.
+  // A term on every course, spanning today. The semester-progress bar reads
+  // term.start_at/end_at off an enrollment and removes itself when it finds
+  // none, so a termless stub made that feature render nothing on every run and
+  // the sweep reported it as permanently stuck.
+  const termStart = new Date(Date.now() - 40 * 864e5).toISOString();
+  const termEnd = new Date(Date.now() + 60 * 864e5).toISOString();
+  const term = { id: 9, name: "Fall 2025", start_at: termStart, end_at: termEnd };
   const courses = [
-    { id: "1", shortName: "ENGL2700 Creative Writing", originalName: "ENGL2700 Creative Writing", courseCode: "ENGL2700", color: "#b58a3c" },
-    { id: "2", shortName: "SOCL2320 Statistical Analysis", originalName: "SOCL2320 Statistical Analysis", courseCode: "SOCL2320", color: "#4a9d7f" },
+    { id: "1", shortName: "ENGL2700 Creative Writing", originalName: "ENGL2700 Creative Writing", courseCode: "ENGL2700", color: "#b58a3c", term },
+    { id: "2", shortName: "SOCL2320 Statistical Analysis", originalName: "SOCL2320 Statistical Analysis", courseCode: "SOCL2320", color: "#4a9d7f", term },
   ];
   BC.api = Object.assign(BC.api || {}, {
     dashboardCards: () => Promise.resolve(courses),

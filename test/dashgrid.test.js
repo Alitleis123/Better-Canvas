@@ -155,8 +155,19 @@ module.exports = {
     const navs = e.grid().querySelectorAll(".bc-dc-links");
     assert.equal(navs.length, 2, "both cards have a footer");
     assert.ok(navs[1].classList.contains("is-empty"), "the one with no links is marked, not omitted");
-    assert.match(e.sheet(), /\.bc-dc-links\.is-empty \{ min-height/,
-      "and the empty one has to hold the same height");
+    // The empty footer has to reserve the height a POPULATED one resolves to,
+    // and asserting that the rule merely EXISTS is what let this ship broken:
+    // the rule was there, reserving 28px against a real footer's 41, and the
+    // card it was meant to align dropped its term 13px below the row for as
+    // long as the test was green. So compare the numbers. Both come from the
+    // icon box, which is the only reason they can be expected to match.
+    const css = e.sheet();
+    const icon = /\.bc-dc-ln \{[^}]*?height: (\d+)px/s.exec(css);
+    const spacer = /\.bc-dc-links\.is-empty::before \{[^}]*?height: (\d+)px/s.exec(css);
+    assert.ok(icon, "the quick-link icon declares a height");
+    assert.ok(spacer, "the empty footer reserves a box");
+    assert.equal(spacer[1], icon[1],
+      `empty footer reserves ${spacer && spacer[1]}px against an icon of ${icon && icon[1]}px`);
   },
 
   async "a course with no colour still gets its own identity"() {
