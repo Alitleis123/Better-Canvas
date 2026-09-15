@@ -20,10 +20,10 @@ scale.
 |---|---|---|
 | Chrome bars | 2 (the second overflowed its own right edge) | 1 |
 | Tabs | 17, flat | 13, in Look / Pages / Tools / You |
-| Rows carrying an icon | 0 of 125 | 128 of 128 |
-| Section headings carrying an icon | 0 of 46 | 48 of 48 |
-| Words of hint and section copy | 438 | 357 |
-| Narrowest label column, 360–900px | 26px at 600px | ≥ 144px at every width |
+| Rows carrying an icon | 0 of 125 | 129 of 129 |
+| Section headings carrying an icon | 0 of 46 | 50 of 50 |
+| Words of hint and section copy | 438 | 341 |
+| Narrowest label column, 360–900px | 26px at 600px | 144px floor, in the track itself |
 | Deepest wrapped hint | 7 lines | 2 |
 
 Five tabs that held one or two switches each — Files, Calendar, Announcements,
@@ -41,6 +41,14 @@ exempt: a switch is 40px and fits beside a label at any width the panel reaches,
 and stacking those too cost a second line on most of the panel at a 1100px
 window.
 
+That exemption was right and the label paid for it anyway. At a 520px drawer the
+tab rail still takes its 200px, which leaves the body 252px, and every exempt
+row handed its label 114px — so "Round our own controls too" wrapped over three
+lines beside a switch with room to spare. The label column now carries a 144px
+floor in the track itself rather than a share of whatever the control leaves,
+and a second threshold stacks even a switch row below 280px, which is the width
+at which the floor and the switch genuinely stop both fitting.
+
 Everything below the shell got the same treatment, because half of it had
 never been rendered in a test at all: the course editor handed two `1fr` tracks
 to a 300px row, so its nickname field was six characters wide and its image-URL
@@ -52,6 +60,39 @@ caption said "switch off to hide".
 Numbers above are measured, not estimated — `test/browser/page.html` plus
 `__bcPanel(width)` and `__bcRowWidths()` report label widths and hint depth from
 the real engine, and `test/panel.test.js` holds them there.
+
+One screenshot of one tab at one width cannot see either failure, so
+`test/browser/panel.sh` renders all thirteen tabs at six drawer widths and exits
+non-zero on a starved label or a hint over two lines.
+
+---
+
+## The dashboard, on any monitor
+
+A course card is 250x312 at every window width from 1280 to 3440, with no ragged
+gutter at the end of a row, a constant 16px to the sidebar, and equal margins
+either side. `test/browser/measure.sh` checks all of that at ten widths and
+prints PASS or the widths that disagree.
+
+It took two fixes to be able to say that. The five-column cap that was supposed
+to make monitors agree only ever bound at the *top* end, and nothing measured
+where the capped block **sat**: the cards stopped at 1314px on the left while the
+sidebar stayed pinned to the right edge, which is 934px of nothing between them
+on a 27" and 294px on a 24". Below the cap the grid's `1fr` tracks poured the
+leftover into the cards instead, so the same 250px card drew at 307px on a 1280
+window and 284px at 1512.
+
+So the content column and the sidebar are now one centred group — which needs no
+arithmetic about a sidebar that is 320px on Canvas and 280px in the replica —
+and the measure is snapped down to a whole number of columns at every width, not
+just above the cap. The leftover becomes page margin, split evenly, instead of
+being handed to the cards.
+
+The snap cannot be CSS: it needs the column count, and a container query cannot
+size the element it queries. It is one `ResizeObserver`, and what it observes
+matters. Not the content column — that is the thing being resized, and the clamp
+is one-way, so once `max-width` pinned the column narrow, widening the window
+could never lift it again. It watches the row, whose width comes from the page.
 
 ---
 

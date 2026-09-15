@@ -75,9 +75,25 @@ live.html?c=<uri-encoded expression>      run it after boot, print the result
 
 await __bcLive({ theming: { radius: 20 } })   change a setting + re-apply
 __bcSeen('[data-bc-node="bc-gpa-card"]')      how many are in the DOM
+__bcPage("grades")                            pretend to be on another page
 __bcNeedsReload(CASES)                        node-driven settings that are stuck
 __bcStyleSweep(CASES)                         style-driven ones that are stuck
 ```
+
+The cases live in `_live_cases.js` and `live.sh` runs both sweeps over them.
+Adding one is two lines and it is worth doing.
+
+`__bcPage` exists because this harness could otherwise only ever BE a dashboard.
+`BC.detect.context()` derives the page type from `location.pathname`, which a
+page served from `/test/browser/` cannot change, so the five features gated on a
+course page — grade tools, module progress, discussion tools, the syllabus
+reader, the roster tools — had never been applied once in any sweep. Overriding
+that one function is the whole seam.
+
+The page *type* is not enough on its own: several features re-read the path and
+want the shape Canvas uses, so a bare `/courses/1/<page>` passes the page check
+and then fails the path check, which reads as the feature being stuck when it is
+the harness that is wrong. `__bcPage` maps each type to a realistic path.
 
 Both sweeps set a setting one way, the other way, and back, and report anything
 that reads the same all three times. Two real defects came out of it: the
@@ -85,6 +101,53 @@ read-aloud buttons had no off branch, and `theming`'s global radius rule outrank
 the dashboard's own card-radius control so that slider moved nothing. Three
 apparent failures were wrong selectors on my part, which is the other thing this
 is good for.
+
+## Five commands that answer a question
+
+The console helpers above and the screenshots below are ways to *look*. These
+are ways to **ask**: each one exits non-zero, so they can gate a release. All of
+them need `serve.js` running.
+
+```sh
+test/browser/measure.sh      # the dashboard at ten widths, 1280 to 3440
+test/browser/panel.sh        # 13 settings tabs x 6 drawer widths
+test/browser/overflow.sh     # 4 densities x 3 text scales x 19 surfaces
+test/browser/live.sh         # 37 settings, round-tripped off/on/off
+test/browser/probe.sh SIZE Q EXPR   # one expression, at any width, as TEXT
+```
+
+`probe.sh` is what the other four are built on, and it exists because measuring
+a 2560px layout used to need a 2560px display. The width comes from an iframe
+rather than from the window, so any width is free, and Chrome's `--dump-dom`
+returns a string a script can diff instead of a screenshot somebody has to read.
+
+```sh
+test/browser/probe.sh 2560x1440 'm=plain&n=7' 'JSON.stringify(__bcAudit().length)'
+```
+
+Chrome does not exit after `--dump-dom` any more than it does after
+`--screenshot`, so these redirect to a file and poll. Piping directly hangs
+forever.
+
+What each one is actually watching for:
+
+- **measure.sh** — one card size, one card height, metadata that lines up, no
+  ragged gutter, a constant 16px to the sidebar, equal margins either side, and
+  one shared right edge for the header, the grid and the content column. The
+  last three were added after a 27" was measured for the first time and found
+  934px of nothing between the last card and the sidebar: the cap was doing its
+  job, five columns on every monitor, and the page still looked broken, because
+  nothing was checking where the capped block **sat**.
+- **panel.sh** — starved labels and hints over two lines, on every tab. The
+  panel has starved a label three times: a select at 26px, a colour field at
+  29px, a single switch at 114px. Each time on a tab and a width nobody had
+  looked at. Each time with the node suite green.
+- **overflow.sh** — anything that scrolls the page sideways, clips its own
+  content, or draws text at zero height. It reports per *element*, not per
+  state: the two floating utility buttons park their labels at `max-width: 0` so
+  a screen reader can still read them, and a naive check flags that in all 231
+  states, which buries everything else.
+- **live.sh** — the settings round-trip described in the section above.
 
 ## Photograph it
 
