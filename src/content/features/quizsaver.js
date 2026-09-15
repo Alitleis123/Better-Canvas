@@ -11,15 +11,17 @@
 
   const CSS = `
     .bc-quiz-banner {
-      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-      margin: 10px 0; padding: 10px 14px; border-radius: 10px;
+      display: flex; align-items: center; gap: var(--bc-space-4, 10px); flex-wrap: wrap;
+      margin: var(--bc-space-4, 10px) 0;
+      padding: var(--bc-space-4, 10px) var(--bc-space-6, 14px);
+      border-radius: var(--bc-radius-lg, 10px);
       background: var(--bc-surface-2, #eef2ff); border: 1px solid var(--bc-border, #e5e7eb);
-      font-size: 14px;
+      font-size: var(--bc-text-md, 14px);
     }
-    .bc-quiz-banner .bc-btn { padding: 4px 10px; }
+    .bc-quiz-banner .bc-btn { padding: var(--bc-space-1, 4px) var(--bc-space-4, 10px); }
     .bc-quiz-save-dot {
       position: fixed; bottom: 14px; left: 14px; z-index: var(--bc-z-dock, 2147480000);
-      padding: 4px 10px; border-radius: 999px; font-size: 11px;
+      padding: var(--bc-space-1, 4px) var(--bc-space-4, 10px); border-radius: 999px; font-size: var(--bc-text-2xs, 11px);
       background: var(--bc-surface-2, #f3f4f6); color: var(--bc-muted, #6b7280);
       border: 1px solid var(--bc-border, #e5e7eb); opacity: 0; transition: opacity .3s ease;
       pointer-events: none;
@@ -139,7 +141,8 @@
     banner.dataset.bcBuilt = "1";
     const when = new Date(draft.savedAt).toLocaleString();
     const msg = document.createElement("span");
-    msg.innerHTML = "💾 Better Canvas saved a local draft of your answers (<b>" +
+    msg.innerHTML = BC.icons.svg("save", { size: 14 }) +
+        " Better Canvas saved a local draft of your answers (<b>" +
       BC.util.escapeHtml(when) + "</b>). Restore them?";
     const yes = document.createElement("button");
     yes.className = "bc-btn"; yes.textContent = "Restore answers";
@@ -194,13 +197,14 @@
       }, true);
     });
 
-    pruneOld();
+    // Once per page visit, not once per apply tick (which is several a second).
+    bag.once("prune", pruneOld);
     const draft = BC.storage.local && BC.storage.local.quizDrafts && BC.storage.local.quizDrafts[draftKey()];
     if (draft && draft.answers && diffCount(draft) > 0) ensureBanner(draft);
   }
 
   BC.registry.register({
-    id: "quizsaver",
+    id: "quizsaver", pages: ["course"],
     styles: ["bc-quiz-css"],
     nodes: ["bc-quiz-banner", "bc-quiz-dot"],
     apply,

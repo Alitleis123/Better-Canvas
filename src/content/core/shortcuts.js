@@ -51,7 +51,11 @@
   function onKey(ev) {
     if (isTypingTarget(ev.target)) return;
     const s = BC.storage && BC.storage.current;
-    if (!s || !s.shortcuts || !s.shortcuts.enabled) return;
+    // The master switch has to gate this too. The listener is installed once at
+    // document level and teardown never removes it, so checking only
+    // shortcuts.enabled left every binding live while the extension was off --
+    // Mod+Shift+D still toggled dark mode on a "disabled" extension.
+    if (!s || !s.enabled || !s.shortcuts || !s.shortcuts.enabled) return;
 
     // Chord second key (e.g. "g d").
     if (chord) {
@@ -94,10 +98,16 @@
   }
 
   BC.shortcuts = {
+    // `id` is the settings.shortcuts.bindings key, so reloadFromSettings can
+    // find the entry. It previously took an arbitrary id ("bc-palette") that
+    // never matched a settings key ("commandPalette"), which made
+    // reloadFromSettings a silent no-op.
     register(id, combo, handler) {
       bindings.set(id, { combo: normalizeCombo(combo), handler });
     },
     unregister(id) { bindings.delete(id); },
+    has(id) { return bindings.has(id); },
+    comboFor(id) { const e = bindings.get(id); return e ? e.combo : null; },
     reloadFromSettings(settings) {
       const b = settings && settings.shortcuts && settings.shortcuts.bindings;
       if (!b) return;

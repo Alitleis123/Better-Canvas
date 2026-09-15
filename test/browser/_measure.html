@@ -1,0 +1,153 @@
+<!doctype html><meta charset=utf-8><title>measure</title>
+<body style="margin:0;font:12px/1.6 ui-monospace,Menlo,monospace;white-space:pre-wrap;padding:10px">
+<pre id=out>measuring…</pre>
+<script>
+// The dashboard, measured at a range of viewport widths. An iframe is the only
+// way to vary the viewport without varying the screenshot, and the card grid is
+// laid out against the iframe's width, not the window's.
+//
+// Every row here is an invariant that broke once. The three that check margins
+// and edges were added after a 27" monitor was measured for the first time and
+// found 934px of nothing between the last card and the sidebar: the cap was
+// doing its job, five columns on every monitor, and the page still looked
+// broken, because nothing was checking where the capped block SAT.
+const WIDTHS = [1280, 1440, 1512, 1710, 1800, 1920, 2240, 2560, 3000, 3440];
+const out = document.getElementById('out');
+
+// A card may be 250px at the cap and stretch to just under the next column's
+// worth below it. Anything outside this band means the card is a different card
+// on a different monitor, which is the thing the cap exists to prevent.
+const CARD_MIN = 240, CARD_MAX = 275;
+
+// And a sweep of COURSE COUNTS at one width. The cap is a column count, so a
+// five-column measure around four courses fills four tracks and leaves the
+// fifth empty -- a 266px hole between the last card and the sidebar, landing on
+// anyone taking fewer courses than the cap. Nine courses cannot show that.
+const COUNTS = [1, 2, 3, 4, 5, 7, 9, 12];
+const COUNT_AT = 1920;
+
+(async () => {
+  const rows = [];
+  for (const w of WIDTHS) {
+    const f = document.createElement('iframe');
+    f.style.cssText = "width:" + w + "px;height:900px;border:0;position:absolute;left:-99999px";
+    f.src = "/test/browser/page.html?t=" + Date.now() + "&w=" + w;
+    document.body.appendChild(f);
+    await new Promise((r) => { f.onload = r; });
+    const cw = f.contentWindow;
+    await cw.__bcReady;
+    cw.__bcApply({});
+    // dashgrid paints on the apply that follows its fetch, which is debounced.
+    await new Promise((r) => setTimeout(r, 400));
+    const d = cw.document;
+    const grid = d.querySelector('[data-bc-node="bc-dashgrid"]');
+    const cards = grid ? [...grid.querySelectorAll(".bc-dc")] : [];
+    const r0 = cards.length ? cards[0].getBoundingClientRect() : null;
+    const tops = [...new Set(cards.map((c) => Math.round(c.getBoundingClientRect().y)))];
+    const row1 = cards.filter((c) => Math.round(c.getBoundingClientRect().y) === tops[0]);
+    const widths = [...new Set(cards.map((c) => Math.round(c.getBoundingClientRect().width)))];
+    // Every card on the page, not just the first row: align-items only equalises
+    // within a row, so a short last row is invisible to a row-1 measurement.
+    const heights = [...new Set(cards.map((c) => Math.round(c.getBoundingClientRect().height)))];
+    // Where the metadata sits, across a row. One value means it lines up.
+    const terms = [...new Set(row1.map((c) => {
+      const t = c.querySelector(".bc-dc-term");
+      return t ? Math.round(t.getBoundingClientRect().y - c.getBoundingClientRect().y) : -1;
+    }))];
+    const gs = grid ? getComputedStyle(grid) : null;
+    const gb = grid ? grid.getBoundingClientRect() : null;
+    const gw = gb ? gb.width : 0;
+    const cols = row1.length;
+    const rect = (sel) => { const e = d.querySelector(sel); return e ? e.getBoundingClientRect() : null; };
+    const aside = rect("#right-side-wrapper");
+    const head = rect(".ic-Dashboard-header__layout");
+    const main = rect("#content");
+    rows.push({
+      vw: w,
+      cols,
+      cardW: widths.length === 1 ? widths[0] : widths,
+      cardH: heights.length === 1 ? heights[0] : heights,
+      termY: terms.length === 1 ? terms[0] : terms,
+      gridW: Math.round(gw),
+      // Constant-width tracks cannot absorb leftover space and leave a ragged
+      // gutter at the end of every row. 1fr inside a capped container should
+      // leave none at all: this is the number that proves it.
+      trailing: Math.round(gw - (cols * (r0 ? r0.width : 0) + (cols - 1) * parseFloat(gs.gap || 16))),
+      // The gap between the last card and the sidebar. This is the one that was
+      // 934px on a 27" and 16px on a laptop.
+      toAside: gb && aside ? Math.round(aside.left - gb.right) : null,
+      // Centring: whitespace to the left of the grid vs to the right of the
+      // sidebar. Equal means the dashboard sits in the middle of the monitor
+      // rather than hugging one edge.
+      padL: gb ? Math.round(gb.left) : null,
+      padR: aside ? Math.round(w - aside.right) : null,
+      // The README has claimed since the cap landed that the header, the grid
+      // and the content column share a right edge. Nothing measured it.
+      edges: [head, gb, main].every(Boolean)
+        ? [...new Set([head.right, gb.right, main.right].map(Math.round))].length
+        : null,
+    });
+    f.remove();
+  }
+
+  const counts = [];
+  for (const n of COUNTS) {
+    const f = document.createElement('iframe');
+    f.style.cssText = "width:" + COUNT_AT + "px;height:900px;border:0;position:absolute;left:-99999px";
+    f.src = "/test/browser/page.html?t=" + Date.now() + "&n=" + n;
+    document.body.appendChild(f);
+    await new Promise((r) => { f.onload = r; });
+    const cw = f.contentWindow;
+    await cw.__bcReady;
+    cw.__bcApply({});
+    await new Promise((r) => setTimeout(r, 400));
+    const d = cw.document;
+    const grid = d.querySelector('[data-bc-node="bc-dashgrid"]');
+    const cards = grid ? [...grid.querySelectorAll(".bc-dc")] : [];
+    const gb = grid ? grid.getBoundingClientRect() : null;
+    const aside = d.querySelector("#right-side-wrapper");
+    const ab = aside ? aside.getBoundingClientRect() : null;
+    const widths = [...new Set(cards.map((c) => Math.round(c.getBoundingClientRect().width)))];
+    const right = cards.length ? Math.max(...cards.map((c) => c.getBoundingClientRect().right)) : 0;
+    counts.push({
+      n,
+      drawn: cards.length,
+      cardW: widths.length === 1 ? widths[0] : widths,
+      // The gap from the LAST CARD to the sidebar, not from the grid box: an
+      // empty track is inside the box, so a box measurement cannot see the hole.
+      cardToAside: ab ? Math.round(ab.left - right) : null,
+      padL: gb ? Math.round(gb.left) : null,
+      padR: ab ? Math.round(COUNT_AT - ab.right) : null,
+    });
+    f.remove();
+  }
+
+  // A measurement nobody reads is a measurement that drifts. Each width gets a
+  // verdict so this page can be run headlessly and believed.
+  const fail = [];
+  for (const r of rows) {
+    const one = (v) => !Array.isArray(v);
+    if (!one(r.cardW)) fail.push(`${r.vw}: cards are ${r.cardW.join("/")}px wide in one grid`);
+    else if (r.cardW < CARD_MIN || r.cardW > CARD_MAX) fail.push(`${r.vw}: card is ${r.cardW}px, outside ${CARD_MIN}-${CARD_MAX}`);
+    if (!one(r.cardH)) fail.push(`${r.vw}: card heights differ across the grid: ${r.cardH.join("/")}`);
+    if (!one(r.termY)) fail.push(`${r.vw}: metadata is ragged across a row: ${r.termY.join("/")}`);
+    if (r.trailing !== 0) fail.push(`${r.vw}: ${r.trailing}px of ragged gutter at the end of the row`);
+    if (r.toAside !== 16) fail.push(`${r.vw}: ${r.toAside}px between the cards and the sidebar, expected 16`);
+    if (Math.abs(r.padL - r.padR) > 1) fail.push(`${r.vw}: off centre — ${r.padL}px left, ${r.padR}px right`);
+    if (r.edges !== 1) fail.push(`${r.vw}: header, grid and content column do not share a right edge`);
+  }
+  for (const c of counts) {
+    if (c.drawn !== Math.min(c.n, 40)) fail.push(`n=${c.n}: drew ${c.drawn} cards`);
+    if (Array.isArray(c.cardW)) fail.push(`n=${c.n}: cards are ${c.cardW.join("/")}px wide`);
+    else if (c.cardW < CARD_MIN || c.cardW > CARD_MAX) fail.push(`n=${c.n}: card is ${c.cardW}px`);
+    if (c.cardToAside !== 16) fail.push(`n=${c.n}: ${c.cardToAside}px from the last card to the sidebar, expected 16`);
+    if (Math.abs(c.padL - c.padR) > 1) fail.push(`n=${c.n}: off centre — ${c.padL}px left, ${c.padR}px right`);
+  }
+
+  out.textContent = rows.map((r) => JSON.stringify(r)).join("\n")
+    + "\n\n" + counts.map((c) => JSON.stringify(c)).join("\n")
+    + "\n\n" + (fail.length ? "FAIL\n" + fail.join("\n")
+                              : "PASS — every width and every course count agrees");
+  document.title = "ready";
+})();
+</script>

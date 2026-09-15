@@ -73,7 +73,8 @@
     /* A token, not opacity: dimming already-AA text with opacity pushes it below AA. */
     .bc-empty-hint { font-size: var(--bc-text-xs, 12px); color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); margin-top: var(--bc-space-1, 4px); }
     .bc-error { display: flex; align-items: center; gap: var(--bc-space-4, 10px); flex-wrap: wrap; color: var(--bc-danger, #b91c1c); }
-    .bc-error-msg::before { content: "⚠ "; }
+    .bc-error-msg { display: inline-flex; align-items: center; gap: var(--bc-space-2, 6px); }
+    .bc-error-ic { display: inline-flex; line-height: 0; flex: 0 0 auto; }
 
     .bc-tabs [role="tablist"] { display: flex; gap: var(--bc-space-1, 4px); border-bottom: 1px solid var(--bc-border, #e5e7eb); margin-bottom: var(--bc-space-4, 10px); }
     .bc-tabs [role="tab"] {
@@ -190,8 +191,12 @@
     for (const k in attrs || {}) {
       if (k === "class") n.className = attrs[k];
       else if (k === "text") n.textContent = attrs[k];
-      else if (k.indexOf("on") === 0) n.addEventListener(k.slice(2), attrs[k]);
-      else n.setAttribute(k, attrs[k]);
+      // Lowercased, and only when the value is actually a function. "onClick"
+      // would otherwise register a listener for a "Click" event that never
+      // fires, and an attribute like "only" would be swallowed as a handler.
+      else if (k.indexOf("on") === 0 && typeof attrs[k] === "function") {
+        n.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
+      } else n.setAttribute(k, attrs[k]);
     }
     for (const c of children || []) n.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
     return n;
@@ -241,7 +246,12 @@
 
     errorState(message, onRetry) {
       ensure();
-      const kids = [el("span", { class: "bc-error-msg", text: message || "Something went wrong." })];
+      const msg = el("span", { class: "bc-error-msg" });
+      const ic = el("span", { class: "bc-error-ic", "aria-hidden": "true" });
+      ic.innerHTML = BC.icons.svg("alert", { size: 14 });
+      msg.appendChild(ic);
+      msg.appendChild(el("span", { text: message || "Something went wrong." }));
+      const kids = [msg];
       if (onRetry) kids.push(BC.ui.button("Retry", { onClick: onRetry }));
       return el("div", { class: "bc-error", role: "alert" }, kids);
     },

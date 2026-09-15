@@ -1,0 +1,30 @@
+<!doctype html>
+<!--
+  Run one expression against the harness and print the result where a screenshot
+  can read it. Headless Chrome has no console you can collect without a debugger
+  protocol client, so the answer has to end up in the pixels.
+
+    _eval.html?c=<uri-encoded expression>
+
+  The expression is evaluated inside page.html after __bcReady, so __bcPanel,
+  __bcTab, __bcRowWidths, __bcAudit and BC are all in scope. Errors from the
+  frame are captured and printed rather than lost.
+-->
+<meta charset=utf-8><title>eval</title>
+<body style="margin:0;font:13px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;padding:12px">
+<pre id=out>running…</pre>
+<iframe id=f src="/test/browser/page.html" style="width:1280px;height:900px;border:1px solid #ccc"></iframe>
+<script>
+const out = document.getElementById('out'); const log = [];
+window.onerror = (m) => { log.push("TOP ERR " + m); };
+document.getElementById('f').onload = async function () {
+  const w = this.contentWindow;
+  w.onerror = (m, s, l) => { log.push("IFRAME ERR " + m + " @" + s + ":" + l); };
+  try { await w.__bcReady; } catch (e) { log.push("ready failed: " + e.message); }
+  const code = decodeURIComponent(new URLSearchParams(location.search).get('c') || '1');
+  try { const r = await w.eval(code); log.push("RESULT: " + JSON.stringify(r, null, 1)); }
+  catch (e) { log.push("EVAL ERR: " + e.message + "\n" + e.stack); }
+  out.textContent = log.join("\n\n");
+  document.title = "ready";
+};
+</script>

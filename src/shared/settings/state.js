@@ -116,7 +116,7 @@
       return true;
     }
 
-    // React to external changes (another tab, the popup, the options page).
+    // React to external changes (another tab, the options page).
     if (adapter.subscribe) {
       unsubAdapter = adapter.subscribe((incoming) => {
         // Our own write echoes back through here; suppressing it keeps the echo
@@ -127,6 +127,14 @@
         notify("structural");
       });
     }
+
+    // The components layer needs to read current state at CONSTRUCTION time, not
+    // only inside a subscriber: a row with enabledWhen has to know whether it is
+    // enabled the moment it is built. Handing it a reader here keeps components
+    // free of any import of the store.
+    // ||= the namespace: the store is loaded on its own in tests and by the
+    // options page before the components file in some orders.
+    (BC.SettingsComponents = BC.SettingsComponents || {}).state = () => state;
 
     return {
       get() { return state; },

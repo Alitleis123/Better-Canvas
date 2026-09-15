@@ -4,62 +4,15 @@
  * Manages toolbar badge count. All content-side features run in the tab.
  */
 
-const CONTENT_JS = [
-  "src/shared/defaults.js",
-  "src/shared/themes.js",
-  "src/content/core/util.js",
-  "src/content/core/datetime.js",
-  "src/content/core/color.js",
-  "src/shared/tokens.js",
-  "src/content/core/storage.js",
-  "src/content/core/detect.js",
-  "src/content/core/injector.js",
-  "src/content/core/lifecycle.js",
-  "src/content/core/ui.js",
-  "src/content/core/cache.js",
-  "src/content/core/api.js",
-  "src/content/core/alarms.js",
-  "src/content/core/toast.js",
-  "src/content/core/shortcuts.js",
-  "src/content/core/commandPalette.js",
-  "src/shared/settings/state.js",
-  "src/shared/settings/components.js",
-  "src/shared/settings/index.js",
-  "src/content/features/theming.js",
-  "src/content/features/cosmetics.js",
-  "src/content/features/navigation.js",
-  "src/content/features/dashboard.js",
-  "src/content/features/todo.js",
-  "src/content/features/grades.js",
-  "src/content/features/notifications.js",
-  "src/content/features/files.js",
-  "src/content/features/announcements.js",
-  "src/content/features/calendar.js",
-  "src/content/features/previews.js",
-  "src/content/features/productivity.js",
-  "src/content/features/accessibility.js",
-  "src/content/features/instructor.js",
-  "src/content/features/quizsaver.js",
-  "src/content/features/modules.js",
-  "src/content/features/semester.js",
-  "src/content/features/discussions.js",
-  "src/content/features/insights.js",
-  "src/content/features/syllabus.js",
-  "src/content/features/rotation.js",
-  "src/content/features/onboarding.js",
-  "src/content/features/settings-panel.js",
-  "src/content/core/observer.js",
-  "src/content/content.js",
-];
-
-const FRAME_JS = [
-  "src/shared/defaults.js",
-  "src/shared/themes.js",
-  "src/content/core/datetime.js",
-  "src/content/core/color.js",
-  "src/shared/tokens.js",
-  "src/content/frame.js",
-];
+// Derived from the manifest, never restated. These lists are what gets injected
+// on user-granted custom Canvas domains, so a hand-maintained copy that drifts
+// from manifest.json makes the extension behave differently there than on
+// *.instructure.com -- with no error to notice, because both lists are valid.
+function manifestScripts(allFrames) {
+  const entry = (chrome.runtime.getManifest().content_scripts || [])
+    .find((c) => !!c.all_frames === allFrames);
+  return (entry && entry.js) || [];
+}
 
 const DYNAMIC_ID = "bc-dynamic";
 const DYNAMIC_FRAME_ID = "bc-dynamic-frame";
@@ -78,11 +31,11 @@ async function syncRegistration() {
     if (!matches.length) return;
     await chrome.scripting.registerContentScripts([
       {
-        id: DYNAMIC_ID, js: CONTENT_JS, matches,
+        id: DYNAMIC_ID, js: manifestScripts(false), matches,
         runAt: "document_start", allFrames: false, persistAcrossSessions: true,
       },
       {
-        id: DYNAMIC_FRAME_ID, js: FRAME_JS, matches,
+        id: DYNAMIC_FRAME_ID, js: manifestScripts(true), matches,
         runAt: "document_start", allFrames: true, matchOriginAsFallback: true, persistAcrossSessions: true,
       },
     ]);
@@ -94,15 +47,39 @@ chrome.runtime.onStartup.addListener(syncRegistration);
 if (chrome.permissions && chrome.permissions.onAdded) chrome.permissions.onAdded.addListener(syncRegistration);
 if (chrome.permissions && chrome.permissions.onRemoved) chrome.permissions.onRemoved.addListener(syncRegistration);
 
-// Popup-triggered re-sync.
+// One click, one destination. The toolbar button used to open a small popup
+// whose main control was a button that opened the real settings, so reaching any
+// actual setting took two clicks and a decision. There is no default_popup now:
+// the click lands here, and this opens the drawer in place on a Canvas tab, or
+// the full settings page anywhere else.
+//
+// The options page (not this worker) owns the custom-domain permission prompt,
+// because chrome.permissions.request needs a user gesture in a foreground
+// extension page and a service worker is neither.
+chrome.action.onClicked.addListener((tab) => {
+  const fallback = () => chrome.runtime.openOptionsPage();
+  if (!tab || tab.id == null) return fallback();
+  // The callback is required: on a tab with no content script this raises an
+  // unchecked lastError, and its absence is also how we detect that case.
+  chrome.tabs.sendMessage(tab.id, { type: "bc:openSettings" }, (resp) => {
+    if (chrome.runtime.lastError || !resp || !resp.ok) fallback();
+  });
+});
+
+// Re-sync after the options page grants a custom domain.
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || !msg.type) return;
   if (msg.type === "bc:syncRegistration") { syncRegistration().then(() => sendResponse({ ok: true })); return true; }
   if (msg.type === "bc:setBadge") {
     try {
       const n = msg.count | 0;
-      chrome.action.setBadgeText({ text: n > 0 ? String(n) : "" });
-      chrome.action.setBadgeBackgroundColor({ color: "#dc2626" });
+      // Scope to the sending tab. A global badge meant every open Canvas tab
+      // overwrote the others, so the count shown belonged to whichever tab
+      // happened to scan last rather than the one being looked at.
+      const tabId = sender && sender.tab && sender.tab.id;
+      const target = tabId == null ? {} : { tabId };
+      chrome.action.setBadgeText({ ...target, text: n > 0 ? String(n) : "" });
+      chrome.action.setBadgeBackgroundColor({ ...target, color: "#dc2626" });
     } catch (_) {}
     sendResponse({ ok: true }); return;
   }
@@ -120,6 +97,9 @@ try {
   });
   chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (info.menuItemId !== "bc-add-task" || !tab || tab.id == null) return;
-    chrome.tabs.sendMessage(tab.id, { type: "bc:addTaskFromContext", info });
+    // The callback is required: without it, a tab with no content script (the
+    // page was never injected, or the extension was just reloaded) raises an
+    // unchecked runtime.lastError into the console on every click.
+    chrome.tabs.sendMessage(tab.id, { type: "bc:addTaskFromContext", info }, () => void chrome.runtime.lastError);
   });
 } catch (_) {}

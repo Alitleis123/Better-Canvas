@@ -9,22 +9,22 @@
   BC.features = BC.features || {};
 
   const CSS = `
-    .bc-instr-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
-    .bc-att { display: inline-flex; gap: 2px; margin-left: 8px; vertical-align: middle; }
+    .bc-instr-bar { display: flex; gap: var(--bc-space-3, 8px); align-items: center; flex-wrap: wrap; margin: var(--bc-space-3, 8px) 0; }
+    .bc-att { display: inline-flex; gap: 2px; margin-left: var(--bc-space-3, 8px); vertical-align: middle; }
     .bc-att button {
       border: 1px solid var(--bc-border, #e5e7eb); background: transparent; color: inherit;
-      border-radius: 6px; padding: 1px 7px; font-size: 11px; cursor: pointer;
+      border-radius: var(--bc-radius-md, 6px); padding: 1px var(--bc-space-3, 8px); font-size: var(--bc-text-2xs, 11px); cursor: pointer;
     }
     /* P/A stays letter-and-colour, not colour alone, so it survives a colour-blind mode. */
     .bc-att button.on-p { background: var(--bc-success, #047857); color: var(--bc-success-fg, #fff); border-color: var(--bc-success, #047857); }
     .bc-att button.on-a { background: var(--bc-danger, #b91c1c); color: var(--bc-danger-fg, #fff); border-color: var(--bc-danger, #b91c1c); }
     .bc-ungraded-pill {
-      display: inline-block; margin: 8px 0; padding: 4px 12px; border-radius: 999px;
-      background: var(--bc-surface-3, #fef3c7); color: inherit; font-size: 13px; font-weight: 600;
+      display: inline-block; margin: var(--bc-space-3, 8px) 0; padding: var(--bc-space-1, 4px) var(--bc-space-5, 12px); border-radius: 999px;
+      background: var(--bc-surface-3, #fef3c7); color: inherit; font-size: var(--bc-text-sm, 13px); font-weight: 600;
       border: 1px solid var(--bc-border, #e5e7eb);
     }
     .bc-ungraded-badge {
-      display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px;
+      display: inline-block; margin-left: var(--bc-space-2, 6px); padding: 0 var(--bc-space-2, 6px); border-radius: 999px;
       background: var(--bc-danger, #b91c1c); color: var(--bc-danger-fg, #fff); font-size: var(--bc-text-2xs, 11px); font-weight: 700; vertical-align: middle;
     }
   `;
@@ -82,16 +82,33 @@
   }
 
   function installPeopleTools(ctx, settings) {
-    const onPeople = ctx.page === "course" && ctx.courseId && /\/users\/?$/.test(location.pathname);
+    // ctx.path, not location.pathname. They are the same string in production,
+    // which is exactly why the mismatch survived: this was the one place that
+    // reached past the context object every other feature reasons about, so it
+    // was also the one place a page could not be reasoned about without being
+    // navigated to.
+    const onPeople = ctx.page === "course" && ctx.courseId && /\/users\/?$/.test(ctx.path);
     if (!onPeople) { BC.injector.removeNode("bc-roster-btn"); return; }
 
     const rows = document.querySelectorAll("tr[id^='user_']");
     if (!settings.instructor.rosterExport && !settings.instructor.attendanceQuick) {
       BC.injector.removeNode("bc-roster-btn");
     } else {
-      BC.injector.ensureNode("bc-roster-btn", document.querySelector("#content, #main") || document.body, () => {
-        const bar = document.createElement("div");
-        bar.className = "bc-instr-bar";
+      const bar = BC.injector.ensureNode("bc-roster-btn", document.querySelector("#content, #main") || document.body, () => {
+        const d = document.createElement("div");
+        d.className = "bc-instr-bar";
+        const host = document.querySelector("#content, #main") || document.body;
+        host.prepend(d);
+        return d;
+      });
+      // Built OUTSIDE the factory and keyed on the toggles it depends on. The
+      // factory runs once, so building the buttons in there froze the bar at
+      // whatever the settings were the first time this page was opened: toggling
+      // either export off (or on) did nothing until a reload.
+      const sig = (settings.instructor.rosterExport ? "r" : "") + (settings.instructor.attendanceQuick ? "a" : "");
+      if (bar.dataset.bcSig !== sig) {
+        bar.dataset.bcSig = sig;
+        bar.replaceChildren();
         if (settings.instructor.rosterExport) {
           const btn = document.createElement("button");
           btn.className = "bc-btn";
@@ -106,14 +123,11 @@
           btn2.addEventListener("click", () => exportAttendance(ctx.courseId));
           bar.appendChild(btn2);
           const hint = document.createElement("span");
-          hint.style.cssText = "font-size:12px;color:var(--bc-muted,#6b7280)";
+          hint.style.cssText = "font-size:var(--bc-text-xs,12px);color:var(--bc-muted,#6b7280)";
           hint.textContent = "P/A buttons mark today's attendance (stored locally).";
           bar.appendChild(hint);
         }
-        const host = document.querySelector("#content, #main") || document.body;
-        host.prepend(bar);
-        return bar;
-      });
+      }
     }
 
     if (!settings.instructor.attendanceQuick) {
@@ -177,7 +191,8 @@
         pill.className = "bc-ungraded-pill";
         (document.querySelector("#content") || document.body).prepend(pill);
         return pill;
-      }).textContent = `⚑ ${total} submission${total === 1 ? "" : "s"} waiting to be graded`;
+      }).innerHTML = BC.icons.svg("flag", { size: 13 }) +
+      `<span>${total} submission${total === 1 ? "" : "s"} waiting to be graded</span>`;
     }).catch((e) => BC.diag.push("instructor:ungraded", e));
   }
 
@@ -203,7 +218,7 @@
   // bc-ungraded-badge is injected per assignment link but was never declared, so
   // teardown left the badges stuck on Canvas's assignments index.
   BC.registry.register({
-    id: "instructor", styles: ["bc-instr-css"],
+    id: "instructor", styles: ["bc-instr-css"], pages: ["course", "assignments"],
     nodes: ["bc-roster-btn", "bc-ungraded", "bc-ungraded-badge"], apply,
   });
 })();

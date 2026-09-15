@@ -9,7 +9,11 @@
   // (#1f2937 13.5:1, #0f5132 9.6:1, #8a5a00 6.4:1, #7f1d1d 9.9:1).
   const CSS = `
     .bc-toast-host {
-      position: fixed; right: 16px; bottom: 16px;
+      position: fixed; right: 16px;
+      /* Sits above whichever persistent chrome is mounted in this corner: the
+         Pomodoro dock raises --bc-dock-bottom, the page-utility buttons raise
+         --bc-utility-h. */
+      bottom: calc(16px + var(--bc-dock-bottom, 0px) + var(--bc-utility-h, 0px));
       display: flex; flex-direction: column; gap: var(--bc-space-3, 8px);
       z-index: var(--bc-z-toast, 2147483200); pointer-events: none;
       font-family: var(--bc-font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
@@ -38,7 +42,7 @@
     .bc-toast .bc-toast-msg { color: rgba(255,255,255,.92); margin-top: 2px; font-size: var(--bc-text-sm, 13px); }
     .bc-toast .bc-toast-close {
       background: none; border: 0; color: #fff; cursor: pointer;
-      font-size: 16px; line-height: 1; border-radius: var(--bc-radius-sm, 4px); padding: 0 3px;
+      font-size: var(--bc-text-xl, 16px); line-height: 1; border-radius: var(--bc-radius-sm, 4px); padding: 0 3px;
     }
     .bc-toast .bc-toast-close:hover { background: rgba(255,255,255,.16); }
     .bc-toast .bc-toast-close:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }

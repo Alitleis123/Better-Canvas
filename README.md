@@ -3,14 +3,126 @@
 The most feature-complete browser extension for Instructure Canvas — free forever, local-only, no accounts, no telemetry.
 
 - **Cross-browser.** Chrome (Manifest V3), Firefox, Zen.
+- **One click to settings.** The toolbar button opens the settings drawer on the Canvas page you are looking at, or the full settings page anywhere else. There is no intermediate popup.
 - **Same-origin only.** Every Canvas API call uses your existing session — nothing is sent off-domain.
 - **No paywalls, no accounts.** Every feature ships free.
 
 ---
 
+## The settings panel
+
+One bar of chrome, thirteen tabs in four named groups, and a drawn mark on every
+row. It is warm paper rather than a control panel: a rounded system face, an
+ochre-clay accent, and card padding on the panel scale instead of the component
+scale.
+
+| | Before | Now |
+|---|---|---|
+| Chrome bars | 2 (the second overflowed its own right edge) | 1 |
+| Tabs | 17, flat | 13, in Look / Pages / Tools / You |
+| Rows carrying an icon | 0 of 125 | 129 of 129 |
+| Section headings carrying an icon | 0 of 46 | 50 of 50 |
+| Words of hint and section copy | 438 | 341 |
+| Narrowest label column, 360–900px | 26px at 600px | 144px floor, in the track itself |
+| Deepest wrapped hint | 7 lines | 2 |
+
+Five tabs that held one or two switches each — Files, Calendar, Announcements,
+Instructor, and the Modules and Discussions blocks — became one **Course tools**
+tab; **Accessibility** joined the colour-blind and reduced-motion switches it
+already belonged beside, in Appearance. Nothing was removed.
+
+Rows with no bearing on your current choice go inert rather than sitting there
+live: pick "Canvas's own" for the planner and the planner's ten controls dim;
+set the page background to None and its eight follow-up controls dim with it.
+
+When the panel is too narrow for two columns, a row puts its control on the line
+below its label, left-aligned under it. Rows whose control is a single switch are
+exempt: a switch is 40px and fits beside a label at any width the panel reaches,
+and stacking those too cost a second line on most of the panel at a 1100px
+window.
+
+That exemption was right and the label paid for it anyway. At a 520px drawer the
+tab rail still takes its 200px, which leaves the body 252px, and every exempt
+row handed its label 114px — so "Round our own controls too" wrapped over three
+lines beside a switch with room to spare. The label column now carries a 144px
+floor in the track itself rather than a share of whatever the control leaves,
+and a second threshold stacks even a switch row below 280px, which is the width
+at which the floor and the switch genuinely stop both fitting.
+
+Everything below the shell got the same treatment, because half of it had
+never been rendered in a test at all: the course editor handed two `1fr` tracks
+to a 300px row, so its nickname field was six characters wide and its image-URL
+field read "backgro"; the GPA panel was a bordered `<table>` that wrapped every
+course name over three lines; the global-nav list was the last native checkbox
+in the product, rendering in system blue against a warm accent while its own
+caption said "switch off to hide".
+
+Numbers above are measured, not estimated — `test/browser/page.html` plus
+`__bcPanel(width)` and `__bcRowWidths()` report label widths and hint depth from
+the real engine, and `test/panel.test.js` holds them there.
+
+One screenshot of one tab at one width cannot see either failure, so
+`test/browser/panel.sh` renders all thirteen tabs at six drawer widths and exits
+non-zero on a starved label or a hint over two lines. `test/browser/all.sh` runs
+that and every other sweep — roughly 900 rendered states — alongside the node
+suite, and is the release gate.
+
+---
+
+## The dashboard, on any monitor
+
+A course card is 250x312 at every window width from 1280 to 3440, with no ragged
+gutter at the end of a row, a constant 16px to the sidebar, and equal margins
+either side. `test/browser/measure.sh` checks all of that at ten widths and
+prints PASS or the widths that disagree.
+
+It took two fixes to be able to say that. The five-column cap that was supposed
+to make monitors agree only ever bound at the *top* end, and nothing measured
+where the capped block **sat**: the cards stopped at 1314px on the left while the
+sidebar stayed pinned to the right edge, which is 934px of nothing between them
+on a 27" and 294px on a 24". Below the cap the grid's `1fr` tracks poured the
+leftover into the cards instead, so the same 250px card drew at 307px on a 1280
+window and 284px at 1512.
+
+So the content column and the sidebar are now one centred group — which needs no
+arithmetic about a sidebar that is 320px on Canvas and 280px in the replica —
+and the measure is snapped down to a whole number of columns at every width, not
+just above the cap. The leftover becomes page margin, split evenly, instead of
+being handed to the cards.
+
+The snap cannot be CSS: it needs the column count, and a container query cannot
+size the element it queries. It is one `ResizeObserver`, and what it observes
+matters. Not the content column — that is the thing being resized, and the clamp
+is one-way, so once `max-width` pinned the column narrow, widening the window
+could never lift it again. It watches the row, whose width comes from the page.
+
+---
+
 ## Features
 
+### Skins
+Not a colour scheme — a whole look. A skin carries surface art, per-card art, nav treatment, type and palette, and drives the same `--bc-*` tokens everything else reads, so one click restyles the page, the drawer, the planner and the options page together.
+- **44 built-in skins.** Ten illustrated ones drawn here (Matcha Strawberry,
+  Forest Study, Harvest, Bubblegum, Blueprint, Phosphor, Paper, Frost, Dusk,
+  Meadow) and **34 ports of open-source colour schemes** — Catppuccin (4
+  flavours), Tokyo Night (3), Rosé Pine (3), Gruvbox, Dracula, Solarized,
+  Everforest, Kanagawa, Monokai, One Dark/Light, GitHub, Ayu, Night Owl,
+  Material, Palenight, Synthwave, Zenburn, Horizon, Moonlight, Nightfox,
+  Oceanic Next, Sonokai and more. Each credits the project it came from.
+  There is no registry of Canvas themes to read, and reading one would mean an
+  outbound request on every page load; these are palettes, ported, with the art
+  still generated locally.
+- **Searchable gallery** — the tab search reaches individual cards, so a family
+  is one query ("catppuccin", "gruvbox", "retro"), split into illustrated, dark
+  and light.
+- **14 patterns generated at runtime** — gingham, lattice, plaid, stripes, grid, dots, polka, checks, floral, sprigs, waves, confetti, scallop, noise. Every one is a CSS gradient or an inline SVG built from two colours and a scale: **no image files ship**, a pattern recolours to any palette instead of needing one file per variant, it stays crisp at any zoom, and **nothing is fetched** — skins work offline and leak no request.
+- **Cards cycle through the skin's patterns**, so six cards read as six related faces rather than one texture smeared across the dashboard.
+- **Course colours: replace or tint.** A skin can own the card colour, or keep Canvas's course colour and let the pattern tint it — for people who navigate by colour.
+- **Import / export as JSON.** A built-in, a pasted file and an edited fork are the same kind of object on the same code path. Editing a built-in forks it rather than mutating shipped data.
+- **Every built-in clears AA** for body text, hint text, links and accent labels — enforced by the suite, because a pretty theme nobody can read their assignments in is not shippable. The suite checks the colour a skin *emits*, not the one it authors: a skin's ink used to bypass the readability guard every other palette goes through, which put the course code below AA on 9 of the 44 (down to 3.86:1) with the authored-value test green.
+
 ### Appearance (30+ knobs)
+- **One drawn icon set** — a single 16px grid at one stroke weight, shared by every settings row, the tab rail, the planner and every button. Nothing is a typed glyph, so nothing renders in the wrong colour or as a box when the host font lacks it.
 - Dark mode: Off / On / Auto (system) / Scheduled window.
 - **Dark mode inside iframes** — SpeedGrader submissions, New Quizzes, and other embedded Canvas frames.
 - **6 dark palettes** (Neutral, Slate, Midnight, Nord, Dracula, Solarized) + **6 light palettes** + custom-background derivation.
@@ -26,6 +138,15 @@ The most feature-complete browser extension for Instructure Canvas — free fore
 
 ### Dashboard
 - Card layouts: **Grid / List / Masonry / Compact**, with size and radius sliders.
+- **The same dashboard on every monitor.** Cards per row is capped (5 by default,
+  or lift it), so above about 1700px the layout stops being a function of the
+  viewport and becomes a function of how many courses you are taking — the same
+  number on your laptop and your 27". Measured at eight widths from 1280 to 3000:
+  identical from 1728 up, and **zero** space left over at the end of a row at any
+  of them. It used to be 146, 40, 14, 254, 42, 96, 4px, and a 27" laid out eight
+  columns for five courses.
+- **Card metadata lines up across a row** — the course code and term sit on one
+  line whether a title took one line or two.
 - Drag-reorder, rename, recolor, hide, background-image per card.
 - **Inline grade badge**, **progress bar**, **due-count badge**, **grade sparkline** from locally recorded history.
 - Course search bar, hover-lift animation.
@@ -37,12 +158,14 @@ The most feature-complete browser extension for Instructure Canvas — free fore
 Three modes:
 - **Canvas default** — untouched.
 - **Clean circles** — CSS restyle of the native list.
-- **Planner widget** — completion **ring**, week nav, course filter, groupings (day/course/priority/tag/none), views (list/**kanban**/time-block), custom accent, star / snooze, personal tasks.
+- **Planner widget** — week nav, course filter, groupings (day/course/priority/tag/none), views (list/**kanban**/time-block), custom accent, star / snooze, personal tasks.
+- **Five layouts** — Comfortable (boxed rows), **Compact** (hairline-separated, for a full week in a small sidebar), **Cards** (each task an object), **Minimal** (no boxes; hierarchy from type alone), **Timeline** (a rail with a node per task that fills in as you finish). One attribute drives all five, so no layout can drift into a different feature set — and none of them hides a control.
+- **Six progress indicators** — ring (showing what's *left*, not a percentage), line bar, per-task segments, a **rainbow** whose hue tracks how far along you are, plain text, or none. Picked from swatches that draw themselves, not a dropdown.
 - **Kanban board** with drag-and-drop status columns; dropping on Done completes the Canvas item.
-- **Time-block view** — drag tasks onto a 7am–10pm day grid to schedule them.
+- **Time-block view** — drag tasks onto a 7am to 10pm day grid to schedule them.
 - **Recurring tasks** (daily / weekly with weekday mask / monthly), **subtasks**, **tags**, and **priorities** with an item-detail popover.
 - **Streaks** with configurable **grace days** + monthly **repairs** (fixes the #1 Tasks-for-Canvas complaint).
-- **Pomodoro** timer with a persistent dock widget, task binding, and a local session log — survives reloads.
+- **Pomodoro** timer with a persistent dock widget, **pause/resume**, task binding, and a local session log — survives reloads.
 
 ### Grades & GPA
 - **Grade tools panel** on every course grades page: current score, goal tracker, "grade needed on final" solver, **weight donut**, **missing-assignments** warning.
@@ -102,6 +225,7 @@ Three modes:
 - Hover over any assignment link to see a floating card with title / due date / points / score / description — no page nav.
 
 ### Accessibility
+Lives in the Appearance tab, beside the colour-blind and reduced-motion switches.
 - **TTS "Speak"** button on assignments / announcements / discussion bodies.
 - **Larger click targets**, **dyslexia-friendly font stack**.
 - Color-blind SVG palette shifts. Reduced-motion honored.
@@ -111,6 +235,7 @@ Three modes:
 - **Grade trend sparklines** and **Pomodoro session history** in the same tab.
 
 ### Instructor helpers
+In the Course tools tab.
 - **Roster CSV export**, attendance quick-mark (P/A buttons + CSV), **ungraded-count badges** on the assignments index.
 
 ### Backgrounds & CSS
@@ -127,10 +252,13 @@ Three modes:
 ## Install (from source)
 
 1. Build the unpacked extensions:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File build.ps1
+   ```sh
+   ./build.sh                                              # macOS, Linux
+   powershell -ExecutionPolicy Bypass -File build.ps1      # Windows
    ```
-   This populates `dist/chrome` and `dist/firefox` after syntax-checking every JS file.
+   Both run `node --check` over every JS file and the full test suite, then
+   populate `dist/chrome` and `dist/firefox`. They do the same thing; keep them
+   in step.
 
 2. Load it:
    - **Chrome**: `chrome://extensions` → Developer mode → **Load unpacked** → select `dist/chrome`.
@@ -139,7 +267,7 @@ Three modes:
 3. Open any `*.instructure.com` page. Better Canvas runs automatically.
 
 ### Custom school domains
-For non-instructure.com Canvas (e.g. `canvas.yourschool.edu`), click the toolbar popup on that site and grant permission. The background service worker registers the content scripts on your origin.
+For non-instructure.com Canvas (e.g. `canvas.yourschool.edu`), open that site, click the toolbar button, and grant permission on the page that opens. The background service worker then registers the content scripts on your origin.
 
 ---
 
@@ -167,7 +295,14 @@ src/
     themes.js                            preset themes + isDarkActive
     tokens.js                            the single design-token emitter, shared by the
                                          page, the drawer's shadow root, the options
-                                         page and the popup (+ the readability guard)
+                                         page and the options page (+ the readability guard)
+    icons.js                             the icon set: one 16px grid, one stroke weight,
+                                         currentColor. Geometry is verified by test/icons
+    skins.js                             the skin engine: 14 runtime-generated patterns,
+                                         validation for untrusted skins, and the stylesheet
+                                         emitter that drives the token layer
+    skin-catalog.js                      the 44 built-in skins. Pure data — adding one is
+                                         adding an object, no code and no assets
     settings/
       state.js                           undo/redo store, subscribe, adapter
       components.js                      Switch/Select/Slider/Sortable/Tags/Links/Keybind…
@@ -186,6 +321,7 @@ src/
       navigation.js    global/course nav + breadcrumbs + course tabs
       dashboard.js     cards, layouts, badges, inline grade, sparkline, hover preview
       todo.js          planner widget + kanban + time-block + recurring + streaks + Pomodoro
+                       (six progress-indicator styles; every length on the spacing scale)
       grades.js        what-if, weight donut, final solver, trend chart, rubric predictor
       notifications.js due-soon + goal + announcement scans + in-page + browser toasts
       files.js         cross-course files library
@@ -208,30 +344,70 @@ src/
     content.js         entry: applies registered features, wires observer + shortcuts + palette
   background/
     service-worker.js  register dynamic scripts on custom domains + badge + context menu
-  popup/               toolbar popup: enable/dark/dash toggles + Palette + Open settings
-  options/             standalone options page hosting the shared settings UI
+  options/             the settings page: hosts the shared UI, plus the custom-domain prompt
 ```
 
 ### How it fits together
 
-- **Features self-register** via `BC.registry.register({ id, styles, nodes, apply })`; `content.js` iterates the registry (theming first) and applies each feature's idempotent `apply(settings, ctx)` on every observer tick. Features swap keyed `<style>` text or toggle classes — re-applying is cheap and survives Canvas's React re-renders. Teardown derives its style/node keys from the registry.
+- **Features self-register** via `BC.registry.register({ id, styles, nodes, pages?, apply })`; `content.js` iterates the registry (theming first) and applies each feature's idempotent `apply(settings, ctx)` on every observer tick. Features swap keyed `<style>` text or toggle classes — re-applying is cheap and survives Canvas's React re-renders. Teardown derives its style/node keys from the registry.
+- **`pages`** is an optional allowlist of page names from `BC.detect`. A feature that declares it is skipped entirely while off its pages, and gets exactly one more call on the tick the page changes so its own cleanup branch still runs. Features with no `pages` are global. On a course page this takes the per-tick work from 22 feature entry points down to 12.
 - **`BC.lifecycle.bag(id)`** gives each feature scoped listeners/intervals that are cleared on disable; `pageBag(id)` also clears on SPA navigation. Errors land in the `BC.diag` ring buffer.
 - **Settings UI is shared** via `BC.SettingsUI.render(rootEl, adapter)`. The in-page drawer backs it with live `BC.storage` + `BC.api`; the options page backs it with `chrome.storage` + messaging the active Canvas tab.
 - **Dark mode / theming** is driven by CSS variables. `theming.js` emits one variable block and a static rule set consumes it — re-tinting is a single style swap.
+- **Dark mode does not rely on a selector allowlist.** Colour inherits but background does not, so any Canvas surface a selector list misses keeps its light background, inherits the light text, and renders blank. No list can be complete against an app that renames its containers between releases, and CSS cannot ask what an element's computed background is. So a bounded pass measures it: block containers only, capped, throttled off real DOM change (never a poll), and scoped to skip our own UI, instructor-authored content, background images, already-dark surfaces, dashboard cards, and any *saturated* fill — a pale course colour is meaning, not chrome.
+- **The dashboard card container is derived at runtime**, not matched by class name, and marked `data-bc-cardgrid`. Canvas has changed this markup more than once; `.ic-DashboardCard__box` is the per-card wrapper, and styling it as the container is what made every card a one-column grid and stacked them.
 - **Command palette + shortcuts** are wired centrally in `content.js` from `settings.shortcuts.bindings`, so users can rebind everything from Settings → Shortcuts.
 
 ### Adding a feature
 
 1. Create `src/content/features/yourfeature.js` ending with `BC.registry.register({ id, styles: [...], nodes: [...], apply(settings, ctx) })` — declare every keyed style and node it injects so teardown can clean up.
 2. Add any new settings to `src/shared/defaults.js`.
-3. Register the script in both manifests and the `CONTENT_JS` list in `src/background/service-worker.js` (before `observer.js`).
-4. Add controls to `src/shared/settings/index.js`.
-5. Rebuild with `build.ps1`.
+3. Register the script in **both manifests**, before `observer.js`. The service worker derives its injection lists from `manifest.json` at runtime, so there is no second list to update.
+4. If it only applies to certain pages, declare `pages: [...]` so it is skipped elsewhere.
+5. Add controls to `src/shared/settings/index.js`. Every row takes an `icon:`
+   from `BC.icons`, and a hint only where the label genuinely cannot say it —
+   `test/panel.test.js` enforces both, plus a word budget for the whole panel.
+6. Run `npm test` (or `node test/run.js`) and rebuild with `./build.sh`.
 
 ---
 
 ## Development
 
-- After editing source, run `build.ps1` and reload the unpacked extension, then refresh Canvas.
-- `build.ps1` runs `node --check` on every `.js` file before copying.
-- No test suite — UI/feature correctness is verified in-browser on a live Canvas instance.
+- After editing source, run `./build.sh` (or `build.ps1` on Windows) and reload the unpacked extension, then refresh Canvas.
+- Both build scripts run `node --check` on every `.js` file and the test suite before copying. A build is only a copy, so the only thing that can go wrong is copying something broken.
+
+### Tests
+
+```sh
+node test/run.js            # everything
+node test/run.js tokens     # one suite, by filename fragment
+```
+
+No dependencies and no install step: `test/harness.js` loads the real source files
+into a sandbox with small DOM and `chrome.*` shims, including a selector engine
+good enough to exercise the injector and observer against an actual tree.
+
+| Suite | Covers |
+| --- | --- |
+| `tokens`, `color` | WCAG contrast of every shipped theme, on every surface, in both modes |
+| `designsystem` | no literal colours outside the palette sources, token existence, z-index order |
+| `settings`, `state` | schema, migrations, undo/redo, import/export, state identity |
+| `storage` | migration carry-over, subscriber delivery, every prune bound |
+| `api`, `cache` | pagination, retry policy, CSRF, TTL and request de-duplication |
+| `lifecycle`, `injector`, `observer` | registry, bags, sheet/node lifecycle, ownership rules |
+| `detect`, `pagescope`, `applyall` | route mapping and the page-scoping dispatch rule |
+| `grades` | weighted and points totals, GPA bands, donut geometry |
+| `shortcuts` | combos, chords, typing guards, rebinding |
+| `security` | escaping, URL scheme gating, no eval, no external endpoints |
+| `a11y` | focus management, roles and labels, reduced motion, contrast pairings |
+| `icons` | icon geometry: painted bounds, optical centring, size, one grid, no typed glyphs |
+| `skins` | pattern determinism and escaping, nothing fetched, untrusted-skin validation, every built-in's contrast, the apply wiring |
+| `progress` | every progress style's maths at 0%, 100% and an empty window; the ring migration |
+| `pomodoro` | pause/resume arithmetic: no drift across cycles, no countdown while frozen |
+| `widgetcss` | planner markup and stylesheet agree; no dead rules; spacing and type come off the scale |
+| `darksweep` | every exclusion the light-surface sweep makes, and its bounds |
+| `dashboardlayout` | card container derivation across both Canvas DOM shapes |
+| `robustness` | async failure paths, unhandled rejections, error containment |
+
+Feature behaviour against a live Canvas instance is still verified in-browser;
+the suite covers the logic, the design system and the integration rules.

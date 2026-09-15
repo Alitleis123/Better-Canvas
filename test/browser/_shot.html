@@ -1,0 +1,95 @@
+<!doctype html>
+<!--
+  Screenshot target. The visual harness is only useful if a change can be LOOKED
+  at, and headless Chrome needs a URL that arrives already in the state you want
+  to photograph. This page takes that state in the query string so a capture is
+  one command:
+
+    <chrome> --headless --screenshot=out.png --window-size=1440,1250 \
+      'http://localhost:8731/test/browser/_shot.html?m=panel&t=grades'
+
+    m=panel   the settings drawer      t=<tab id>   w=<drawer px>
+    m=todo    the planner widget       p=<progress style>
+    m=skin    a skin on the dashboard  s=<skin id>
+    m=plain   the dashboard, no panel      layout=<grid|list|compact|masonry>
+    n=<count> how many courses the API stub reports. The fixture ships nine;
+              this is for the counts nine cannot show — whether a row packs,
+              wraps, or strands a card on a row of its own. It is passed through
+              to page.html rather than applied to the DOM here, because the
+              dashboard is rendered from the stub, not from Canvas's markup.
+    dark=1    apply dark mode to whichever of the above you chose
+    y=<px>    scroll the drawer down, for a section below the fold
+    s=<text>  type into the tab search, to photograph a filtered or empty state
+-->
+<meta charset=utf-8><title>shot</title>
+<body style="margin:0;background:#e8e9ea">
+<iframe id=f style="width:100vw;height:100vh;border:0"></iframe>
+<script>
+const q = new URLSearchParams(location.search);
+// The src is set here, not in the markup, so the handler below is already
+// assigned when it loads -- and it carries this page's query string, because
+// n= has to reach page.html's API stub rather than only its DOM.
+const frame = document.getElementById('f');
+frame.onload = async function () {
+  const w = this.contentWindow; await w.__bcReady;
+  // Clone cards BEFORE applying, so the grid is laid out against the count we
+  // asked for rather than re-laid-out after it.
+  if (q.get('n')) {
+    const want = Math.max(1, Math.min(24, +q.get('n')));
+    const d = w.document;
+    const cards = [...d.querySelectorAll('.ic-DashboardCard')];
+    const host = cards[0] && cards[0].parentElement;
+    if (host) {
+      const items = cards.map((c) => (c.parentElement === host ? c : c.parentElement));
+      for (let i = items.length; i < want; i++) {
+        const clone = items[i % items.length].cloneNode(true);
+        const a = clone.querySelector('a.ic-DashboardCard__link');
+        if (a) a.setAttribute('href', '/courses/' + (100 + i));
+        host.appendChild(clone);
+      }
+      for (let i = items.length - 1; i >= want; i--) items[i].remove();
+    }
+  }
+  const dark = q.get('dark') ? { theming: { darkMode: "on" } } : {};
+  const mode = q.get('m') || 'panel';
+  if (mode === 'panel') {
+    w.__bcPanel(q.get('w') ? +q.get('w') : null, dark);
+    if (q.get('t')) w.__bcTab(q.get('t'));
+    if (q.get('s')) {
+      const host = w.document.querySelector('[data-bc-node="bc-drawer"]');
+      const si = host && host.shadowRoot.querySelector('.bc-search');
+      if (si) { si.value = q.get('s'); si.dispatchEvent(new Event('input', { bubbles: true })); }
+    }
+    // Scroll LAST and late. The course editor and the GPA table mount from a
+    // promise, so scrolling immediately clamps against a document that is still
+    // short and the shot lands well above where it was aimed.
+    if (q.get('y')) {
+      await new Promise((r) => setTimeout(r, 300));
+      const host = w.document.querySelector('[data-bc-node="bc-drawer"]');
+      const root = host && host.shadowRoot.querySelector('.root');
+      if (root) root.scrollTop = +q.get('y');
+    }
+  } else if (mode === 'todo') {
+    // v=<list|kanban|timeblock> and g=<grouping>, because the kanban board in a
+    // sidebar is a different shape from the list and was never photographed.
+    const over = Object.assign({}, dark);
+    if (q.get('v') || q.get('g') || q.get('lay')) {
+      over.todo = Object.assign({}, over.todo,
+        q.get('v') ? { view: q.get('v') } : null,
+        q.get('g') ? { groupBy: q.get('g') } : null,
+        q.get('lay') ? { layout: q.get('lay') } : null);
+    }
+    w.__bcTodo(q.get('p') || 'ring', over);
+  } else if (mode === 'skin') {
+    w.__bcSkin(q.get('s') || 'matcha-strawberry', dark);
+  } else {
+    const over = Object.assign({}, dark);
+    if (q.get('layout')) over.dashboard = { layout: q.get('layout') };
+    w.__bcApply(over);
+  }
+  // The title is the signal a driver can wait on; --virtual-time-budget alone
+  // will happily photograph a half-painted frame.
+  setTimeout(() => { document.title = "ready"; }, 500);
+};
+frame.src = '/test/browser/page.html' + location.search;
+</script>

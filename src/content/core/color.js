@@ -49,6 +49,37 @@
       return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
     },
 
+    // Parse what getComputedStyle actually returns: "rgb(r, g, b)",
+    // "rgba(r, g, b, a)", "transparent", or a hex. Returns {r,g,b,a} or null.
+    parseCssColor(str) {
+      const s = String(str == null ? "" : str).trim().toLowerCase();
+      if (!s || s === "transparent" || s === "none") return null;
+      if (s[0] === "#") { const c = color.hexToRgb(s); return c ? { r: c.r, g: c.g, b: c.b, a: 1 } : null; }
+      const m = s.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.%]+))?\s*\)$/);
+      if (!m) return null;
+      let a = 1;
+      if (m[4] != null) a = m[4].indexOf("%") > -1 ? parseFloat(m[4]) / 100 : parseFloat(m[4]);
+      return { r: +m[1], g: +m[2], b: +m[3], a: isFinite(a) ? a : 1 };
+    },
+
+    // How far a colour is from grey, 0..255. A white or grey panel is chrome; a
+    // saturated colour is somebody's deliberate choice (a course colour, a
+    // status badge, a highlight) and must not be repainted as if it were a
+    // surface.
+    chroma(str) {
+      const c = color.parseCssColor(str);
+      if (!c) return 0;
+      return Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b);
+    },
+
+    // Relative luminance of a computed colour string, or null when it is too
+    // transparent to be what the user actually sees.
+    cssLuminance(str, minAlpha) {
+      const c = color.parseCssColor(str);
+      if (!c || c.a < (minAlpha == null ? 0.5 : minAlpha)) return null;
+      return color.relLuminance(color.rgbToHex(c.r, c.g, c.b));
+    },
+
     // WCAG contrast ratio, 1..21.
     contrastRatio(a, b) {
       const x = color.relLuminance(a), y = color.relLuminance(b);
@@ -133,9 +164,12 @@
       const presets = BC.LIGHT_PRESETS || {};
       const darkBase = (t.darkBg && color.isHex(t.darkBg))
         ? t.darkBg
-        : (tones[t.darkTone] || tones.neutral || { bg: "#1a1d24" }).bg;
-      const lp = presets[t.lightPreset] || presets.default || { bg: "#f6f7fb", accent: "" };
-      const accent = color.normalizeHex(t.accentColor) || color.normalizeHex(lp.accent) || "#4f46e5";
+        : (tones[t.darkTone] || tones.neutral || { bg: "#1b1917" }).bg;
+      const lp = presets[t.lightPreset] || presets.default || { bg: "#f5f1ea", accent: "" };
+      // Warm clay, not the stock indigo every extension ships. It clears 4.9:1 on
+      // the lightest paper surface and 5.9:1 for its own label, so it can be the
+      // default without the guard having to rescue it.
+      const accent = color.normalizeHex(t.accentColor) || color.normalizeHex(lp.accent) || "#a8452c";
       return {
         dark:  { ...color.darkSurface(darkBase), accent, link: color.lighten(accent, 0.15) },
         light: { ...color.lightSurface(lp.bg),   accent, link: accent },

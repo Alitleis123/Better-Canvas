@@ -10,11 +10,17 @@
   BC.features = BC.features || {};
 
   const DRAWER_ID = "bc-drawer";
+  // ONE definition of how much of the window the panel occupies. The drawer was
+  // min(720px, 54vw) wide while the preview stage beside it reserved only
+  // min(600px, 48vw), so the drawer covered the rightmost ~120px of the stage.
+  // The preview box is centred in that stage and sized to fill it, so what got
+  // covered was the right-hand edge of the page preview -- at 1440px, 96px of a
+  // 792px picture, and the wider the window the more of it went under the panel.
+  const DRAWER_W = "min(720px, 54vw)";
   let drawerHost = null;
   let shadow = null;
   let store = null;
   let isOpen = false;
-  let trap = null;
 
   function makeAdapter() {
     return {
@@ -57,8 +63,9 @@
     });
     a.innerHTML = `<div class="menu-item-icon-container" aria-hidden="true">
       <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
-        <rect x="4" y="4" width="18" height="18" rx="3" fill="currentColor" opacity="0.85"/>
-        <text x="13" y="17" text-anchor="middle" font-size="10" fill="white" font-weight="800">BC</text>
+        <rect x="4.75" y="4.75" width="16.5" height="16.5" rx="3.25" stroke="currentColor" stroke-width="1.5"/>
+        <text x="13" y="17.5" text-anchor="middle" font-size="9.5" font-weight="700"
+              font-family="system-ui, -apple-system, sans-serif" fill="currentColor">BC</text>
       </svg></div>
       <div class="menu-item__text">Better Canvas</div>`;
     a.addEventListener("click", (e) => { e.preventDefault(); open(); });
@@ -74,7 +81,9 @@
     // the transform, so the host stayed pointer-events-active across the right edge
     // of every Canvas page and silently swallowed clicks there.
     drawerHost.style.cssText =
-      "position:fixed; top:0; right:0; bottom:0; width:min(720px, 96vw);" +
+      // 600px minus a 210px tab rail left ~330px of body, which is less than the
+    // widest control row needs and is what forced labels to wrap five lines deep.
+    "position:fixed; top:0; right:0; bottom:0; width:" + DRAWER_W + ";" +
       "z-index:var(--bc-z-drawer, 2147482000); transform: translateX(100%); visibility: hidden;" +
       "box-shadow: var(--bc-shadow-4, -20px 0 60px rgba(0,0,0,.18));";
     document.body.appendChild(drawerHost);
@@ -85,25 +94,42 @@
     // --bc-* from :root and tracks the user's theme for free.
     const style = document.createElement("style");
     style.textContent = `
-      :host { all: initial; }
+      /* Only the drawer floats a close button over its header, so only the drawer
+         reserves that corner. The options page hosts the same UI with no close
+         button and was leaving 46px of dead air with its overflow menu adrift
+         from the cards below. */
+      :host { all: initial; --bc-panel-gutter: 46px; }
       * { box-sizing: border-box; }
       .root { height: 100%; overflow: auto; background: var(--bc-surface-1, #f6f7fb); }
+      /* Sits on the panel's own header, so it reads as the header's last button
+         rather than as a chip floating over it: same 30px box, same muted ink,
+         no border until hover. It was a bordered white square on a translucent
+         bar, which was the only piece of chrome still in the old style. */
       .bc-drawer-close {
-        position: absolute; top: 10px; right: 12px; z-index: 2;
-        width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
-        border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-md, 8px);
-        background: var(--bc-surface-2, #fff); color: var(--bc-text, #1b2430);
-        font: 15px/1 var(--bc-font-sans, sans-serif); cursor: pointer;
+        position: absolute; top: 15px; right: 14px; z-index: 4;
+        width: 30px; height: 30px; padding: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 1px solid transparent; border-radius: var(--bc-radius-md, 8px);
+        background: transparent; color: var(--bc-muted, #6b6155);
+        cursor: pointer;
+        transition: background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
+                    color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
       }
-      .bc-drawer-close:hover { background: var(--bc-surface-3, #f1f3f7); }
+      .bc-drawer-close:hover {
+        background: var(--bc-surface-3, #eee7dc);
+        color: var(--bc-text, #1d1a16);
+      }
       .bc-drawer-close:focus-visible {
         outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px;
       }
     `;
     const root = document.createElement("div");
     root.className = "root";
+    // A dialog, but NOT aria-modal. The drawer docks beside the page instead of
+    // covering it: the page stays scrollable, clickable and reachable by
+    // keyboard, so claiming modality here would tell a screen reader the rest of
+    // the document is inert when it is the very thing being previewed.
     root.setAttribute("role", "dialog");
-    root.setAttribute("aria-modal", "true");
     root.setAttribute("aria-label", "Better Canvas settings");
     shadow.appendChild(style);
     shadow.appendChild(root);
@@ -115,7 +141,8 @@
     closeBtn.type = "button";
     closeBtn.className = "bc-drawer-close";
     closeBtn.setAttribute("aria-label", "Close settings");
-    closeBtn.textContent = "✕";
+    closeBtn.title = "Close settings";
+    closeBtn.innerHTML = BC.icons.svg("close", { size: 16 });
     closeBtn.addEventListener("click", close);
     shadow.appendChild(closeBtn);
 
@@ -133,32 +160,60 @@
     // removed, stacking up handlers pointed at dead hosts.
     const bag = BC.lifecycle.bag("settingsPanel-persist");
     bag.once("global", () => {
-      bag.listen(document, "mousedown", (e) => {
-        if (!isOpen || !drawerHost) return;
-        if (e.target === drawerHost || drawerHost.contains(e.target)) return;
-        close();
-      });
+      // NO click-outside-to-close. The page beside the drawer is the live
+      // preview, so clicking it is the thing you are meant to do; closing the
+      // panel every time somebody tried would make the dock useless.
       bag.listen(document, "keydown", (e) => { if (e.key === "Escape" && isOpen) close(); });
     });
     return drawerHost;
   }
 
-  // A scrim gives the drawer depth and signals that the page behind is inert.
-  // Sliding in over an unchanged page was the single biggest thing making this feel
-  // unfinished.
-  function ensureScrim() {
-    let s = document.querySelector('[data-bc-node="bc-drawer-scrim"]');
-    if (!s) {
-      s = document.createElement("div");
-      s.setAttribute("data-bc-node", "bc-drawer-scrim");
-      s.style.cssText =
-        "position:fixed; inset:0; z-index:calc(var(--bc-z-drawer, 2147482000) - 1);" +
-        "background: var(--bc-overlay, rgba(15,20,28,.44)); opacity:0; pointer-events:none;" +
-        "transition: opacity var(--bc-dur-3, 220ms) var(--bc-ease-out, ease);";
-      s.addEventListener("mousedown", close);
-      document.body.appendChild(s);
+
+  // ---- Live preview: the page itself ----
+  //
+  // This used to be a scaled, inert CLONE of the page rendered beside the
+  // drawer, and it was wrong in three ways at once.
+  //
+  //  - It stripped [data-bc-node] from the clone, on the reasoning that "classes
+  //    stay, which is what our own styling actually targets". That stopped being
+  //    true the moment a feature scoped its sheet by node id, which dashgrid
+  //    does for every rule it has -- so the preview rendered the real card
+  //    markup with none of the card CSS, as a column of bare links.
+  //  - It was pointer-events:none, so every control in it was dead. Reasonable
+  //    for a photograph; baffling for something that looks like your page.
+  //  - It was a photograph. A snapshot rebuilt on a 200ms timer can only ever
+  //    approximate what the page would do, and anything driven by a real
+  //    re-render -- the To Do list rebuilding its layout, for one -- did not
+  //    show up in it at all without reloading the tab.
+  //
+  // So there is no preview any more. The drawer DOCKS, the real page shrinks to
+  // the space beside it, and what you are looking at is the page: correctly
+  // styled because it is the one the stylesheets are for, live because applyAll
+  // runs on it, and clickable because it is not a picture. It also costs about
+  // 120 lines less code than photographing it did.
+  const DOCK_STYLE = "bc-drawer-dock";
+
+  function dockPage(on) {
+    const root = document.documentElement;
+    if (!on) {
+      root.removeAttribute("data-bc-dock");
+      // The sheet stays: removing it would drop the transition mid-slide and the
+      // page would snap back rather than follow the drawer out.
+      return;
     }
-    return s;
+    BC.injector.setStyle(DOCK_STYLE, `
+      /* The transition lives outside the [data-bc-dock] guard so it applies on
+         the way out as well as the way in. */
+      body { transition: margin-right var(--bc-dur-4, 300ms) var(--bc-ease-spring, ease); }
+      :root[data-bc-dock] body { margin-right: ${DRAWER_W}; }
+      /* Canvas pins a few things to the right edge of the VIEWPORT rather than
+         to the content column, and a viewport-fixed element does not know the
+         page got narrower -- it would sit under the drawer. */
+      :root[data-bc-dock] #right-side-wrapper,
+      :root[data-bc-dock] .ic-app-course-nav-toggle { max-width: 100%; }
+      @media (prefers-reduced-motion: reduce) { body { transition: none; } }
+    `);
+    root.setAttribute("data-bc-dock", "");
   }
 
   function setExpanded(v) {
@@ -170,26 +225,40 @@
     ensureDrawer();
     if (isOpen) return;
     isOpen = true;
-    const scrim = ensureScrim();
     // Asymmetric on purpose: slow-in reads as considered, quick-out as responsive.
     drawerHost.style.transition = "transform var(--bc-dur-4, 300ms) var(--bc-ease-spring, ease), visibility 0s";
     drawerHost.style.visibility = "visible";
-    scrim.style.pointerEvents = "auto";
     requestAnimationFrame(() => {
       if (!drawerHost) return;
       drawerHost.style.transform = "translateX(0)";
-      scrim.style.opacity = "1";
     });
     setExpanded(true);
-    if (BC.ui && BC.ui.focusTrap) trap = BC.ui.focusTrap(shadow, { returnTo: document.getElementById("bc-open-settings") });
+    dockPage(true);
+    // Focus is AIMED, not trapped. A trap is correct for a modal and wrong for a
+    // dock: it would make the page beside the drawer unreachable by keyboard,
+    // which is the same mistake pointer-events:none made for the mouse.
+    // The search field is both visible and the most useful place to land -- the
+    // first tabbable in DOM order is the master switch's visually hidden
+    // checkbox, a 1x1 box, so landing there puts the ring somewhere invisible.
+    const first = shadow.querySelector(".bc-search");
+    if (first) BC.util.guard(() => first.focus({ preventScroll: true }), "drawer focus");
   }
 
   function close() {
     if (!isOpen) return;
     isOpen = false;
-    if (trap) { BC.util.guard(() => trap.release(), "drawer focus"); trap = null; }
-    const scrim = document.querySelector('[data-bc-node="bc-drawer-scrim"]');
-    if (scrim) { scrim.style.opacity = "0"; scrim.style.pointerEvents = "none"; }
+    // Give the keyboard back what it had. The host is about to go
+    // visibility:hidden, which stops anything inside it being focusable, and the
+    // browser answers that by dropping focus to <body> -- so closing the drawer
+    // with Escape lost the user's place on the page entirely and the next Tab
+    // started again from the top of Canvas.
+    //
+    // Only when focus is actually OURS. Focus inside a shadow root reports as
+    // the host, so that is the check. Closing by clicking something on the page
+    // should leave the click where it landed rather than yanking the ring back
+    // to the nav.
+    const fromInside = drawerHost && document.activeElement === drawerHost;
+    dockPage(false);
     if (drawerHost) {
       // Delay visibility until the slide-out finishes, so the panel doesn't vanish
       // mid-transition but also can't keep eating clicks once it's gone.
@@ -199,6 +268,10 @@
       drawerHost.style.visibility = "hidden";
     }
     setExpanded(false);
+    if (fromInside) {
+      const trigger = document.getElementById("bc-open-settings");
+      if (trigger) BC.util.guard(() => trigger.focus({ preventScroll: true }), "drawer refocus");
+    }
   }
   // An explicit flag, not a string match on style.transform: open() sets the
   // transform inside requestAnimationFrame, so a toggle() immediately after an
@@ -208,8 +281,17 @@
     isOpen ? close() : open();
   }
 
+  // The first click used to pay for the whole settings form being built. Build it
+  // while the page is idle instead, so the panel is already there when asked for.
+  function prewarm() {
+    const go = () => { if (!drawerHost) BC.util.guard(ensureDrawer, "drawer prewarm"); };
+    if (typeof requestIdleCallback === "function") requestIdleCallback(go, { timeout: 3000 });
+    else setTimeout(go, 1200);
+  }
+
   function apply(settings, ctx) {
     installNavItem();
+    prewarm();
     // Always accessible so the user can re-enable if disabled.
   }
 

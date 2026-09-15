@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Better Canvas visual harness</title>
+<link rel="stylesheet" href="canvas.css">
+<script>document.write('<link rel="stylesheet" href="canvas.css?t=' + Date.now() + '">');</script>
+</head>
+<body>
+<div id="application" class="ic-app">
+  <header id="header" class="ic-app-header">
+    <ul id="menu" style="list-style:none;margin:0;padding:0;display:flex;gap:16px">
+      <li class="ic-app-header__menu-list-item"><a class="ic-app-header__menu-list-link" href="#">Dashboard</a></li>
+      <li class="ic-app-header__menu-list-item"><a class="ic-app-header__menu-list-link" href="#">Courses</a></li>
+    </ul>
+  </header>
+  <div id="wrapper" class="ic-Layout-wrapper">
+    <!-- #not_right_side is the real flex container on Canvas, and this replica
+         did not have it: it made .ic-Layout-columns the flex parent of the
+         content wrapper directly. On a live dashboard .ic-Layout-columns is
+         display: BLOCK and #not_right_side.ic-app-main-content is the flex one,
+         so a justify-content rule aimed at the former does nothing at all —
+         which is how the dashboard shipped uncentred while this fixture showed
+         it centred at ten widths. Structure verified against a real Canvas DOM. -->
+    <div id="main" class="ic-Layout-columns">
+     <div id="not_right_side" class="ic-app-main-content">
+      <div id="content-wrapper" class="ic-Layout-contentWrapper" style="flex:1 1 auto;min-width:0">
+        <div id="content" class="ic-Layout-contentMain">
+
+          <div class="ic-Dashboard-header__layout">
+            <h1 class="ic-Dashboard-header__title">Dashboard</h1>
+            <div class="ic-Dashboard-header__actions">
+              <button class="Button">Switch to new dashboard view</button>
+            </div>
+          </div>
+
+          <div id="DashboardCard_Container">
+            <div class="ic-DashboardCard__box">
+              <h2 class="ic-DashboardCard__box_header">Published Courses</h2>
+              <!-- card with an image header -->
+              <div class="ic-DashboardCard">
+                <div class="ic-DashboardCard__header">
+                  <button class="ic-DashboardCard__header-button" aria-label="Course options">⋮</button>
+                  <div class="ic-DashboardCard__header_image"
+                       style="background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22262%22 height=%22146%22><rect width=%22262%22 height=%22146%22 fill=%22%23b58a3c%22/><text x=%2231%22 y=%2285%22 font-size=%2236%22 fill=%22%23fff%22>POE</text></svg>')">
+                    <div class="ic-DashboardCard__header_hero" style="background-color:#b58a3c"></div>
+                  </div>
+                  <a class="ic-DashboardCard__link" href="/courses/1">
+                    <div class="ic-DashboardCard__header-content">
+                    <div class="ic-DashboardCard__header-title"><span>ENGL2700 55077 Creative Writing</span></div>
+                    <div class="ic-DashboardCard__header-subtitle">ENGL2700.55077.202650</div>
+                    <div class="ic-DashboardCard__header-term">202650_2A Summer 2026</div>
+                    </div>
+                  </a>
+                </div>
+                <nav class="ic-DashboardCard__action-container"><a href="#">Announcements</a><a href="#">Files</a></nav>
+              </div>
+              <!-- card with a solid course colour -->
+              <div class="ic-DashboardCard">
+                <div class="ic-DashboardCard__header">
+                  <button class="ic-DashboardCard__header-button" aria-label="Course options">⋮</button>
+                  <div class="ic-DashboardCard__header_hero" style="background-color:#4a9d7f"></div>
+                  <a class="ic-DashboardCard__link" href="/courses/2">
+                    <div class="ic-DashboardCard__header-content">
+                    <div class="ic-DashboardCard__header-title"><span>SOCL2320 33716 Statistical Analysis</span></div>
+                    <div class="ic-DashboardCard__header-subtitle">SOCL2320.33716.202630</div>
+                    <div class="ic-DashboardCard__header-term">202630_1 Spring 2026</div>
+                    </div>
+                  </a>
+                </div>
+                <nav class="ic-DashboardCard__action-container"><a href="#">Announcements</a><a href="#">Discussions</a></nav>
+              </div>
+              <div class="ic-DashboardCard">
+                <div class="ic-DashboardCard__header">
+                  <button class="ic-DashboardCard__header-button" aria-label="Course options">⋮</button>
+                  <div class="ic-DashboardCard__header_hero" style="background-color:#8c5a9e"></div>
+                  <a class="ic-DashboardCard__link" href="/courses/3">
+                    <div class="ic-DashboardCard__header-content">
+                    <div class="ic-DashboardCard__header-title"><span>COMM3750 51076 Special Effects</span></div>
+                    <div class="ic-DashboardCard__header-subtitle">COMM3750.51076.202650</div>
+                    <div class="ic-DashboardCard__header-term">202650_2A Summer 2026</div>
+                    </div>
+                  </a>
+                </div>
+                <nav class="ic-DashboardCard__action-container"><a href="#">Announcements</a></nav>
+              </div>
+              <div class="ic-DashboardCard">
+                <div class="ic-DashboardCard__header">
+                  <button class="ic-DashboardCard__header-button" aria-label="Course options">⋮</button>
+                  <div class="ic-DashboardCard__header_hero" style="background-color:#c0562e"></div>
+                  <a class="ic-DashboardCard__link" href="/courses/4">
+                    <div class="ic-DashboardCard__header-content">
+                    <div class="ic-DashboardCard__header-title"><span>HIST1100 Modern History</span></div>
+                    <div class="ic-DashboardCard__header-subtitle">HIST1100.11002.202650</div>
+                    <div class="ic-DashboardCard__header-term">202650_2A Summer 2026</div>
+                    </div>
+                  </a>
+                </div>
+                <nav class="ic-DashboardCard__action-container"><a href="#">Files</a></nav>
+              </div>
+            </div>
+          </div>
+
+          <h2 style="margin-top:24px">Assignment description (instructor authored)</h2>
+          <div class="description user_content">
+            <p>Read chapters 4 through 6 and answer the questions below.</p>
+            <div class="callout">Remember: submissions close at 11:59pm.</div>
+            <blockquote>"Quoth the raven, nevermore."</blockquote>
+            <table><tr><td>Week 1</td><td>Introduction</td></tr><tr><td>Week 2</td><td>Method</td></tr></table>
+          </div>
+
+          <h2 style="margin-top:24px">Grades table</h2>
+          <table id="grades_summary">
+            <thead><tr><th>Assignment</th><th>Due</th><th>Score</th></tr></thead>
+            <tbody>
+              <tr><th class="title"><a href="#">Essay 1</a></th><td>Sep 3</td><td>92/100</td></tr>
+              <tr><th class="title"><a href="#">Essay 2</a></th><td>Sep 17</td><td>88/100</td></tr>
+            </tbody>
+          </table>
+
+          <h2 style="margin-top:24px">Discussion</h2>
+          <!-- Replies live inside #discussion_subentries on Canvas, and the
+               discussion tools count them from there. Without the container the
+               bar rendered "0 replies - 0 words" against a visible reply. -->
+          <div id="discussion_subentries">
+            <div class="discussion_entry">
+              <div class="header"><a class="author" href="/users/7">Megan Hahn</a></div>
+              <div class="message user_content"><p>Welcome to the course discussion board.</p></div>
+            </div>
+            <div class="discussion_entry unread">
+              <div class="header"><a class="author" href="/users/8">Alex Roy</a></div>
+              <div class="message user_content"><p>Posting my reading response for week one here.</p></div>
+            </div>
+          </div>
+
+          <h2 style="margin-top:24px">Syllabus (course page body)</h2>
+          <div id="course_syllabus" class="user_content">
+            <p>Midterm on October 14. Final project due December 3.</p>
+            <table><tr><td>Sep 22</td><td>Reading response due</td></tr></table>
+          </div>
+
+          <h2 style="margin-top:24px">People</h2>
+          <table class="roster"><tbody>
+            <tr id="user_1"><td>Megan Hahn</td><td>Student</td></tr>
+            <tr id="user_2"><td>Alex Roy</td><td>Student</td></tr>
+          </tbody></table>
+
+          <h2 style="margin-top:24px">Modules</h2>
+          <div class="context_module" id="context_module_1">
+            <div class="header ig-header"><span class="name">Week 1</span></div>
+            <ul class="ig-list">
+              <li class="ig-row"><a class="ig-title" href="#">Lecture slides</a></li>
+              <li class="ig-row"><a class="ig-title" href="#">Reading</a></li>
+            </ul>
+          </div>
+
+        </div>
+      </div>
+      <div id="right-side-wrapper">
+        <aside id="right-side">
+          <div class="Sidebar__TodoListContainer">
+            <div class="todo-list-header-container">To Do</div>
+            <div><a href="#">Reminder: Sexual Violence P...</a><div>Up2Us Foundations</div></div>
+          </div>
+          <!-- BOTH classes on ONE element, which is what a live Canvas emits:
+               the DOM reports class="events_list\n  recent_feedback". Coming Up
+               and Recent Feedback are two settings sharing one block, so hiding
+               either by its own class took the other with it. The replica used
+               to give them a tidy element each and could not show that. -->
+          <div class="events_list recent_feedback">
+            <h2 style="margin:0 0 6px;font-size:16px">Recent Feedback</h2>
+            <span>Nothing for now</span>
+          </div>
+          <!-- An ANCHOR with class Button, which is what most Canvas buttons
+               actually are. A tag selector for <button> never matched it, so it
+               kept a light fill in a dark sidebar. Canvas wraps it in a bare
+               div, which is why the sidebar surface rule names the blocks it
+               applies to rather than using `> *`. -->
+          <div><a class="Button button-sidebar-wide" href="/grades">View Grades</a></div>
+        </aside>
+      </div>
+     </div>
+    </div>
+  </div>
+</div>
+
+<!-- The extension's real source, fetched with no-store so an edited file is
+     always what runs. A cached subresource silently tested the old code. -->
+<script>
+window.__bcReady = (async () => {
+  const inline = [];
+  const sources = [
+    "../../src/shared/defaults.js",
+    "../../src/shared/themes.js",
+    "../../src/shared/icons.js",
+    "../../src/content/core/util.js",
+    "../../src/content/core/datetime.js",
+    "../../src/content/core/color.js",
+    "../../src/shared/tokens.js",
+    "../../src/shared/skins.js",
+    "../../src/shared/skin-catalog.js",
+    "../../src/content/core/cache.js",
+  ];
+  const run = (code, name) => {
+    const s = document.createElement("script");
+    s.textContent = code + "\n//# sourceURL=" + name;
+    document.head.appendChild(s);
+  };
+  const load = async (path) => {
+    const r = await fetch(path + "?t=" + Date.now(), { cache: "no-store" });
+    run(await r.text(), path);
+  };
+  for (const src of sources) await load(src);
+
+  // Stand-ins for what the features reach for. setStyle does what the real
+  // injector does: one keyed <style> tag, appended last.
+  window.BC = window.BC || {};
+  BC.injector = {
+    setStyle(key, css) {
+      let tag = document.querySelector('style[data-better-canvas="' + key + '"]');
+      if (!css) { if (tag) tag.remove(); return; }
+      if (!tag) { tag = document.createElement("style"); tag.setAttribute("data-better-canvas", key); }
+      if (tag.textContent !== css) tag.textContent = css;
+      document.head.appendChild(tag);
+    },
+    removeStyle(key) { const t = document.querySelector('style[data-better-canvas="' + key + '"]'); if (t) t.remove(); },
+    removeNode(id) { document.querySelectorAll('[data-bc-node="' + id + '"]').forEach(n => n.remove()); },
+    ensureNode(id, parent, factory) {
+      let n = document.querySelector('[data-bc-node="' + id + '"]');
+      if (!n) { n = factory(); n.setAttribute("data-bc-node", id); if (!n.isConnected) (parent || document.body).appendChild(n); }
+      return n;
+    },
+  };
+  BC.registry = { register(def) { BC.features = BC.features || {}; BC.features[def.id] = def; } };
+  // Bags are kept BY ID and `once` really does run once, because that is what
+  // the real lifecycle does. The old stub returned a fresh object per call with
+  // `once(k, fn) { fn(); }`, which is not a simplification of `once` -- it is the
+  // opposite of it. Any feature that uses once() to arm a loader exactly once per
+  // page visit had that loader re-armed on every apply, so its load state was
+  // reset forever and it could never reach "done". That is invisible while
+  // BC.requestApply is a no-op, and becomes a feature that simply never renders
+  // the moment it is not.
+  const _bags = new Map();
+  const _bag = (id) => {
+    let b = _bags.get(id);
+    if (!b) {
+      const marks = new Set();
+      b = {
+        once(k, fn) { if (marks.has(k)) return false; marks.add(k); fn(); return true; },
+        timeout(fn, ms) { setTimeout(fn, ms); },
+        interval(fn, ms) { return setInterval(fn, ms); },
+        listen(t, e, h) { t.addEventListener(e, h); },
+        clear() { marks.clear(); },
+      };
+      _bags.set(id, b);
+    }
+    return b;
+  };
+  BC.lifecycle = { pageBag: _bag, bag: _bag };
+  BC.detect = { context: () => ({ page: "dashboard", courseId: null, path: "/" }) };
+  // A planner window with the shape Canvas actually returns, so the widget has
+  // something to lay out. Two are already submitted, which is what gives the
+  // progress indicator a reading other than 0%.
+  const DAY = 86400000;
+  const plannerFixture = () => {
+    const t0 = new Date(); t0.setHours(9, 0, 0, 0);
+    const mk = (id, title, course, offsetDays, hour, done) => ({
+      plannable_id: id, plannable_type: "assignment",
+      course_id: course.id, context_type: "Course", context_name: course.name,
+      plannable_date: new Date(t0.getTime() + offsetDays * DAY + hour * 3600000).toISOString(),
+      html_url: "/courses/" + course.id + "/assignments/" + id,
+      plannable: { id, title, due_at: new Date(t0.getTime() + offsetDays * DAY).toISOString() },
+      submissions: done ? { submitted: true, graded: true } : { submitted: false },
+    });
+    const engl = { id: 1, name: "ENGL2700 Creative Writing" };
+    const cs   = { id: 2, name: "CS3000 Algorithms" };
+    const bio  = { id: 3, name: "BIOL2299 Cell Biology" };
+    return [
+      mk(101, "Flash fiction draft \u2014 800 words", engl, 0, 4, false),
+      mk(102, "Problem set 4: dynamic programming", cs, 0, 8, true),
+      mk(103, "Reading response: Borges", engl, 1, 2, false),
+      mk(104, "Lab notebook check", bio, 1, 6, false),
+      mk(105, "Midterm study guide", cs, 2, 5, true),
+      mk(106, "Peer workshop letters (3)", engl, 3, 3, false),
+      mk(107, "Mitosis quiz", bio, 4, 1, false),
+      mk(108, "Algorithms: graph traversal set", cs, 5, 7, false),
+    ];
+  };
+  // Courses, not an empty array. The settings panel's course editor and GPA
+  // table only render rows once these resolve with something, so returning []
+  // meant both panels had never been seen at all: every screenshot of them was
+  // their "Loading courses..." state, and their CSS was never exercised.
+  const courseFixture = () => [
+    { id: "1", name: "ENGL2700 Creative Writing",   courseCode: "ENGL2700", color: "#b58a3c" },
+    { id: "2", name: "SOCL2320 Statistical Analysis", courseCode: "SOCL2320", color: "#4a9d7f" },
+    { id: "3", name: "COMM3750 Special Effects",    courseCode: "COMM3750", color: "#8e5ea8" },
+    { id: "4", name: "HIST1100 Modern History",     courseCode: "HIST1100", color: "#c0562e" },
+    { id: "5", name: "BIOL1105 Cell Biology",       courseCode: "BIOL1105", color: "#3d7ea6" },
+  ];
+  // How many courses the stub should report, from ?n=. 0 or absent means the
+  // fixture's own nine, which is the realistic load; the knob exists for the
+  // counts that a nine-course list cannot show, like four courses in a
+  // five-column measure.
+  const WANT = Math.max(0, Math.min(40, +(new URLSearchParams(location.search).get("n")) || 0));
+  function sizedCards(list) {
+    if (!WANT || WANT === list.length) return list;
+    const out = [];
+    for (let i = 0; i < WANT; i++) {
+      const src = list[i % list.length];
+      out.push(i < list.length ? src : Object.assign({}, src, { id: String(1000 + i) }));
+    }
+    return out;
+  }
+
+  BC.api = {
+    coursesWithScores: () => Promise.resolve(courseFixture().map((c, i) => ({
+      id: c.id, name: c.name, course_code: c.courseCode,
+      enrollments: [{ computed_current_score: [92.4, 88.1, 79.5, 95, 71.2][i] }],
+      concluded: i === 4,
+    }))),
+    activeCourses: () => Promise.resolve(courseFixture()),
+    // Canvas's own colour picker. dashgrid fetches this ALONGSIDE the cards, so
+    // a missing stub rejected the pair and the harness silently showed Canvas's
+    // fallback dashboard instead of ours.
+    customColors: () => Promise.resolve({ custom_colors: {} }),
+    plannerItems: () => Promise.resolve(plannerFixture()),
+    // Shaped like a real /api/v1/dashboard/dashboard_cards row, and deliberately
+    // covering the cases a real dashboard has and the old fixture did not: a
+    // title short enough to sit on one line next to two-line neighbours, and a
+    // course with NO colour and NO image, which on a real dashboard rendered as
+    // an identity-less black slab.
+    // n=<count> in the query string resizes this list. It used to resize only
+    // Canvas's own cards in the DOM, which stopped meaning anything the day we
+    // started rendering the dashboard ourselves from this stub -- so the one
+    // knob for "does a row pack, wrap, or strand a card on a row of its own"
+    // had been quietly inert. Extra courses are clones with fresh ids, so the
+    // colours and monograms stay distinguishable.
+    dashboardCards: () => Promise.resolve(sizedCards([
+      { id: "1", shortName: "ENGL2700 55077 Creative Writing SEC 01 Summer 2026",
+        courseCode: "ENGL2700.55077.202650", color: "#b58a3c", term: { name: "Summer 2026" },
+        image: "data:image/svg+xml;utf8," + encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#8a6a2c"/><text x="20" y="110" font-size="54" fill="#f6e3b8">POE</text></svg>'),
+        links: [{ css_class: "announcements", path: "#", label: "Announcements" },
+                { css_class: "files", path: "#", label: "Files" }] },
+      { id: "2", shortName: "SOCL2320 33716 Statistical Analysis in Sociology",
+        courseCode: "SOCL2320.33716.202630", color: "#4a9d7f", term: { name: "Spring 2026" },
+        links: [{ css_class: "announcements", path: "#", label: "Announcements" },
+                { css_class: "assignments", path: "#", label: "Assignments", icon: "icon-assignment" },
+                { css_class: "discussions", path: "#", label: "Discussions" },
+                { css_class: "files", path: "#", label: "Files" }] },
+      { id: "3", shortName: "COMM3750 51076 Specl Effects/Postprod for TV",
+        courseCode: "COMM3750.51076.202650", color: "#8e5ea8", term: { name: "Summer 2026" },
+        links: [{ css_class: "announcements", path: "#", label: "Announcements" },
+                { css_class: "assignments", path: "#", label: "Assignments" }] },
+      { id: "4", shortName: "OOD", courseCode: "CS3100.MERGED.202610",
+        term: { name: "Fall 2025" },
+        links: [{ css_class: "announcements", path: "#", label: "Announcements" },
+                { css_class: "files", path: "#", label: "Files" }] },
+      { id: "5", shortName: "CS1210 38891 Professional Development for Khoury Co-Op",
+        courseCode: "CS1210.38891.202630", color: "#2f6a4f", term: { name: "Spring 2026" },
+        links: [{ css_class: "announcements", path: "#", label: "Announcements" }] },
+      { id: "6", shortName: "SOCL1101 12425 Introduction to Sociology",
+        courseCode: "SOCL1101.12425.202610", term: { name: "Fall 2025" },
+        links: [{ css_class: "assignments", path: "#", label: "Assignments" }] },
+      { id: "7", shortName: "MATH1365 40780 Intro to Math Reasoning SEC 33",
+        courseCode: "MATH1365.40780.202530", term: { name: "Spring 2025" }, links: [] },
+      { id: "8", shortName: "CS3540 41436 Game Programming SEC 01",
+        courseCode: "CS3540.41436.202540", color: "#8c3b3b", term: { name: "Summer 2025" },
+        image: "data:image/svg+xml;utf8," + encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#5d2626"/><text x="18" y="108" font-size="30" fill="#e8b4b4">GAME PROG</text></svg>'),
+        links: [{ css_class: "announcements", path: "#", label: "Announcements" },
+                { css_class: "assignments", path: "#", label: "Assignments" },
+                { css_class: "discussions", path: "#", label: "Discussions" }] },
+      { id: "9", shortName: "BIOL1105 Cell Biology", courseCode: "BIOL1105.10021.202630",
+        color: "#3d7ea6", term: { name: "Spring 2026" },
+        links: [{ css_class: "files", path: "#", label: "Files" }] },
+    ])),
+    createPlannerNote: () => Promise.resolve({}),
+    setPlannerComplete: () => Promise.resolve({}),
+    TTL: 60000,
+  };
+  const _subs = [];
+  BC.storage = { current: null, local: {},
+    // The widget writes stars/snoozes/kanban status through these on every
+    // click; a no-op stub would make each one look like it did nothing.
+    updateLocal(fn) { fn(BC.storage.local); return Promise.resolve(BC.storage.local); },
+    update(fn) { fn(BC.storage.current); if (window.__bcTodoRepaint) window.__bcTodoRepaint(); return Promise.resolve(); },
+    loadLocal: () => Promise.resolve({}),
+    subscribe(cb) { _subs.push(cb); return () => { const i = _subs.indexOf(cb); if (i >= 0) _subs.splice(i, 1); }; },
+    notify() { for (const cb of _subs.slice()) cb(BC.storage.current); },
+    save: () => Promise.resolve(), adopt(s) { BC.storage.current = s; }, saveLocal: () => Promise.resolve() };
+  BC.cloneDefaults = BC.cloneDefaults || (() => BC.mergeDefaults({ version: BC.SETTINGS_VERSION }));
+  // The real kit, not a stub: the planner's skeleton, empty and error states are
+  // its components, and the whole point of this page is seeing what ships.
+  await load("../../src/content/core/ui.js");
+  // dashgrid paints on the apply that FOLLOWS its fetch resolving, so a no-op
+  // here left the harness showing Canvas's fallback cards forever.
+  //
+  // Debounced, like the real one. A synchronous stub is not a smaller version of
+  // applyAll, it is a different thing: every loader that resolves calls back into
+  // apply, which starts the next loader, whose stub promise resolves on the same
+  // microtask -- so the queue never drains and the page hangs with the main
+  // thread busy. The real requestApply coalesces onto a timer, which is exactly
+  // what stops that, so the stub has to as well.
+  let _pending = 0;
+  BC.requestApply = () => {
+    clearTimeout(_pending);
+    _pending = setTimeout(() => {
+      if (window.__bcLastSettings) window.__bcApply(window.__bcLastSettings);
+    }, 0);
+  };
+  BC.diag = { push() {}, entries: [] };
+
+  await load("../../src/content/features/theming.js");
+  await load("../../src/content/features/dashboard.js");
+  await load("../../src/content/features/dashgrid.js");
+  await load("../../src/content/core/toast.js");
+  await load("../../src/content/features/productivity.js");
+  await load("../../src/content/features/todo.js");
+  // The real settings UI, not a stub: its shell layout is what the drawer width
+  // has to hold, so a stub would hide exactly the bug worth catching.
+  // The keybind control calls BC.shortcuts.prettify; without this the Shortcuts
+  // tab threw and the panel silently showed the previous tab's body instead.
+  await load("../../src/content/core/shortcuts.js");
+  await load("../../src/shared/settings/components.js");
+  await load("../../src/shared/settings/state.js");
+  await load("../../src/shared/settings/index.js");
+  await load("../../src/content/features/settings-panel.js");
+  return true;
+})();
+
+window.__bcApply = function (overrides) {
+  window.__bcLastSettings = overrides || {};
+  const s = BC.mergeDefaults(Object.assign({ version: BC.SETTINGS_VERSION }, overrides || {}));
+  const ctx = { page: "dashboard", courseId: null, path: "/" };
+  BC.storage.current = s;
+  BC.features.theming.apply(s, ctx);
+  BC.features.dashboard.apply(s, ctx);
+  if (BC.features.dashgrid) BC.features.dashgrid.apply(s, ctx);
+  // The real applyAll runs EVERY feature on every pass. Leaving todo out meant
+  // any re-apply -- and dashgrid's fetch causes one -- rendered the dashboard
+  // without re-rendering the planner beside it, so the widget vanished behind
+  // Canvas's native list and every kanban screenshot showed the wrong thing.
+  if (BC.features.todo) BC.features.todo.apply(s, ctx);
+  if (BC.features.productivity) BC.features.productivity.apply(s, ctx);
+  // apply() throttles the sweep; run it directly so a test does not have to wait.
+  BC.theming.sweepLightSurfaces();
+  return s;
+};
+
+// Render the planner widget on the fixture sidebar. Pass a progress style to
+// see it: __bcTodo("segments"), __bcTodo("rainbow"), __bcTodo("off").
+window.__bcTodo = function (progress, extra) {
+  // `extra` is spread FIRST and the todo block written over it. The other way
+  // round -- which is how this read -- meant any caller passing {todo:{...}}
+  // clobbered the whole merged block including the mode:"custom" that mounts
+  // the widget at all, so the page silently showed Canvas's native list and
+  // every layout looked identical.
+  const over = Object.assign({}, extra || {}, {
+    todo: Object.assign({ mode: "custom", progress: progress || "ring" }, (extra && extra.todo) || {}),
+  });
+  const s = __bcApply(over);
+  BC.features.todo.apply(s, { page: "dashboard", courseId: null, path: "/" });
+  window.__bcTodoRepaint = () => BC.features.todo.apply(BC.storage.current, { page: "dashboard", courseId: null, path: "/" });
+  return s.todo;
+};
+
+// Mount and open the real settings drawer. Optionally pin the host to a width,
+// because every row-layout bug this page exists to catch is a width bug: the
+// control that fits at 600px is the one that strangles its label at 380px.
+window.__bcPanel = function (width, overrides) {
+  const s = __bcApply(overrides);
+  const ctx = { page: "dashboard", courseId: null, path: "/" };
+  BC.features.settingsPanel.apply(s, ctx);
+  BC.features.settingsPanel.open();
+  const host = document.querySelector('[data-bc-node="bc-drawer"]');
+  if (host && width) host.style.width = width + "px";
+  return host;
+};
+
+// Jump the open drawer to a tab by its id, so a screenshot can be aimed.
+window.__bcTab = function (id) {
+  const host = document.querySelector('[data-bc-node="bc-drawer"]');
+  const tab = host && host.shadowRoot.querySelector('.bc-tab[data-tab="' + id + '"]');
+  if (tab) tab.click();
+  return !!tab;
+};
+
+// Every settings row whose label column ended up narrower than the threshold
+// below. This is the crushed-label bug as a number rather than as a screenshot.
+window.__bcRowWidths = function (min) {
+  const host = document.querySelector('[data-bc-node="bc-drawer"]');
+  if (!host) return "open the panel first";
+  const out = [];
+  for (const row of host.shadowRoot.querySelectorAll(".bc-row")) {
+    const label = row.querySelector(".bc-row-label");
+    const title = row.querySelector(".bc-row-title");
+    const hint = row.querySelector(".bc-row-hint");
+    if (!label) continue;
+    const lh = hint ? parseFloat(getComputedStyle(hint).lineHeight) : 0;
+    out.push({
+      label: (title ? title.textContent : "").slice(0, 34),
+      w: Math.round(label.getBoundingClientRect().width),
+      hintLines: hint && lh ? Math.round(hint.getBoundingClientRect().height / lh) : 0,
+      wrapped: row.querySelector(".bc-row-control") &&
+               row.querySelector(".bc-row-control").getBoundingClientRect().top >=
+               label.getBoundingClientRect().bottom,
+    });
+  }
+  return min == null ? out : out.filter((r) => r.w < min || r.hintLines > 2);
+};
+
+// Apply a skin by id to the replica dashboard. __bcSkin("matcha-strawberry").
+// Pass nothing to list what is available.
+window.__bcSkin = function (id, extra) {
+  if (!id) return BC.SKIN_CATALOG.map((s) => s.id);
+  const over = Object.assign({ theming: { skin: id } }, extra || {});
+  const s = __bcApply(over);
+  return { skin: id, dark: BC.isDarkActive(s) };
+};
+
+// Does every stylesheet we inject actually PARSE to its end? Chrome discards the
+// remainder of a sheet at a parse error, so one bad selector silently disables
+// every rule after it and nothing anywhere reports a problem. This bisects each
+// sheet for the shortest prefix that already yields its full rule count: on a
+// healthy sheet that lands at the very end.
+//
+// It exists because a selector-splitting bug shredded
+// [style*="background-color: rgb(255, 255, 255)"] into an unterminated string,
+// and 11,820 of 21,743 characters stopped applying with a green node suite.
+window.__bcSheetHealth = function () {
+  const out = {};
+  for (const n of document.querySelectorAll("style[data-better-canvas]")) {
+    const text = n.textContent, key = n.getAttribute("data-better-canvas");
+    const probe = document.createElement("style");
+    document.head.appendChild(probe);
+    const count = (len) => {
+      probe.textContent = text.slice(0, len);
+      try { return probe.sheet.cssRules.length; } catch (e) { return -1; }
+    };
+    const full = count(text.length);
+    let lo = 0, hi = text.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (count(mid) >= full) hi = mid; else lo = mid + 1; }
+    probe.remove();
+    out[key] = { rules: full, len: text.length, lastGainAt: lo, ok: lo > text.length * 0.9 };
+  }
+  return out;
+};
+
+window.__bcClear = function () {
+  BC.theming.clearLightSweep();
+  if (BC.features.dashboard.unmount) BC.features.dashboard.unmount();
+  document.documentElement.classList.remove("bc-dark");
+  document.querySelectorAll("style[data-better-canvas]").forEach(n => n.remove());
+  document.querySelectorAll("[data-bc-cardgrid],[data-bc-carditem]").forEach(n => {
+    n.removeAttribute("data-bc-cardgrid"); n.removeAttribute("data-bc-carditem");
+  });
+};
+
+// Every element carrying visible text, with what it renders as.
+window.__bcAudit = function () {
+  const out = [];
+  const parse = (c) => {
+    const m = String(c).match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+))?/);
+    return m ? { r: +m[1], g: +m[2], b: +m[3], a: m[4] == null ? 1 : +m[4] } : null;
+  };
+  const lum = (c) => {
+    const p = parse(c); if (!p) return null;
+    const f = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(p.r) + 0.7152 * f(p.g) + 0.0722 * f(p.b);
+  };
+  const ratio = (a, b) => {
+    const x = lum(a), y = lum(b);
+    if (x == null || y == null) return null;
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  };
+  const behind = (el) => {
+    for (let n = el; n; n = n.parentElement) {
+      const p = parse(getComputedStyle(n).backgroundColor);
+      if (p && p.a >= 0.5) return getComputedStyle(n).backgroundColor;
+    }
+    return "rgb(255, 255, 255)";
+  };
+  const hasOwnText = (el) => [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
+  for (const el of document.querySelectorAll("#application *")) {
+    if (!hasOwnText(el) || !el.getClientRects().length) continue;
+    // Decorative text, hidden from assistive tech, is exempt -- WCAG grades what
+    // a user has to READ. The dashboard card's monogram is the case: a 46px
+    // subject code at 20% alpha, behind the same code printed in full two lines
+    // below it. Grading it reports a 1:1 failure on every card, and a permanent
+    // known failure is worse than no check at all, because it is what a real one
+    // hides behind.
+    if (el.closest('[aria-hidden="true"]')) continue;
+    const fg = getComputedStyle(el).color;
+    const bg = behind(el);
+    const r = ratio(fg, bg);
+    if (r == null) continue;
+    out.push({
+      sel: el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") +
+           (typeof el.className === "string" && el.className.trim() ? "." + el.className.trim().split(/\s+/).join(".") : ""),
+      text: (el.textContent || "").trim().slice(0, 40),
+      fg, bg, ratio: +r.toFixed(2),
+    });
+  }
+  return out;
+};
+</script>
+</body>
+</html>

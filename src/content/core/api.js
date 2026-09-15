@@ -103,14 +103,40 @@
 
     self() { return api.getJSON("/api/v1/users/self", { ttl: TTL.self }); },
 
+    // The authoritative course colours -- this is the endpoint Canvas's own colour
+    // picker reads and writes. dashboard_cards is supposed to carry the colour on
+    // each card, but the field name has moved between Canvas versions (and its
+    // `links` array is snake_case while the rest of the payload is camelCase), so
+    // reading the card alone left every course painted with our fallback instead
+    // of the colour the user actually chose.
+    // Shape: { custom_colors: { "course_123": "#RRGGBB", ... } }
+    customColors() {
+      return api.getJSON("/api/v1/users/self/colors", { ttl: TTL.cards });
+    },
+
     dashboardCards() {
       return api.getJSON("/api/v1/dashboard/dashboard_cards", { ttl: TTL.cards });
     },
 
+    // Student enrollments only, because the point is the scores. Anything that
+    // merely needs "which courses am I in" must use activeCourses() instead.
     coursesWithScores() {
       return api.getList(
         "/api/v1/courses?enrollment_state=active&enrollment_type=student" +
         "&include[]=total_scores&include[]=concluded&include[]=term&per_page=100",
+        { maxPages: 20, ttl: TTL.courses }
+      );
+    },
+
+    // Every active enrollment, whatever the role. Features that just enumerate
+    // courses (files library, announcements aggregator, term progress) were
+    // using coursesWithScores, so for a teacher or TA -- who has no student
+    // enrollment -- the list came back empty and those panels rendered as
+    // "nothing here" rather than as anything wrong.
+    activeCourses() {
+      return api.getList(
+        "/api/v1/courses?enrollment_state=active" +
+        "&include[]=concluded&include[]=term&per_page=100",
         { maxPages: 20, ttl: TTL.courses }
       );
     },

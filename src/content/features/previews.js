@@ -19,7 +19,7 @@
                   transform var(--bc-dur-2, 150ms) var(--bc-ease-out, ease);
     }
     .bc-preview.show { opacity: 1; transform: translateY(0); }
-    .bc-preview h5 { margin: 0 0 4px; font-size: var(--bc-text-md, 14px); }
+    .bc-preview h5 { margin: 0 0 var(--bc-space-1, 4px); font-size: var(--bc-text-md, 14px); }
     .bc-preview p { margin: 0; color: var(--bc-muted, #6b7280); }
   `;
 

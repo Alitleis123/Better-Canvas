@@ -9,6 +9,8 @@
   const BC = (globalThis.BC = globalThis.BC || {});
 
   let shortcutSig = null;
+  // Drives the "apply once more on the way out" rule for page-scoped features.
+  let lastPage = null;
 
   BC.applyAll = function (settings) {
     if (!settings) return;
@@ -22,33 +24,47 @@
     if (!settings.enabled) return teardown();
     if (tornDown) remount();
 
+    // Page-scoped features are skipped entirely while off their page. applyAll
+    // runs several times a second, so calling all ~24 features on every tick
+    // meant most of them were doing a selector query only to early-return.
+    // They still get one call on the tick the page changes, which is where their
+    // own cleanup branch lives.
+    const pageChanged = ctx.page !== lastPage;
+    lastPage = ctx.page;
+
     for (const f of BC.registry.all()) {
       if (f === sp) continue;
+      if (!BC.registry.shouldApply(f, ctx.page, pageChanged)) continue;
       BC.util.guard(() => f.apply(settings, ctx), f.id);
     }
 
     // Shortcuts + palette registration. Signature-guarded: this re-registered all
     // ten handlers on every applyAll, i.e. several times a second forever.
+    //
+    // Handler ids ARE the settings.shortcuts.bindings keys, so a rebinding lines
+    // up with the entry it should update and BC.shortcuts.reloadFromSettings
+    // actually finds it.
     const sBindings = (settings.shortcuts && settings.shortcuts.bindings) || {};
     const quickSearch = !(settings.navigation && settings.navigation.quickSearch === false);
     const sSig = Object.keys(sBindings).sort().map((k) => k + "=" + sBindings[k]).join("|") + "|qs=" + quickSearch;
     if (BC.shortcuts && settings.shortcuts && settings.shortcuts.enabled && sSig !== shortcutSig) {
       shortcutSig = sSig;
-      BC.shortcuts.reloadFromSettings(settings);
       const b = sBindings;
+      const bind = (key, fn) => BC.shortcuts.register(key, b[key], fn);
       // navigation.quickSearch was a live switch that nothing read — the palette
       // shortcut registered unconditionally.
-      if (quickSearch) BC.shortcuts.register("bc-palette", b.commandPalette, () => BC.palette && BC.palette.open());
-      else BC.shortcuts.unregister("bc-palette");
-      BC.shortcuts.register("bc-settings", b.settings,          () => BC.features.settingsPanel && BC.features.settingsPanel.open());
-      BC.shortcuts.register("bc-dark",     b.toggleDark,        () => BC.storage.update((d) => { d.theming.darkMode = BC.isDarkActive(d) ? "off" : "on"; }));
-      BC.shortcuts.register("bc-task",     b.quickTask,         () => quickTaskFlow());
-      BC.shortcuts.register("bc-note",     b.quickNote,         () => BC.quickNote && BC.quickNote());
-      BC.shortcuts.register("bc-dash",     b.gotoDashboard,     () => location.assign("/"));
-      BC.shortcuts.register("bc-grades",   b.gotoGrades,        () => { const cid = BC.util.courseIdFromHref(location.pathname); if (cid) location.assign("/courses/" + cid + "/grades"); else BC.toast.info("Open a course first"); });
-      BC.shortcuts.register("bc-inbox",    b.gotoInbox,         () => location.assign("/conversations"));
-      BC.shortcuts.register("bc-cal",      b.gotoCalendar,      () => location.assign("/calendar"));
-      BC.shortcuts.register("bc-focus",    b.focusMode,         () => BC.storage.update((d) => { d.productivity.focusMode = !d.productivity.focusMode; }));
+      if (quickSearch) bind("commandPalette", () => BC.palette && BC.palette.open());
+      else BC.shortcuts.unregister("commandPalette");
+      bind("settings",      () => BC.features.settingsPanel && BC.features.settingsPanel.open());
+      bind("toggleDark",    () => BC.storage.update((d) => { d.theming.darkMode = BC.isDarkActive(d) ? "off" : "on"; }));
+      bind("quickTask",     () => quickTaskFlow());
+      bind("quickNote",     () => BC.quickNote && BC.quickNote());
+      bind("gotoDashboard", () => location.assign("/"));
+      bind("gotoGrades",    () => { const cid = BC.util.courseIdFromHref(location.pathname); if (cid) location.assign("/courses/" + cid + "/grades"); else BC.toast.info("Open a course first"); });
+      bind("gotoInbox",     () => location.assign("/conversations"));
+      bind("gotoCalendar",  () => location.assign("/calendar"));
+      bind("focusMode",     () => BC.storage.update((d) => { d.productivity.focusMode = !d.productivity.focusMode; }));
+      BC.shortcuts.reloadFromSettings(settings);
     }
 
     // Register once, not on every applyAll. This used to re-register ~10 static
@@ -97,7 +113,7 @@
 
   const ROOT_ATTRS = [
     "data-bc-accent", "data-bc-density", "data-bc-radius", "data-bc-focus",
-    "data-bc-cursor", "data-bc-hc", "data-bc-motion", "data-bc-rounded",
+    "data-bc-cursor", "data-bc-hc", "data-bc-motion", "data-bc-rounded", "data-bc-sidebar",
   ];
 
   function teardown() {
@@ -121,9 +137,13 @@
     BC.alarms.clearAll();
     if (BC.notifications) BC.util.guard(() => BC.notifications.sendBadge(0), "badge clear");
 
-    for (const n of ["bc-toast-host", "bc-toast-host-alert", "bc-live-polite", "bc-live-assertive"]) {
+    // Core surfaces are not registry features, so styleKeys()/nodeKeys() above
+    // don't reach them and their stylesheets outlived a disable.
+    if (BC.palette) BC.util.guard(() => BC.palette.close(), "palette close");
+    for (const n of ["bc-toast-host", "bc-toast-host-alert", "bc-live-polite", "bc-live-assertive", "bc-cp"]) {
       BC.injector.removeNode(n);
     }
+    for (const k of ["bc-toast-css", "bc-cp-css"]) BC.injector.removeStyle(k);
 
     const doc = document.documentElement;
     doc.classList.remove("bc-dark");
@@ -148,6 +168,7 @@
   // simply never came back.
   function remount() {
     tornDown = false;
+    lastPage = null;   // force one full pass so page-scoped features re-mount
     startAlarms();
   }
 
@@ -165,7 +186,7 @@
     requestAnimationFrame(() => { rafPending = false; BC.applyAll(BC.storage.current); });
   };
 
-  // Messages from popup / options page
+  // Messages from the toolbar button, the options page and the context menu
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg || !msg.type) return;
     if (msg.type === "bc:ping") {
@@ -173,8 +194,13 @@
       return;
     }
     if (msg.type === "bc:openSettings") {
-      BC.util.guard(() => BC.features.settingsPanel && BC.features.settingsPanel.open(), "openSettings");
-      sendResponse({ ok: true }); return;
+      // ok is the toolbar click's fallback signal, so it has to be honest: the
+      // content script also runs on instructure.com pages that are not Canvas,
+      // where there is no nav to hang a drawer off. Saying ok there would leave
+      // the click doing nothing at all.
+      const panel = BC.detect.isCanvas() && BC.features.settingsPanel;
+      if (panel) BC.util.guard(() => panel.open(), "openSettings");
+      sendResponse({ ok: !!panel }); return;
     }
     if (msg.type === "bc:openPalette") {
       BC.util.guard(() => BC.palette && BC.palette.open(), "openPalette");
@@ -214,7 +240,13 @@
   }
 
   function boot() {
-    Promise.all([BC.storage.load(), BC.storage.loadLocal()]).then(([settings]) => {
+    Promise.all([BC.storage.load(), BC.storage.loadLocal()]).catch((e) => {
+      // Without this the whole extension just never starts, with nothing in the
+      // console to say why. Fall back to defaults so the settings drawer is
+      // still reachable.
+      BC.util.err("settings load failed, starting from defaults", e);
+      return [BC.cloneDefaults()];
+    }).then(([settings]) => {
       let tries = 0;
       const tryStart = () => {
         if (BC.detect.isCanvas()) return start(settings);

@@ -7,14 +7,21 @@
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
+    <!-- The custom-domain prompt lives here, not in a popup: chrome.permissions
+         .request needs a user gesture in a foreground extension page, and this
+         is the only one left. Hidden until there is something to say. -->
+    <div id="bc-site" class="bc-site" hidden></div>
     <div id="bc-settings-root"></div>
 
     <script src="../shared/defaults.js"></script>
     <script src="../shared/themes.js"></script>
+    <script src="../shared/icons.js"></script>
     <script src="../content/core/util.js"></script>
     <script src="../content/core/datetime.js"></script>
     <script src="../content/core/color.js"></script>
     <script src="../shared/tokens.js"></script>
+    <script src="../shared/skins.js"></script>
+    <script src="../shared/skin-catalog.js"></script>
     <script src="../content/core/shortcuts.js"></script>
     <script src="../shared/settings/state.js"></script>
     <script src="../shared/settings/components.js"></script>

@@ -73,11 +73,26 @@
 
   function compute(filter) {
     const s = BC.storage && BC.storage.current;
-    return Array.from(commands.values())
+    const scored = Array.from(commands.values())
       .filter((c) => !c.when || c.when(s))
       .map((c) => ({ c, s: score(c, filter) }))
       .filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s);
+
+    // Relevance ordering scrambles group adjacency, and render() only emits a
+    // header when the group CHANGES between adjacent rows -- so a group split
+    // across the ranking printed its header several times. Partition into groups
+    // (in best-score order, so the most relevant group still leads) and flatten,
+    // which keeps relevance ranking while making each header appear exactly once.
+    const groups = new Map();
+    for (const item of scored) {
+      const key = item.c.group || "";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
+    }
+    const out = [];
+    for (const items of groups.values()) out.push(...items);
+    return out;
   }
 
   // Toggling two classes, NOT re-rendering. The old code re-rendered on mouseenter,

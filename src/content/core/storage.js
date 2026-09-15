@@ -126,6 +126,28 @@
         for (const id of Object.keys(gh)) {
           if (Array.isArray(gh[id]) && gh[id].length > 90) gh[id] = gh[id].slice(-90);
         }
+
+        // Per-task planner metadata is keyed by planner item id, so it accrues an
+        // entry for every task ever starred, tagged, snoozed or dragged and NOTHING
+        // ever removed one. Over a few terms that is the largest thing in bcLocal,
+        // and it grows toward the quota that would start failing writes for
+        // everything else. The items themselves are long gone from Canvas, so the
+        // oldest entries are dead weight by definition.
+        const todo = d.todo || {};
+        for (const k of ["stars", "priorities", "tagsByItem", "subtasks", "notes",
+                         "estimates", "status", "scheduled", "snoozed"]) {
+          capMap(todo[k], 500);
+        }
+        // One bucket per recurring rule, each holding completed days.
+        capMap(todo.recurringDone, 50);
+        for (const id of Object.keys(todo.recurringDone || {})) capMap(todo.recurringDone[id], 400);
+
+        capMap(d.rubricDrafts, 100);
+
+        // Attendance is course -> day -> user. Keep a term's worth of days.
+        const att = d.attendance || {};
+        capMap(att, 20);
+        for (const courseId of Object.keys(att)) capMap(att[courseId], 200);
       }).then(() => {
         const a = area();
         if (!a || typeof a.getBytesInUse !== "function") return; // Firefox lacks getBytesInUse

@@ -1,7 +1,7 @@
 /*
  * Better Canvas — default settings schema.
  * Single source of truth. Loaded as a classic script by every surface
- * (content scripts, popup, options) and attaches to globalThis.BC.
+ * (content scripts, options page) and attaches to globalThis.BC.
  */
 (function () {
   "use strict";
@@ -10,7 +10,6 @@
   BC.VERSION = "3.1.0";
   BC.SETTINGS_KEY = "bcSettings";
   BC.LOCAL_KEY = "bcLocal";
-  BC.PROFILES_KEY = "bcProfiles";
 
   BC.GLOBAL_NAV_ITEMS = [
     { key: "global_nav_dashboard_link", label: "Dashboard" },
@@ -74,21 +73,37 @@
   };
 
   BC.defaults = {
-    version: 4,
+    version: 6,
     enabled: true,
-    activeProfile: "default",
-    firstRun: true,
 
     dashboard: {
       enabled: true,
       autoHideConcluded: true,
+      // Render the cards ourselves instead of overriding Canvas's. Off puts
+      // Canvas's own grid back, overrides and all, for anyone whose Canvas is
+      // customised in a way our renderer does not model.
+      ownCards: true,
       layout: "grid",              // grid | list | masonry | compact
       cardSize: "m",               // s | m | l
+      // Cards per row, at most. 0 lifts the cap and lets the grid fill the
+      // window. This is the control that makes a 15", a 24" and a 27" render the
+      // same dashboard: above the cap the layout depends on your course count
+      // rather than on which monitor you happen to be sitting at.
+      maxColumns: 5,               // 0 = fill the window, else 3-12
       cardRadius: 8,               // 0-24
       hoverLift: true,
-      showInlineGrade: false,
-      showProgressBar: false,
-      showBadges: false,           // due-count badge on each card
+      // On by default. A card that shows only a name and a colour is decoration;
+      // these three are what make the dashboard tell you something you would
+      // otherwise open four tabs to learn, and every one of them reads data the
+      // dashboard ALREADY fetches -- maybeFetchConcluded pulls the scores and
+      // the planner window is loaded for the term-progress bar -- so none of
+      // them costs an extra request.
+      //
+      // showInlineGrade puts your grade on screen, which is a real thing to be
+      // aware of on a shared or projected display. One switch turns it off.
+      showInlineGrade: true,
+      showProgressBar: true,
+      showBadges: true,            // due-count badge on each card
       showSparkline: false,        // grade trend sparkline from local history
       courseSearch: true,          // filter box above the card grid
       semesterProgress: true,      // "Week 9 of 15" term progress bar
@@ -106,13 +121,17 @@
 
     todo: {
       mode: "default",             // default | clean | custom
-      view: "list",                // list | day | week | kanban | timeblock
+      view: "list",                // list | kanban | timeblock
+      layout: "comfortable",       // comfortable | compact | cards | minimal | timeline
       rangeDays: 7,                // 3 | 7 | 14 | 30 | custom
       showCompleted: false,
       accent: "",
       allowNewTask: true,
       groupBy: "day",              // day | course | priority | tag | none
-      ring: true,                  // weekly progress ring
+      // Was a `ring` boolean. One indicator suits one person: a ring is a poor
+      // fit in a 280px sidebar at large font scales, and some people just want a
+      // line. See MIGRATIONS[6].
+      progress: "ring",            // off | ring | bar | segments | rainbow | text
       streaks: {
         enabled: true,
         graceDays: 2,
@@ -157,6 +176,8 @@
       sidebarWidth: 0,             // 0 = default; else px
       logo: { mode: "default", url: "", text: "" }, // default | hide | replace | text
       rotation: { enabled: false, mode: "daily", themeIds: [] }, // auto theme cycling
+      skin: "",                    // id from BC.SKIN_CATALOG or theming.skins; "" = none
+      skins: [],                   // imported skin objects, BC.skins.normalize shape
     },
 
     navigation: {
@@ -220,7 +241,6 @@
     },
 
     calendar: {
-      icsExport: true,
       miniOnDashboard: false,
       syllabusExtract: true,       // offer to add syllabus dates to planner
     },
@@ -288,7 +308,6 @@
 
     onboarding: {
       seen: false,
-      lastWhatsNewVersion: "",
     },
 
     privacy: { telemetry: false },  // hard-wired
@@ -315,7 +334,7 @@
     return BC.migrate(merged, carry);
   };
 
-  BC.SETTINGS_VERSION = 4;
+  BC.SETTINGS_VERSION = 6;
 
   // Each entry upgrades settings from (v-1) to v. `carry` collects data that
   // must move to the bcLocal store — storage.load() persists it there.
@@ -379,6 +398,32 @@
 
       // Sanitize a stored value whose options no longer exist.
       if (s.todo && ["list", "kanban", "timeblock"].indexOf(s.todo.view) === -1) s.todo.view = "list";
+    },
+
+    5(s) {
+      // Vestigial: BC.PROFILES_KEY and a "profiles" feature never existed, so
+      // activeProfile was written on every save and exported in every backup
+      // while nothing ever read it.
+      delete s.activeProfile;
+      // The .ics export button is unconditional and always has been, so a toggle
+      // gating nothing was just a dead switch in the Calendar tab.
+      if (s.calendar) delete s.calendar.icsExport;
+      // Write-only flags: both were set when the tour was dismissed and then
+      // never read by anything. onboarding.seen is the real gate.
+      delete s.firstRun;
+      if (s.onboarding) delete s.onboarding.lastWhatsNewVersion;
+    },
+
+    6(s) {
+      // todo.ring (boolean) became todo.progress (a style). Read the old flag
+      // before the default wins: someone who had turned the ring off wanted no
+      // indicator, not the new default one.
+      if (s.todo) {
+        if (s.todo.ring !== undefined) s.todo.progress = s.todo.ring ? "ring" : "off";
+        delete s.todo.ring;
+        const STYLES = ["off", "ring", "bar", "segments", "rainbow", "text"];
+        if (STYLES.indexOf(s.todo.progress) === -1) s.todo.progress = "ring";
+      }
     },
   };
 

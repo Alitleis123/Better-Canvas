@@ -10,18 +10,22 @@
   BC.features = BC.features || {};
 
   const CSS = `
-    .bc-syl { margin: 10px 0; padding: 12px 14px; border-radius: 10px;
-      background: var(--bc-surface-2, #f3f4f6); border: 1px solid var(--bc-border, #e5e7eb); }
-    .bc-syl-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-weight: 600; font-size: 14px; }
-    .bc-syl-list { margin: 10px 0 0; max-height: 260px; overflow: auto; display: none; }
+    .bc-syl {
+      margin: var(--bc-space-4, 10px) 0;
+      padding: var(--bc-space-5, 12px) var(--bc-space-6, 14px);
+      border-radius: var(--bc-radius-lg, 10px);
+      background: var(--bc-surface-2, #f3f4f6); border: 1px solid var(--bc-border, #e5e7eb);
+    }
+    .bc-syl-head { display: flex; align-items: center; gap: var(--bc-space-4, 10px); flex-wrap: wrap; font-weight: 600; font-size: var(--bc-text-md, 14px); }
+    .bc-syl-list { margin: var(--bc-space-4, 10px) 0 0; max-height: 260px; overflow: auto; display: none; }
     .bc-syl.open .bc-syl-list { display: block; }
-    .bc-syl-item { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; font-size: 13px;
+    .bc-syl-item { display: flex; gap: var(--bc-space-3, 8px); align-items: baseline; padding: var(--bc-space-1, 4px) 0; font-size: var(--bc-text-sm, 13px);
       border-top: 1px solid var(--bc-border, #e5e7eb); }
     .bc-syl-item:first-child { border-top: 0; }
     .bc-syl-date { color: var(--bc-muted, #6b7280); white-space: nowrap; font-variant-numeric: tabular-nums; }
     /* A token rather than opacity: fading already-AA text drops it below AA. */
     .bc-syl-item.added { color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); }
-    .bc-syl-actions { margin-top: 10px; display: none; gap: 8px; }
+    .bc-syl-actions { margin-top: var(--bc-space-4, 10px); display: none; gap: var(--bc-space-3, 8px); }
     .bc-syl.open .bc-syl-actions { display: flex; }
   `;
 
@@ -86,7 +90,8 @@
     panel.innerHTML = "";
     const head = document.createElement("div");
     head.className = "bc-syl-head";
-    head.innerHTML = "📅 Better Canvas found <b>" + found.length + "</b> date" +
+    head.innerHTML = BC.icons.svg("calendar", { size: 14 }) +
+      " Better Canvas found <b>" + found.length + "</b> date" +
       (found.length === 1 ? "" : "s") + " in this syllabus.";
     const toggle = document.createElement("button");
     toggle.className = "bc-btn";
@@ -174,5 +179,5 @@
     buildPanel(panel, found, ctx.courseId);
   }
 
-  BC.registry.register({ id: "syllabus", styles: ["bc-syl-css"], nodes: ["bc-syllabus"], apply });
+  BC.registry.register({ id: "syllabus", pages: ["assignments"], styles: ["bc-syl-css"], nodes: ["bc-syllabus"], apply });
 })();

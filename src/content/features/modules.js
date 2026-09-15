@@ -9,26 +9,34 @@
   BC.features = BC.features || {};
 
   const CSS = `
-    .bc-mod-bar { display: flex; align-items: center; gap: 8px; margin: 6px 12px 8px; }
+    .bc-mod-bar { display: flex; align-items: center; gap: var(--bc-space-3, 8px); margin: var(--bc-space-2, 6px) var(--bc-space-5, 12px) var(--bc-space-3, 8px); }
     .bc-mod-track { flex: 1; height: 6px; border-radius: 999px; background: var(--bc-surface-3, #e5e7eb); overflow: hidden; }
     .bc-mod-fill { height: 100%; background: var(--bc-accent, #0374b5); border-radius: 999px; transition: width .4s ease; }
     .bc-mod-fill.done { background: var(--bc-success, #047857); }
-    .bc-mod-label { font-size: 12px; color: var(--bc-muted, #6b7280); white-space: nowrap; }
+    .bc-mod-label { font-size: var(--bc-text-xs, 12px); color: var(--bc-muted, #6b7280); white-space: nowrap; }
     .bc-mod-summary {
-      display: flex; align-items: center; gap: 12px; margin: 8px 0; padding: 10px 14px;
-      border-radius: 10px; background: var(--bc-surface-2, #f3f4f6);
-      border: 1px solid var(--bc-border, #e5e7eb); font-size: 13px; font-weight: 600;
+      display: flex; align-items: center; gap: var(--bc-space-5, 12px);
+      margin: var(--bc-space-3, 8px) 0;
+      padding: var(--bc-space-4, 10px) var(--bc-space-6, 14px);
+      border-radius: var(--bc-radius-lg, 10px); background: var(--bc-surface-2, #f3f4f6);
+      border: 1px solid var(--bc-border, #e5e7eb);
+      font-size: var(--bc-text-sm, 13px); font-weight: var(--bc-weight-semibold, 600);
     }
     .bc-mod-summary .bc-mod-track { max-width: 260px; }
   `;
 
+  // Read before write throughout: render() runs on every apply tick, and
+  // reassigning an identical style or textContent still invalidates style and
+  // still registers as a DOM mutation the observer turns into another applyAll.
   function setBar(bar, done, total) {
     const pct = total ? Math.round((done / total) * 100) : 0;
     const fill = bar.querySelector(".bc-mod-fill");
-    fill.style.width = pct + "%";
-    fill.classList.toggle("done", pct >= 100);
+    const w = pct + "%";
+    if (fill.style.width !== w) fill.style.width = w;
+    if (fill.classList.contains("done") !== (pct >= 100)) fill.classList.toggle("done", pct >= 100);
     const label = bar.querySelector(".bc-mod-label");
-    if (label) label.textContent = done + "/" + total + " · " + pct + "%";
+    const text = done + "/" + total + " · " + pct + "%";
+    if (label && label.textContent !== text) label.textContent = text;
     return pct;
   }
 
@@ -65,10 +73,13 @@
         return div;
       });
       const pct = total ? Math.round((done / total) * 100) : 0;
-      summary.querySelector(".bc-mod-sum").textContent = "Course progress: " + done + "/" + total + " requirements (" + pct + "%)";
+      const sumEl = summary.querySelector(".bc-mod-sum");
+      const sumText = "Course progress: " + done + "/" + total + " requirements (" + pct + "%)";
+      if (sumEl.textContent !== sumText) sumEl.textContent = sumText;
       const fill = summary.querySelector(".bc-mod-fill");
-      fill.style.width = pct + "%";
-      fill.classList.toggle("done", pct >= 100);
+      const w = pct + "%";
+      if (fill.style.width !== w) fill.style.width = w;
+      if (fill.classList.contains("done") !== (pct >= 100)) fill.classList.toggle("done", pct >= 100);
     }).catch((e) => BC.diag.push("modules", e));
   }
 
@@ -86,5 +97,5 @@
 
   // bc-mod-bar was injected per module but never declared, so disabling the
   // extension left stale progress bars sitting inside Canvas's module headers.
-  BC.registry.register({ id: "modules", styles: ["bc-mod-css"], nodes: ["bc-mod-summary", "bc-mod-bar"], apply });
+  BC.registry.register({ id: "modules", pages: ["modules"], styles: ["bc-mod-css"], nodes: ["bc-mod-summary", "bc-mod-bar"], apply });
 })();

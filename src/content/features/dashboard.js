@@ -27,30 +27,678 @@
   function widgetsCss(w) {
     const rules = [];
     if (!w.todo)           rules.push(`.Sidebar__TodoListContainer, .ToDoSidebar { display: none !important; }`);
-    if (!w.comingUp)       rules.push(`.events_list, .coming_up { display: none !important; }`);
-    if (!w.recentFeedback) rules.push(`.recent_feedback { display: none !important; }`);
+    // Coming Up and Recent Feedback are TWO settings and, on at least some
+    // Canvas versions, ONE element: a live dashboard reports a single div whose
+    // class is "events_list recent_feedback". So `.events_list { display: none }`
+    // for the first switch also took the second widget away, and vice versa —
+    // turning one off silently turned off the other.
+    //
+    // The :not() pair keeps each switch independent where Canvas emits two
+    // separate blocks (there the :not() always matches, since neither element
+    // carries the other's class), and leaves the combined block alone while
+    // either widget is still wanted. It goes only when both are off.
+    if (!w.comingUp) rules.push(`.events_list:not(.recent_feedback), .coming_up { display: none !important; }`);
+    if (!w.recentFeedback) rules.push(`.recent_feedback:not(.events_list) { display: none !important; }`);
+    if (!w.comingUp && !w.recentFeedback) rules.push(`.events_list.recent_feedback { display: none !important; }`);
     return rules.join("\n");
   }
 
-  function layoutCss(d) {
+  // The element that actually contains the cards is found at runtime and marked
+  // with data-bc-cardgrid, so the layout rules never have to guess a Canvas class
+  // name. See markCardGrid.
+  //
+  // This previously targeted .ic-DashboardCard__box for the container rules while
+  // ALSO treating that same class as per-card chrome (border-radius, and the dark
+  // background in theming.js). It cannot be both. It is the per-card wrapper, so
+  // `display: grid` landed on every individual card -- each became a one-column
+  // grid containing itself -- and the real container never got a layout at all,
+  // which is why the cards stacked in a single column.
+  const GRID = "[data-bc-cardgrid]";
+
+  // ---- the measure, snapped to whole columns --------------------------------
+  //
+  // The cap only ever bound at the TOP end. Below it the grid's 1fr tracks
+  // poured the leftover space into the cards, so the "same card at every screen
+  // size" the cap promises was true of the widths it was measured at and false
+  // of the ones between them: 307px at a 1280 window, 266 at 1440, 284 at 1512,
+  // and exactly 250 from 1710 up. A third of a card of swing, on the one
+  // dimension the whole design is built around.
+  //
+  // So the measure is snapped DOWN to a whole number of columns at EVERY width.
+  // The remainder becomes page margin, which the centred row already splits
+  // evenly, rather than being handed to the cards.
+  //
+  // This cannot be CSS. It needs the column count, and a container query cannot
+  // size the element it queries. What it can be is one ResizeObserver, and the
+  // thing it observes matters: the content column is what we are resizing, so
+  // watching it feeds its own output back into its input. Worse, the clamp is
+  // one-way -- once max-width pinned the column narrow, widening the window
+  // left it pinned, because the observation could never exceed the clamp. The
+  // ROW is the stable reference: its width comes from the page, and the sidebar
+  // beside it has a width of its own that no rule of ours touches.
+  let snapRO = null;
+  let snapFrame = 0;
+
+  function snapMeasure(d, own) {
+    const doc = document.documentElement;
+    const clear = () => doc.style.removeProperty("--bc-dash-measure");
+    const maxCols = Math.max(0, Math.min(12, d.maxColumns == null ? 5 : d.maxColumns | 0));
+    if (!maxCols) return clear();          // 0 means fill the window, on purpose
+
+    const gm = own && BC.dashgrid && BC.dashgrid.metrics ? BC.dashgrid.metrics(d) : null;
+    const w = gm ? gm.w : ({ s: 200, m: 250, l: 320 }[d.cardSize || "m"] || 250);
+    const g = gm ? gm.gutter : 16;
+
+    // The flex container first: what we need is the width available to
+    // [content + gap + sidebar], which is that element's content box. On a live
+    // Canvas that is #not_right_side.ic-app-main-content; .ic-Layout-columns is
+    // the block around it and #main the fallback for versions with neither.
+    const row = document.querySelector(".ic-app-main-content, .ic-Layout-columns, #main");
+    if (!row) return clear();
+    const rs = getComputedStyle(row);
+    let avail = row.clientWidth - (parseFloat(rs.paddingLeft) || 0) - (parseFloat(rs.paddingRight) || 0);
+
+    // The sidebar's OUTER width, margins included. Canvas has spaced this column
+    // with a flex gap on some versions and a margin on the sidebar on others,
+    // and reading only one of them overestimates the room by the other.
+    const aside = d.hideSidebar ? null
+      : document.querySelector("#right-side-wrapper, .ic-app-main-content__secondary");
+    if (aside && aside.offsetParent !== null) {
+      const as = getComputedStyle(aside);
+      avail -= aside.getBoundingClientRect().width
+        + (parseFloat(as.marginLeft) || 0) + (parseFloat(as.marginRight) || 0)
+        + (parseFloat(rs.columnGap) || 0);
+    }
+    if (!(avail > 0)) return clear();
+
+    let n = Math.floor((avail + g) / (w + g));
+    n = Math.max(1, Math.min(maxCols, n));
+    // ...and never wider than the courses actually there. A five-column measure
+    // around four courses fills four tracks and leaves the fifth empty, which
+    // is a 266px hole between the last card and the sidebar: the same defect as
+    // the uncapped page, one level down, and it lands on anyone taking fewer
+    // courses than the cap. Zero means the cards have not arrived yet, which is
+    // not the same as having none.
+    const have = own
+      ? (BC.dashgrid && BC.dashgrid.count) || 0
+      : document.querySelectorAll(".ic-DashboardCard").length;
+    if (have > 0) n = Math.min(n, have);
+    // Only write when the answer CHANGES. Re-setting the same value still
+    // invalidates layout, and since a new measure can lengthen the page enough
+    // to add or remove a scrollbar -- which changes the row's width, which is
+    // what we observe -- an unconditional write turns the observer into a loop
+    // that the browser reports as "ResizeObserver loop completed with
+    // undelivered notifications". Snapping is a fixed point, so comparing first
+    // makes the second pass a no-op and the loop terminates.
+    const next = n * w + (n - 1) * g + "px";
+    if (doc.style.getPropertyValue("--bc-dash-measure") !== next) {
+      doc.style.setProperty("--bc-dash-measure", next);
+    }
+  }
+
+  // Re-snap on resize. Nothing in the extension watched the window before this,
+  // so dragging a window between monitors kept whatever measure it booted with.
+  function watchMeasure(d, own) {
+    snapMeasure(d, own);
+    // The flex container first: what we need is the width available to
+    // [content + gap + sidebar], which is that element's content box. On a live
+    // Canvas that is #not_right_side.ic-app-main-content; .ic-Layout-columns is
+    // the block around it and #main the fallback for versions with neither.
+    const row = document.querySelector(".ic-app-main-content, .ic-Layout-columns, #main");
+    if (!row || typeof ResizeObserver === "undefined") return;
+    if (snapRO) snapRO.disconnect();
+    // Deferred to the next frame rather than run inside the delivery. Writing a
+    // measure from within the callback resizes the thing being observed in the
+    // same cycle, which browsers report on the page's console as "ResizeObserver
+    // loop completed with undelivered notifications" -- harmless, but it is our
+    // noise in somebody else's console, on every dashboard visit.
+    snapRO = new ResizeObserver(() => {
+      if (snapFrame) return;
+      snapFrame = requestAnimationFrame(() => { snapFrame = 0; snapMeasure(d, own); });
+    });
+    snapRO.observe(row);
+  }
+
+  function unwatchMeasure() {
+    if (snapRO) { snapRO.disconnect(); snapRO = null; }
+    if (snapFrame) { cancelAnimationFrame(snapFrame); snapFrame = 0; }
+    document.documentElement.style.removeProperty("--bc-dash-measure");
+  }
+
+  function layoutCss(d, cardCount, own) {
     const size = { s: 200, m: 250, l: 320 }[d.cardSize || "m"] || 250;
+
+    // AUTO-FIT, a flexible track, and a ceiling on the CARD rather than on the
+    // track.
+    //
+    // This was auto-fill with a constant `size` track, which fixed the card at
+    // exactly `size` on every monitor. That made a card identical everywhere and
+    // the DASHBOARD different everywhere, because a constant track cannot absorb
+    // what is left over, so the slack piled up at the end of the row: measured
+    // across 1280 to 3000 the trailing gap went 146, 40, 14, 254, 42, 96, 4 px.
+    // At 1920 a quarter of the row was empty grey. Worse, auto-fill KEEPS the
+    // empty tracks it created, so a 27" monitor laid out eight columns for the
+    // four or five courses a student actually has and drew them as a thin strip
+    // against 900px of nothing. That is the "it doesn't look the same on my
+    // 27-inch" report, and a constant card width is what caused it rather than
+    // what prevented it.
+    //
+    // 1fr as the track's MAXIMUM, not ${grow}px. The column count is computed
+    // from the track's max track sizing function whenever that is definite, so a
+    // minmax(250px, 300px) track counts as 300px wide when grid decides how many
+    // fit -- at a 1088px grid that dropped four columns to three and wrapped the
+    // fourth card onto a row of its own with a 760px hole beside it. Photographed
+    // before believing it. An indefinite max (1fr) makes the count fall back to
+    // the 250px minimum, which packs as densely as the old constant track did.
+    //
+    // The card then carries the ceiling instead (see `fillCell`), so 1fr gets to
+    // choose the column count without also being allowed to inflate four cards to
+    // 500px each on a wide monitor.
+    const grow = Math.round(size * 1.35);
+
+    // One measure for the dashboard column, and it is a COLUMN COUNT.
+    //
+    // Canvas lets the content column grow without limit, so at 2560 the header
+    // slab and the card grid ended at different x and the grid laid out as many
+    // columns as the monitor allowed. That is what made the same dashboard look
+    // like a different product on a 15", a 24" and a 27": not the card size --
+    // which was already constant -- but the number of cards in a row, and how
+    // much grey was left over beside them.
+    //
+    // Capping the columns is what makes those three agree. Above the cap the
+    // layout stops being a function of the viewport at all: it becomes a
+    // function of how many courses you are taking, which is the same number on
+    // every monitor you own. Five is the default because it is the most that
+    // still fits inside a 15" MacBook's content column at default scaling
+    // (~1400px), and a cap only unifies monitors it actually binds on -- a cap
+    // the laptop cannot reach would leave the laptop out of the agreement.
+    //
+    // The cap lands on the grid and the header rather than on
+    // .ic-Layout-contentMain. Capping the column worked, but Canvas pads that
+    // element, so the grid got `measure` MINUS that padding -- 1290 against a
+    // 1314 measure, which is 24px short of a fifth 250px column and silently
+    // dropped every wide monitor to four. Capping the boxes that lay out means
+    // the measure is exactly the budget, whatever Canvas pads.
+    const maxCols = Math.max(0, Math.min(12, d.maxColumns == null ? 5 : d.maxColumns | 0));
+    // When dashgrid draws the cards it owns the arithmetic, so the measure is ITS
+    // cap rather than a second copy of the sum. The two agreed at the medium card
+    // and disagreed at small and large, which left the header bar ending a few
+    // hundred pixels wide of the grid beneath it.
+    const gm = own && BC.dashgrid && BC.dashgrid.metrics ? BC.dashgrid.metrics(d) : null;
+    const measure = gm
+      ? (gm.cap ? gm.cap + "px" : "none")
+      : `calc(${size * maxCols}px + ${maxCols - 1} * var(--bc-space-7, 16px))`;
+    // The track minimum is the LARGER of the chosen card size and the width that
+    // makes the courses we actually have fill the row exactly.
+    //
+    // auto-fit is documented as collapsing the tracks nothing occupies, and it
+    // does -- unless some item spans every track, which is exactly what Canvas's
+    // "Published Courses" heading does via ${spanRow}. With a spanning item no
+    // track is ever empty, so auto-fit behaves as auto-fill and four courses in a
+    // five-column measure left a 266px notch at the end of the row while the
+    // prose below ran the full measure. Photographed at 2560 before believing it.
+    //
+    // So the count does the capping instead of relying on collapse: at any width
+    // that can hold `cols` cards the percentage term wins and the grid resolves
+    // to exactly `cols` tracks, which the cards then fill; at narrower widths it
+    // falls under `size`, the max() picks `size` back up, and auto-fit reduces
+    // the count the ordinary responsive way.
+    const cols = Math.max(1, maxCols ? Math.min(maxCols, cardCount || maxCols) : (cardCount || 1));
+    const fillMin = maxCols
+      ? `max(${size}px, calc((100% - ${cols - 1} * var(--bc-space-7, 16px)) / ${cols}))`
+      : `${size}px`;
+    const track = `repeat(auto-fit, minmax(min(100%, ${fillMin}), 1fr))`;
+
+    // Every rule below reads the snapped measure and falls back to the cap, so a
+    // browser with no ResizeObserver, or a Canvas layout snapMeasure cannot find
+    // a row in, gets exactly the behaviour that shipped before the snap.
+    const M = `min(100%, var(--bc-dash-measure, ${measure}))`;
+    const shell = !maxCols ? "" : `
+      .ic-Dashboard-header__layout, #DashboardCard_Container, ${GRID} {
+        max-width: ${M} !important;
+      }
+      /* The rest of the column gets the same measure so prose and announcements
+         below the cards end where the cards do instead of running the width of a
+         27" monitor. Its inline padding goes to zero in the same breath: leave it
+         in and the content box is the measure MINUS that padding, which is what
+         cost the fifth column. The page keeps a gutter -- .ic-Layout-columns has
+         one -- so zeroing this one costs nothing but the double inset. */
+      .ic-Layout-contentMain {
+        max-width: ${M} !important;
+        padding-inline: 0 !important;
+      }
+      /* ...and then the WHOLE row gets centred, sidebar included.
+         Capping the content column alone is only half a layout. It pins the
+         cards to the left edge and leaves the sidebar pinned to the right, so
+         the wider the monitor the bigger the hole between them: measured at
+         294px on a 24" and 934px on a 27", which is most of a second dashboard
+         of nothing. The cap was doing its job -- five columns on all three
+         monitors -- and the page still looked broken.
+
+         The content column asks for exactly the measure and is allowed to
+         shrink; the sidebar already refuses to. So above the measure the pair
+         is narrower than the row and justify-content: center puts the free
+         space on BOTH sides, and below it the column shrinks first and the
+         layout is what it always was. Centring this way needs no arithmetic
+         about how wide Canvas's sidebar is -- which is 320px on Canvas and
+         280px in the replica, and would have been a guess wrong by 40px on one
+         of them, every time. */
+      /* BOTH, because which one is the flex container depends on the Canvas
+         version. On a live dashboard .ic-Layout-columns is display: BLOCK and
+         the flex parent of the content wrapper is
+         #not_right_side.ic-app-main-content one level inside it — so this rule
+         on .ic-Layout-columns alone was landing on a block element and doing
+         exactly nothing, while the replica (which had no such level) reported
+         the layout centred at ten widths. justify-content on a block element is
+         inert, so naming both is safe rather than a guess between them. */
+      .ic-Layout-columns, .ic-app-main-content { justify-content: center !important; }
+      .ic-Layout-contentWrapper {
+        flex: 0 1 ${M} !important;
+        min-width: 0 !important;
+      }`;
+
+    // The card's own proportions, shared by every layout that shows a card face.
+    // Canvas fixes the artwork at 146px tall at every card width, so its aspect
+    // ratio changed with the viewport (1.71 at a 250px card, 2.06 at 301px) and
+    // its share of the card jumped between 49% and 52%. An aspect-ratio scales
+    // with the card instead, so the face is identical at every size.
+    const cardShape = `
+      .ic-DashboardCard__header_image, .ic-DashboardCard__header_hero {
+        height: auto !important;
+        aspect-ratio: 16 / 9 !important;
+      }
+      /* Two lines, with an ellipsis. Canvas gives the title white-space: nowrap
+         and clips it, so a long course name is cut off mid-word; letting it wrap
+         to two lines shows far more of it.
+         The span is forced back to inline and is NOT given the clamp. Clamping
+         it too blockified it -- Chrome computes display: -webkit-box as
+         flow-root here -- and text-overflow cannot ellipsize an overflowing
+         BLOCK child, only inline content. That is what produced titles chopped
+         mid-word with no ellipsis at all: the span's content was 246px inside a
+         192px box with nothing to trim it. */
+      .ic-DashboardCard__header-title {
+        white-space: normal !important;
+        display: -webkit-box !important;
+        -webkit-box-orient: vertical !important;
+        -webkit-line-clamp: 2 !important;
+        overflow: hidden !important;
+        overflow-wrap: anywhere !important;
+      }
+      .ic-DashboardCard__header-title span { display: inline !important; white-space: normal !important; }
+      /* Title at the top, course code and term at the BOTTOM of the content box.
+         Cards sharing a row share a height, so this puts every card's metadata on
+         one line across the row. Without it the metadata sat directly under a
+         title that is one line on some cards and two on others, so it stepped up
+         and down across the row -- the single most visible "spacing issue" on the
+         dashboard, and the reason four cards read as four unrelated boxes.
+         margin-top on the SUBTITLE rather than flex-grow on the title: the title
+         carries display: -webkit-box for its line clamp, and growing it is one
+         more thing that can blockify it and cost the ellipsis. */
+      .ic-DashboardCard__header-content {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: var(--bc-space-1, 4px) !important;
+        /* The content box has to be TALLER than its text before margin-top: auto
+           has any slack to spend, and it only is if every box between it and the
+           card is a stretching flex item. The link is an <a>: as a flex item it
+           blockifies, so its own children stay content-sized and the metadata sat
+           straight under the title again -- which is what the first attempt at
+           this did, photographed and caught. */
+        flex: 1 1 auto !important;
+      }
+      .ic-DashboardCard__link { display: flex !important; flex-direction: column !important; }
+      .ic-DashboardCard__header-subtitle { margin-top: auto !important; }
+      /* Canvas pads the body 10px 12px, which is thin against a 250px card and
+         is the other half of what reads as bad spacing. On the scale, so the
+         density setting reaches it. */
+      .ic-DashboardCard__header-content, .ic-DashboardCard__link {
+        padding: var(--bc-pad-row, 14px) !important;
+      }
+      .ic-DashboardCard__action-container {
+        padding: var(--bc-space-3, 8px) var(--bc-pad-row, 14px) var(--bc-pad-row, 14px) !important;
+        gap: var(--bc-space-5, 12px) !important;
+      }`;
     const rad = (d.cardRadius|0) + "px";
+
+    // The dashboard column above the grid: a page title, our filter, and Canvas's
+    // section heading. Canvas gives these three a 12px slab, a 0px margin and an
+    // 8px margin respectively, so measured top to bottom the gaps ran 9, 35 and
+    // 29px -- no rhythm at all, and the filter read as a stray field dropped
+    // between two unrelated blocks. One scale for all three, off the density var
+    // so it moves with the setting.
+    const chrome = `
+      /* Not a white slab. Canvas paints this bar white with a hairline under it,
+         which on a page whose only other white is a course card makes the title
+         bar look like a card that lost its content. Everything above the grid
+         sits on the page surface instead, so the cards are the only things that
+         float. */
+      .ic-Dashboard-header__layout {
+        background: none !important;
+        border-bottom: 0 !important;
+        padding: 0 0 var(--bc-space-5, 12px) !important;
+        margin: 0 0 var(--bc-space-7, 16px) !important;
+        gap: var(--bc-space-7, 16px) !important;
+        flex-wrap: wrap !important;
+      }
+      /* Canvas sets weight 300 at 28px, which reads washed out next to a card
+         title at 600 and is the only thing on the page with no weight. */
+      .ic-Dashboard-header__title {
+        font-size: var(--bc-text-title, 26px) !important;
+        font-weight: var(--bc-weight-semibold, 600) !important;
+        letter-spacing: -0.01em !important;
+        line-height: var(--bc-leading-tight, 1.25) !important;
+        color: var(--bc-text) !important;
+      }
+      /* Canvas's own 16px band above the cards, replaced by the scale. */
+      #DashboardCard_Container { padding: 0 !important; }
+      /* "Published Courses" is a section eyebrow, not a second page title. At
+         Canvas's 16px/bold it competes with the h1 two lines above it. */
+      .ic-DashboardCard__box_header {
+        font-size: var(--bc-text-xs, 12px) !important;
+        font-weight: var(--bc-weight-semibold, 600) !important;
+        letter-spacing: 0.06em !important;
+        text-transform: uppercase !important;
+        color: var(--bc-text-subtle, var(--bc-muted)) !important;
+        margin: 0 0 var(--bc-space-5, 12px) !important;
+      }`;
+
+    // The header bar, the container's padding and the measure the content column
+    // is held to are PAGE chrome, not card chrome: they apply whichever renderer
+    // draws the cards. Skipping them along with the rest of layoutCss is what put
+    // Canvas's white title bar and its hairline back on a dashboard whose cards we
+    // were drawing -- with the filter box sitting on the rule, and the header
+    // running the full window while the grid under it stopped at its cap.
+    if (own) return `${shell}\n${chrome}`;
+
     let css = `
+      ${shell}
+      ${chrome}
       .ic-DashboardCard { border-radius: ${rad} !important; overflow: hidden; }
       .ic-DashboardCard__link, .ic-DashboardCard__box { border-radius: ${rad} !important; }
-      ${d.hoverLift ? `.ic-DashboardCard { transition: transform .18s ease, box-shadow .18s ease; }
-      .ic-DashboardCard:hover { transform: translateY(-2px); box-shadow: var(--bc-shadow-3, 0 10px 30px rgba(0,0,0,.12)); }` : ""}
+      ${d.hoverLift ? `.ic-DashboardCard:hover { transform: translateY(-2px); }
+      :root[data-bc-motion="0"] .ic-DashboardCard:hover { transform: none; }
+      @media (prefers-reduced-motion: reduce) { .ic-DashboardCard:hover { transform: none; } }` : ""}
     `;
-    if (d.layout === "grid") css += `.ic-DashboardCard__box { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(${size}px, 1fr)) !important; gap: 16px !important; }`;
-    if (d.layout === "list") css += `.ic-DashboardCard__box { display: flex !important; flex-direction: column !important; gap: 8px !important; }
+    const spanRow = `${GRID} > :not([data-bc-carditem]) { grid-column: 1 / -1 !important; }`;
+
+    // "Quiet instrument": the course colour runs the full height of the card as a
+    // spine, not just the header block. Scrolling past the artwork, the spine is
+    // what still tells you which course a card is. An inset shadow rather than a
+    // border so it costs no layout and survives the card's overflow:hidden.
+    //
+    // --bc-course is stamped per card in applyCourseIdentity; the fallback keeps
+    // the rule harmless on a card whose colour we could not read.
+    const spine = `
+      .ic-DashboardCard {
+        position: relative !important;
+        /* Only transform is transitioned. Animating an identity cue in on every
+           load is noise rather than craft; the spine is simply there. */
+        transition: transform var(--bc-dur-2, 160ms) var(--bc-ease-standard, ease) !important;
+      }
+      /* A pseudo-element, NOT an inset box-shadow. An inset shadow paints above
+         the element's own background but BELOW its children's, and every part of
+         a card (artwork, hero, body, action row) paints its own background, so
+         the spine was covered everywhere except the few pixels no child reached
+         -- it showed as a stub at the bottom-left corner. This sits above the
+         children instead. */
+      .ic-DashboardCard::before {
+        content: "" !important;
+        position: absolute !important;
+        left: 0 !important; top: 0 !important; bottom: 0 !important;
+        width: 3px !important;
+        background: var(--bc-course, transparent) !important;
+        z-index: 3 !important;
+        pointer-events: none !important;
+        border-top-left-radius: inherit; border-bottom-left-radius: inherit;
+      }
+      .ic-DashboardCard:focus-within {
+        outline: 2px solid var(--bc-focus-ring, var(--bc-accent)) !important;
+        outline-offset: 2px !important;
+      }
+      /* Typography: a clear three-step hierarchy where Canvas has one. Figures are
+         tabular so a column of course codes lines up. */
+      .ic-DashboardCard__header-title, .ic-DashboardCard__header-title span {
+        font-size: var(--bc-text-lg, 15px) !important;
+        font-weight: var(--bc-weight-semibold, 600) !important;
+        line-height: var(--bc-leading-tight, 1.25) !important;
+      }
+      .ic-DashboardCard__header-subtitle {
+        font-variant-numeric: tabular-nums !important;
+        font-size: var(--bc-text-xs, 12px) !important;
+        color: var(--bc-muted) !important;
+      }
+      .ic-DashboardCard__header-term {
+        font-size: var(--bc-text-2xs, 11px) !important;
+        color: var(--bc-text-subtle, var(--bc-muted)) !important;
+      }
+      /* The action row is the one part that should recede -- and a hairline is
+         how it recedes. Filling it with surface-3 made the bottom fifth of every
+         card a second, warmer colour, so a card read as two stacked panels
+         rather than one, and the accent links sitting on that warm fill read
+         muddy. The rule stays for the border alone. */
+      .ic-DashboardCard__action-container {
+        background: none !important;
+        border-top: 1px solid var(--bc-border-subtle, var(--bc-border)) !important;
+      }
+      /* Having chosen that surface, we own the contrast on it. Canvas's link
+         blue (#0374b5) is 4.5:1 on white but 4.09:1 on this warm surface-3, so
+         every action link on every card sat below AA in light mode. --bc-link is
+         the accent already guarded against surface-1, -2 and -3, and it is what
+         dark mode has always used here, so the two modes now agree. */
+      .ic-DashboardCard__action-container a { color: var(--bc-link) !important; }`;
+    // Canvas gives the card a fixed width, so without this the cards sit
+    // left-aligned inside whatever column width the size slider produced, with
+    // dead space to the right of each one.
+    const fillCell = `${GRID} > [data-bc-carditem] { width: 100% !important; min-width: 0 !important; }
+      ${GRID} > [data-bc-carditem] .ic-DashboardCard, ${GRID} > .ic-DashboardCard {
+        width: 100% !important;
+        /* The ceiling. A 1fr track has to be free to take the leftover so the
+           column count comes out right, but a card is a card: past about 1.35x
+           the chosen size it stops reading as one. Capping here rather than in
+           the track is what lets both be true. */
+        max-width: ${grow}px !important;
+      }`;
+    if (d.layout === "grid") css += `${GRID} { display: grid !important; grid-template-columns: ${track} !important; gap: var(--bc-space-7, 16px) !important; align-items: stretch !important; }
+      /* stretch, not start: cards sharing a row share a height, and the slack
+         from a one-line title collects ABOVE THE ACTION ROW rather than between
+         the title and the course code.
+         NOT grid-auto-rows: 1fr, which was the obvious next step and is wrong:
+         1fr distributes the CONTAINER's height across the rows, and this
+         container is not content-sized, so a single row of cards stretched to
+         640px and left a huge empty band above them. Rows can differ by one
+         title line; that is invisible next to what 1fr did. Reserving a second line on the title put it
+         in the middle of the card, which read as a hole on every card whose
+         name fitted on one line -- which, with Canvas's nowrap, was all of them. */
+      ${GRID} > [data-bc-carditem] { display: flex !important; }
+      .ic-DashboardCard { display: flex !important; flex-direction: column !important; }
+      .ic-DashboardCard__header { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; }
+      .ic-DashboardCard__link { flex: 1 1 auto !important; }
+      .ic-DashboardCard__action-container { margin-top: auto !important; }
+      ${spanRow}
+      ${fillCell}
+      ${spine}
+      ${cardShape}`;
+    if (d.layout === "list") css += `${spine}
+      ${GRID} { display: flex !important; flex-direction: column !important; gap: var(--bc-space-3, 8px) !important; }
+      ${GRID} > * { width: 100% !important; }
+      /* The text link is INSIDE __header, not beside it. This layout used to put
+         flex: 0 0 120px on __header and treat it as the artwork, which left
+         the link stacked underneath the hero and clipped away entirely by the
+         90px card: a list row has never shown a course name. __header is the
+         row, the artwork is its first item and the link is its second. */
       .ic-DashboardCard { display: flex !important; flex-direction: row !important; height: 90px !important; }
-      .ic-DashboardCard__header { flex: 0 0 120px !important; }
+      .ic-DashboardCard__header {
+        display: flex !important; flex-direction: row !important;
+        align-items: stretch !important; flex: 1 1 auto !important;
+        height: 100% !important; min-width: 0 !important;
+      }
+      .ic-DashboardCard__header_image, .ic-DashboardCard__header_hero {
+        flex: 0 0 120px !important; height: auto !important; aspect-ratio: auto !important;
+      }
+      .ic-DashboardCard__link {
+        flex: 1 1 auto !important; min-width: 0 !important;
+        display: flex !important; flex-direction: column !important; justify-content: center !important;
+        padding: var(--bc-space-4, 10px) var(--bc-pad-row, 14px) !important;
+      }
+      .ic-DashboardCard__header-content { padding: 0 !important; background: none !important; }
+      /* One line in a 90px row, and no reserved second line to push it out. */
+      .ic-DashboardCard__header-title, .ic-DashboardCard__header-title span {
+        display: -webkit-box !important; -webkit-box-orient: vertical !important;
+        -webkit-line-clamp: 1 !important; overflow: hidden !important;
+      }
+      .ic-DashboardCard__header-title { min-height: 0 !important; }
+      .ic-DashboardCard__header-term { display: none !important; }
       .ic-DashboardCard__action-container { display: none !important; }`;
-    if (d.layout === "compact") css += `.ic-DashboardCard { max-height: 120px !important; }
-      .ic-DashboardCard__header_image { height: 40px !important; }`;
-    if (d.layout === "masonry") css += `.ic-DashboardCard__box { columns: ${Math.max(2, Math.floor(1200/size))} auto !important; column-gap: 14px !important; }
-      .ic-DashboardCard { break-inside: avoid !important; margin-bottom: 14px !important; }`;
+    if (d.layout === "compact") css += `${GRID} { display: grid !important; grid-template-columns: ${track} !important; gap: var(--bc-space-5, 12px) !important; align-items: start !important; }
+      ${spanRow}
+      ${fillCell}
+      ${spine}
+      ${cardShape}
+      .ic-DashboardCard { max-height: 120px !important; }
+      /* Compact trades the artwork for density, so it keeps a strip rather than
+         a 16/9 face -- but a ratio, not a magic 40px, so the strip stays
+         proportional to the card. */
+      .ic-DashboardCard__header_image, .ic-DashboardCard__header_hero { aspect-ratio: 8 / 1 !important; }
+      /* And one title line, not two reserved: the shared card shape's reserve
+         plus two metadata lines overflowed the 120px cap and clipped the term
+         mid-glyph. Density is the whole point of this layout. */
+      .ic-DashboardCard__header-title, .ic-DashboardCard__header-title span { -webkit-line-clamp: 1 !important; }
+      .ic-DashboardCard__header-title { min-height: 0 !important; }
+      .ic-DashboardCard__header-term { display: none !important; }
+      /* The shared card shape pushes the metadata to the bottom of the content
+         box so it lines up across a row. In compact there is no second metadata
+         line to line up and the card is capped at 120px, so all that does is
+         open a gap between the title and the course code inside an already
+         short card. Density is the whole point of this layout. */
+      .ic-DashboardCard__header-subtitle { margin-top: 0 !important; }
+      .ic-DashboardCard__header-content, .ic-DashboardCard__link { padding: var(--bc-space-4, 10px) var(--bc-space-5, 12px) !important; }`;
+    if (d.layout === "masonry") css += `${spine}
+      ${cardShape}
+      /* A column WIDTH and a column COUNT together. The width alone, with the count
+         left at auto, let the columns keep whatever slack was left over, so the
+         masonry right edge stopped 43px short of the prose below it. Given both,
+         the count is a MAXIMUM: the browser takes min(count, what fits) and then
+         divides the width evenly between them, so the columns fill the measure
+         exactly and still reduce on a narrow window. Same cap as the grid, so
+         switching layout does not change how many courses are in a row.
+         Known limit: multicol BALANCES, and with six equal-height cards over
+         four columns 2/2/2/0 and 2/2/1/1 are both height-2 solutions, so the
+         browser may leave the last column empty. column-fill: auto would pack
+         left-to-right but needs a definite height, which a dashboard has not
+         got. The grid layout is the one to use if that matters. */
+      ${GRID} { columns: ${size}px ${cols} !important; column-gap: var(--bc-space-7, 16px) !important; display: block !important; }
+      /* Canvas's "Published Courses" heading is a normal in-flow child, so a
+         multi-column container flows it into the FIRST column and every card
+         below it starts one heading lower than the cards in columns two, three
+         and four. Spanning it lifts it out of the columns entirely. */
+      ${GRID} > :not([data-bc-carditem]) { column-span: all !important; }
+      /* Canvas fixes the card at 262px, and a multi-column column is wider than
+         that, so every masonry card sat left-aligned in its column with ~46px of
+         dead space to its right -- the same defect the grid layout had before
+         fillCell, in the one layout that never got it. */
+      ${fillCell}
+      .ic-DashboardCard, ${GRID} > [data-bc-carditem] {
+        break-inside: avoid !important;
+        margin-bottom: var(--bc-space-7, 16px) !important;
+      }`;
     return css;
+  }
+
+  // Canvas has changed this container's markup more than once, so derive it from
+  // where the cards actually are rather than from a class name. Cards can be
+  // wrapped one level deep, so climb to the nearest ancestor that holds all of
+  // them. data-bc-cardgrid is not in the observer's attributeFilter, so writing
+  // it cannot retrigger applyAll.
+  function markCardGrid(cards) {
+    if (!cards.length) return null;
+    let host = cards[0].parentElement;
+    // If the parent holds only this one card it is a wrapper, not the container.
+    while (host && host !== document.body && host.childElementCount === 1) host = host.parentElement;
+    if (!host || host === document.body || host === document.documentElement) return null;
+    for (const el of document.querySelectorAll("[data-bc-cardgrid]")) {
+      if (el !== host) el.removeAttribute("data-bc-cardgrid");
+    }
+    if (!host.hasAttribute("data-bc-cardgrid")) host.setAttribute("data-bc-cardgrid", "");
+
+    // Canvas puts headings ("Published Courses") inside this container too, and
+    // making it a grid would drop them into a card slot. Mark the children that
+    // actually hold a card so everything else can be told to span the full row.
+    // Marking the ITEMS rather than negating a card class is what makes this work
+    // whether the cards are direct children or each sits in its own wrapper.
+    const items = new Set();
+    for (const card of cards) {
+      let n = card;
+      while (n && n.parentElement !== host) n = n.parentElement;
+      if (n) items.add(n);
+    }
+    for (const child of Array.from(host.children)) {
+      const want = items.has(child);
+      if (child.hasAttribute("data-bc-carditem") !== want) {
+        if (want) child.setAttribute("data-bc-carditem", "");
+        else child.removeAttribute("data-bc-carditem");
+      }
+    }
+    return host;
+  }
+
+  // The course colour lives in Canvas's own markup: an inline background on the
+  // hero block, or the link's background on cards with artwork. Read it once per
+  // card and stamp it as a custom property, so the spine and any hover state can
+  // reference it from CSS without re-reading computed styles every tick.
+  //
+  // A per-card stamp rather than a stylesheet because the value is per course,
+  // and generating N rules would mean rebuilding the sheet whenever a card
+  // re-rendered.
+  function applyCourseIdentity(card, spec) {
+    // An explicit user override always wins over whatever Canvas painted.
+    const chosen = spec && spec.color && BC.color.isHex(spec.color) ? spec.color : null;
+    if (chosen) {
+      if (card.dataset.bcCourseColour !== chosen) {
+        card.style.setProperty("--bc-course", chosen);
+        card.dataset.bcCourseColour = chosen;
+      }
+      return;
+    }
+    if (card.dataset.bcCourseColour) return;   // already resolved for this card
+    // Priority order, not document order. querySelector with a selector list
+    // returns whichever matches FIRST in the tree, and Canvas nests the hero
+    // inside the image wrapper, so a card with artwork returned the wrapper --
+    // which carries a background image and no colour to read.
+    const candidates = [];
+    for (const sel of [".ic-DashboardCard__header_hero",
+                       ".ic-DashboardCard__header_image",
+                       ".ic-DashboardCard__link"]) {
+      const el = card.querySelector(sel);
+      if (el) candidates.push(el);
+    }
+    candidates.push(card);
+    let found = null;
+    for (const el of candidates) {
+      let bg;
+      try { bg = getComputedStyle(el).backgroundColor; } catch (_) { continue; }
+      const parsed = BC.color.parseCssColor(bg);
+      // Skip transparent, and skip our own dark surfaces: a card whose colour we
+      // already repainted would otherwise stamp itself grey.
+      if (!parsed || parsed.a < 0.5) continue;
+      if (BC.color.chroma(bg) < 12) continue;
+      found = BC.color.rgbToHex(parsed.r, parsed.g, parsed.b);
+      break;
+    }
+    if (!found) return;
+    card.style.setProperty("--bc-course", found);
+    card.dataset.bcCourseColour = found;
+  }
+
+  function clearCourseIdentity() {
+    for (const el of document.querySelectorAll("[data-bc-course-colour]")) {
+      el.style.removeProperty("--bc-course");
+      delete el.dataset.bcCourseColour;
+    }
+  }
+
+  function unmarkCardGrid() {
+    for (const el of document.querySelectorAll("[data-bc-cardgrid]")) el.removeAttribute("data-bc-cardgrid");
+    for (const el of document.querySelectorAll("[data-bc-carditem]")) el.removeAttribute("data-bc-carditem");
   }
 
   function overlayCard(card, spec) {
@@ -154,7 +802,7 @@
     const label = n + " item" + (n === 1 ? "" : "s") + " due in the next 24 hours";
     const b = document.createElement("span");
     b.className = "bc-badge due";
-    b.textContent = "⏰ " + n;
+    b.innerHTML = BC.icons.svg("clock", { size: 11 }) + '<span class="bc-num">' + n + "</span>";
     b.title = label;
     b.setAttribute("aria-label", label);   // the bare number conveys nothing alone
     strip.replaceChildren(b);
@@ -294,14 +942,26 @@
     }
   }
 
+  // What dashgrid needs and should not fetch twice. The loaders below are the
+  // only writers; this is a read-only window onto them, published so our own
+  // renderer can put a grade, a due count and a progress bar on its cards
+  // without a second round trip for data already in hand.
+  BC.dashboard = {
+    get scores() { return scoresMap; },
+    get dueSoon() { return dueSoonByCourse; },
+    get progress() { return plannerCountByCourse; },
+    get query() { return query; },
+  };
+
   function apply(settings, ctx) {
     if (ctx.page !== "dashboard") {
       BC.injector.setStyle("bc-dashboard-ui", "");
       BC.injector.setStyle("bc-dashboard-widgets", "");
+      unwatchMeasure();
       return;
     }
     const d = settings.dashboard || {};
-    if (!d.enabled) return;
+    if (!d.enabled) { unwatchMeasure(); return; }
 
     // pageBag marks clear on SPA navigation, so this re-arms the loaders exactly
     // once per page visit. The underlying BC.api calls are TTL-cached, so
@@ -315,11 +975,27 @@
     const widgetCss = widgetsCss(d.widgets || {}) + (d.hideSidebar ? "\n#right-side, #right-side-wrapper { display: none !important; }\n#main { margin-right: 0 !important; }" : "");
     BC.injector.setStyle("bc-dashboard-widgets", widgetCss);
 
+    // With our own renderer on, Canvas's grid is hidden and every rule layoutCss
+    // emits would be styling something nobody can see -- so it is not emitted,
+    // and the per-card overlays below are skipped too. Everything else here
+    // (the course search, the GPA card, the sidebar's rhythm) is page chrome
+    // rather than card chrome and still applies.
+    const own = d.ownCards !== false;
+    watchMeasure(d, own);
+    if (own) unmarkCardGrid();
+
     // layout CSS
-    BC.injector.setStyle("bc-dashboard-ui", layoutCss(d) + `
+    // The card count shapes the grid, so it has to be read BEFORE the sheet is
+    // written rather than after.
+    const cardNodes = document.querySelectorAll(".ic-DashboardCard");
+    // The overlays -- grade pill, progress bar, due badges, sparkline -- are drawn
+    // ON Canvas's cards and are meaningless when ours are the ones on screen.
+    // dashgrid draws its own from the same data, so emitting these too would be
+    // dead CSS carrying a `position: relative` for a card nobody can see.
+    const overlayCss = own ? "" : `
       .bc-inline-grade {
         position: absolute; top: 8px; right: 8px; z-index: 2;
-        padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+        padding: 2px var(--bc-space-3, 8px); border-radius: 999px; font-size: var(--bc-text-2xs, 11px); font-weight: 700;
         /* background + color are set from --bc-grade-* per band in JS */
         box-shadow: var(--bc-shadow-1, 0 1px 4px rgba(0,0,0,.2));
       }
@@ -328,40 +1004,104 @@
         height: 100%; background: var(--bc-accent-stroke, var(--bc-accent, #0374b5)); width: 0%;
         transition: width var(--bc-dur-4, 400ms) var(--bc-ease-out, ease);
       }
-      .bc-badges { position: absolute; left: 6px; bottom: 6px; display: flex; gap: 4px; }
+      .bc-badges { position: absolute; left: 6px; bottom: 6px; display: flex; gap: var(--bc-space-1, 4px); }
       .bc-badge {
         font-size: var(--bc-text-3xs, 10px);
         background: var(--bc-surface-inverse, rgba(0,0,0,.65));
         color: var(--bc-text-inverse, #fff);
-        padding: 2px 6px; border-radius: var(--bc-radius-pill, 999px);
+        padding: 2px var(--bc-space-2, 6px); border-radius: var(--bc-radius-pill, 999px);
         font-variant-numeric: tabular-nums;
       }
       .bc-badge.due { background: var(--bc-warn, #a16207); color: var(--bc-warn-fg, #fff); }
       .ic-DashboardCard { position: relative; }
-
-      .bc-course-search { margin: 0 0 var(--bc-space-5, 12px); }
-      .bc-course-search-input {
-        width: min(320px, 100%);
-        padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px);
-        border: 1px solid var(--bc-border, #e5e7eb);
-        border-radius: var(--bc-radius-md, 8px);
-        background: var(--bc-surface-2, #fff); color: var(--bc-text, #1b2430);
-        font-family: var(--bc-font-sans); font-size: var(--bc-text-sm, 13px);
-      }
-      .bc-course-search-input:focus-visible {
-        outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 1px;
-      }
       .bc-card-spark {
         position: absolute; left: 8px; bottom: 12px; z-index: 2;
         line-height: 0; pointer-events: none;
+      }`;
+
+    BC.injector.setStyle("bc-dashboard-ui", layoutCss(d, cardNodes.length, own) + overlayCss + `
+      /* A top margin as well as a bottom one. With none, the box butted straight
+         against the header block above it and read as sitting ON the rule rather
+         than below it. */
+      .bc-course-search { margin: var(--bc-space-5, 12px) 0 var(--bc-space-7, 16px); }
+      /* !important throughout. Canvas styles its own search inputs with rules far
+         more specific than one class (.ic-app .ic-Input, and friends), so every
+         one of these lost and the filter box rendered as a white Canvas field
+         sitting on a dark dashboard. */
+      .bc-course-search-input {
+        width: min(320px, 100%);
+        padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px) !important;
+        border: 1px solid var(--bc-border, #e5e7eb) !important;
+        border-radius: var(--bc-radius-md, 8px) !important;
+        background: var(--bc-surface-2, #fff) !important;
+        color: var(--bc-text, #1b2430) !important;
+        box-shadow: none !important;
+        font-family: var(--bc-font-sans) !important; font-size: var(--bc-text-sm, 13px) !important;
+        height: auto !important;
       }
-      .bc-gpa-card { margin-bottom: var(--bc-space-5, 12px); }
+      .bc-course-search-input::placeholder { color: var(--bc-text-subtle, var(--bc-muted)) !important; }
+      .bc-course-search-input:focus-visible {
+        outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 1px;
+      }
+      .bc-gpa-card { margin-bottom: var(--bc-space-7, 16px); }
+      /* Canvas's own sidebar blocks carry three different bottom margins, so the
+         gaps down the right column measured 23px then 14px. One value, on the
+         same scale as the column on the left. */
+      #right-side > *, .ic-app-main-content__secondary > * {
+        margin-bottom: var(--bc-space-7, 16px) !important;
+      }
+      #right-side > :last-child, .ic-app-main-content__secondary > :last-child {
+        margin-bottom: 0 !important;
+      }
+      /* ...and the same FACE as our own planner sits in. Measured on a live
+         dashboard: our .bc-todo is 240x276 with a 1px border, a 12.5px radius
+         and 14px of padding, while Canvas's feedback block directly beneath it
+         is a bare div — 0 border, 0 radius, 0 padding — so the right column read
+         as one panel followed by some loose text. The replica had invented
+         markup for those blocks and drew all three as cards, so it had nothing
+         to say about it.
+
+         Named blocks rather than a child-universal selector: the nodes we
+         inject already carry their own surface, and the unclassed wrapper
+         Canvas puts around the View Grades button would otherwise become a box
+         drawn around a button. */
+      :is(#right-side, .ic-app-main-content__secondary) >
+        :is(.events_list, .recent_feedback, .coming_up, .Sidebar__TodoListContainer) {
+        background: var(--bc-surface-2, #fff) !important;
+        border: 1px solid var(--bc-border, #e5e7eb) !important;
+        border-radius: var(--bc-radius-lg, 12px) !important;
+        padding: var(--bc-pad-row, 14px) !important;
+      }
     `);
+
+    // Load whatever any ENABLED consumer needs, not just the one feature that
+    // happens to share a name with the loader. The GPA card reads scoresMap and
+    // the due badge reads dueSoonByCourse, so gating those loads on
+    // showInlineGrade / showProgressBar meant turning on only the GPA card or
+    // only the badge left its data source empty forever and the feature simply
+    // never appeared.
+    //
+    // These run BEFORE the card check: none of them need a card to exist. The
+    // GPA card mounts into the sidebar, so gating it on cards meant it never
+    // appeared on a dashboard rendering no cards at all.
+    if (d.showInlineGrade || (d.widgets && d.widgets.gpa)) ensureLoaded("scores", loadInlineGrades);
+    if (d.showProgressBar || d.showBadges) ensureLoaded("planner", loadPlannerCounts);
+    if (d.widgets && d.widgets.gpa) ensureGpaCard(settings);
+    else BC.injector.removeNode("bc-gpa-card");
+
+    // The filter box is page chrome, not card chrome: it sits above the grid and
+    // both renderers read it. It has to be mounted BEFORE the no-cards guard
+    // below, or a dashboard whose cards our own renderer is drawing -- so Canvas
+    // has none -- loses its search box.
+    if (d.courseSearch) ensureCourseSearch();
+    else BC.injector.removeNode("bc-course-search");
 
     // course cards
     if (d.autoHideConcluded) maybeFetchConcluded(true);
-    const cards = document.querySelectorAll(".ic-DashboardCard");
-    if (!cards.length) return;
+    if (own) return;                 // dashgrid owns the cards from here down
+    const cards = cardNodes;
+    if (!cards.length) { unmarkCardGrid(); return; }
+    markCardGrid(Array.from(cards));
 
     // Build id order + reordering
     const cardsById = new Map();
@@ -381,11 +1121,6 @@
     }
     for (const [id, card] of cardsById) if (!ordered.has(id)) setOrder(card);
 
-    if (d.courseSearch) ensureCourseSearch();
-    else BC.injector.removeNode("bc-course-search");
-    if (d.widgets && d.widgets.gpa) ensureGpaCard(settings);
-    else BC.injector.removeNode("bc-gpa-card");
-
     // Apply per-card overrides
     for (const [id, card] of cardsById) {
       const spec = (d.courses && d.courses[id]) || {};
@@ -396,6 +1131,7 @@
       const effHidden = spec.hidden === true
         || (d.autoHideConcluded && concludedIds && concludedIds.has(id))
         || (!!query && name.indexOf(query) === -1);
+      applyCourseIdentity(card, spec);
       overlayCard(card, { ...spec, hidden: effHidden });
       if (d.showInlineGrade)   overlayInlineGrade(card, id, scoresMap);
       if (d.showProgressBar)   overlayProgress(card, plannerCountByCourse);
@@ -407,18 +1143,18 @@
     const container = document.getElementById("DashboardCard_Container") || document.querySelector(".ic-DashboardCard__box");
     if (container) container.style.display = ""; // let CSS layoutCss govern
 
-    if (d.showInlineGrade) ensureLoaded("scores", loadInlineGrades);
-    if (d.showProgressBar) ensureLoaded("planner", loadPlannerCounts);
   }
 
   BC.registry.register({
-    id: "dashboard",
+    id: "dashboard", pages: ["dashboard"],
     styles: ["bc-dashboard-widgets", "bc-dashboard-ui"],
     // These were injected per card but declared nowhere, so teardown left every
     // badge, grade pill and progress bar stuck on the Canvas cards.
     nodes: ["bc-inline-grade", "bc-progress", "bc-badges", "bc-card-spark", "bc-course-search", "bc-gpa-card"],
     apply,
     unmount() {
+      unmarkCardGrid();
+      clearCourseIdentity();
       scoresMap.clear();
       plannerCountByCourse.clear();
       dueSoonByCourse.clear();

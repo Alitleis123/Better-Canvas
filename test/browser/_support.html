@@ -1,0 +1,135 @@
+<!doctype html>
+<!--
+  Feature check, synchronous so a load-time screenshot catches it. The extension
+  ships a Firefox manifest but the panel was only ever rendered in Blink, and it
+  leans on a handful of things Gecko and WebKit implement on their own schedule.
+  Anything that reports NO here is a real hole in one of the shipped targets.
+-->
+<meta charset=utf-8><title>support</title>
+<style>
+  body { margin: 0; padding: 20px; font: 14px/1.6 ui-monospace, Menlo, monospace; }
+  .no { color: #b91c1c; font-weight: 700; }
+  .yes { color: #047857; }
+  /* A miniature of the real row, so the answer is measured and not just claimed
+     supported: three tracks, a container query that stacks them, and a select
+     capped in absolute units so it cannot starve the label. */
+  #probe { container-type: inline-size; container-name: bc-body; width: 300px; }
+  .row { display: grid; grid-template-columns: 28px minmax(144px,1fr) auto; gap: 10px; align-items: center; }
+  .row > b { min-width: 0; }
+  select { max-width: 190px; }
+  @container bc-body (max-width: 380px) {
+    .row:not(.slim) { grid-template-columns: 28px minmax(0,1fr); row-gap: 8px; }
+    .row:not(.slim) > select { grid-column: 2 / -1; justify-self: start; }
+  }
+  /* And the second threshold, where even a single switch has to stack: a 144px
+     label plus the mark, the gaps and a 40px switch does not fit under ~280. */
+  @container bc-body (max-width: 280px) {
+    .row.slim { grid-template-columns: 28px minmax(0,1fr); row-gap: 8px; }
+    .row.slim > .sw { grid-column: 2 / -1; justify-self: start; }
+  }
+  .sw:has(input:checked) { outline: 2px solid green; }
+  /* A miniature of the dashboard card grid. The track the dashboard ships uses
+     min(), max() and a percentage INSIDE minmax(), under auto-fit -- the column
+     count depends on the engine resolving all of that the same way Blink does,
+     and if it does not, a Firefox user gets a different number of cards in a row
+     than the measurements were taken against. Measured, not claimed. */
+  /* 1100px, not 1000. At 1000 the four-column term resolves to 238px, under the
+     250px floor, so max() picks the floor and only three 250px tracks fit -- the
+     reduce-and-still-fill path. That is correct behaviour but it is not the case
+     worth pinning cross-engine, and asserting 4 there made this page cry wolf in
+     BOTH engines. At 1100 the term is 263px, over the floor, so the count should
+     come out at exactly four. */
+  #gridprobe { width: 1100px; display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, max(250px, calc((100% - 3 * 16px) / 4))), 1fr)); }
+  #gridprobe > h6 { grid-column: 1 / -1; margin: 0; }
+  #gridprobe > .c { height: 20px; background: #ddd; }
+  /* And the masonry heading, which has to lift out of the columns. */
+  /* One card height for the whole grid, not one per row. align-items only
+     equalises within a row, so this is what stops a short last row drawing
+     shorter cards than the rows above it. */
+  #autorows { width: 520px; display: grid; grid-template-columns: repeat(2, 1fr);
+              grid-auto-rows: 1fr; gap: 8px; }
+  #autorows > div { background: #ddd; }
+  #colprobe { width: 600px; columns: 250px 3; column-gap: 16px; }
+  #colprobe > h6 { column-span: all; margin: 0; }
+  #colprobe > .c { height: 30px; background: #ddd; margin-bottom: 8px; break-inside: avoid; }
+</style>
+<body>
+<div id=probe>
+  <div class="row" id=r1><i>ic</i><b id=lab>Course card colour</b><select id=sel><option>Use the skin's colours</option></select></div>
+  <div class="row slim" id=r2><i>ic</i><b>Toggle</b><span class="sw"><input type=checkbox checked></span></div>
+  <div class="row" id=r3><i>ic</i><b id=lab2>Inert test</b><span id=inertbox inert><button id=inertbtn>x</button></span></div>
+</div>
+<div id=gridprobe><h6>Published Courses</h6><div class=c></div><div class=c></div><div class=c></div><div class=c></div></div>
+<div id=autorows><div>one line</div><div>a cell whose content runs onto a second line of text</div><div>x</div><div>y</div></div>
+<div id=colprobe><h6>Published Courses</h6><div class=c></div><div class=c></div><div class=c></div><div class=c></div></div>
+<pre id=out></pre>
+<script>
+const q = [
+  ["container queries",      "container-type: inline-size"],
+  [":has()",                 "selector(:has(input))"],
+  ["color-mix()",            "color: color-mix(in srgb, red 50%, transparent)"],
+  ["ui-rounded font",        "font-family: ui-rounded"],
+  ["text-wrap: pretty",      "text-wrap: pretty"],
+  ["backdrop-filter",        "backdrop-filter: blur(10px)"],
+  ["inert attribute",        null],
+  ["ResizeObserver",         null],
+];
+const lines = q.map(([name, decl]) => {
+  let ok;
+  if (decl === null) ok = name === "ResizeObserver"
+    ? typeof ResizeObserver !== "undefined"
+    : "inert" in HTMLElement.prototype;
+  else if (decl.startsWith("selector(")) ok = CSS.supports(decl);
+  else { const [p, ...v] = decl.split(":"); ok = CSS.supports(p.trim(), v.join(":").trim()); }
+  return (ok ? "  yes  " : "  NO   ") + name;
+});
+// Measured, not claimed: does the label actually keep its width, and does the
+// container query actually stack the non-slim row?
+const lab = document.getElementById("lab");
+const sel = document.getElementById("sel");
+const r2b = document.getElementById("r2").querySelector("b");
+const stacked = sel.getBoundingClientRect().top >= lab.getBoundingClientRect().bottom;
+const slimInline = document.getElementById("r2").querySelector(".sw")
+  .getBoundingClientRect().top < r2b.getBoundingClientRect().bottom;
+// The dashboard grid, measured. Four cards in a 1000px container must come out
+// as four columns that fill it, with nothing left over at the end of the row.
+const gp = document.getElementById("gridprobe");
+const gcells = [...gp.querySelectorAll(".c")];
+const gtracks = getComputedStyle(gp).gridTemplateColumns.split(" ").filter((t) => parseFloat(t) > 0);
+const gRight = Math.round(Math.max(...gcells.map((c) => c.getBoundingClientRect().right)));
+const gTrail = Math.round(gp.getBoundingClientRect().right - gRight);
+// And the same grid squeezed under the floor: the count must drop and the cards
+// must still fill the row rather than leaving a notch.
+gp.style.width = "1000px";
+const narrowTracks = getComputedStyle(gp).gridTemplateColumns.split(" ").filter((t) => parseFloat(t) > 0);
+const narrowTrail = Math.round(gp.getBoundingClientRect().right -
+  Math.max(...gcells.map((c) => c.getBoundingClientRect().right)));
+gp.style.width = "1100px";
+
+// The masonry heading must sit ABOVE every column, not inside the first one.
+const cp = document.getElementById("colprobe");
+const ch = cp.querySelector("h6");
+const ccells = [...cp.querySelectorAll(".c")];
+const headingSpans = ccells.every((c) => c.getBoundingClientRect().top >= ch.getBoundingClientRect().bottom);
+
+const btn = document.getElementById("inertbtn");
+lines.push("");
+lines.push("  label width          " + Math.round(lab.getBoundingClientRect().width) + "px  (starved below ~120)");
+lines.push("  wide row stacked     " + stacked);
+lines.push("  slim row inline      " + slimInline);
+lines.push("  inert blocks focus   " + (document.activeElement !== btn));
+lines.push("");
+lines.push("  card grid columns    " + gtracks.length + "  (want 4)");
+lines.push("  card track width     " + gtracks[0] + "  (want ~263px)");
+lines.push("  row trailing gap     " + gTrail + "px  (want 0)");
+lines.push("  narrow reduces to    " + narrowTracks.length + " cols, " + narrowTrail + "px left over  (want 3, 0)");
+lines.push("  masonry head spans   " + headingSpans + "  (want true)");
+// Every cell the same height, including the ones on the row that did not need it.
+const ar = [...document.getElementById("autorows").children]
+  .map((c) => Math.round(c.getBoundingClientRect().height));
+lines.push("  auto-rows heights    " + ar.join("/") + "  (want all equal)");
+document.getElementById("out").textContent = lines.join("\n");
+btn.focus();
+document.getElementById("out").textContent += "\n  inert after focus()  " + (document.activeElement !== btn);
+</script>

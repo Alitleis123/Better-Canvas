@@ -10,17 +10,25 @@
 
   const CSS = `
     .bc-tts-btn {
-      display: inline-flex; align-items: center; gap: 4px;
+      display: inline-flex; align-items: center; gap: var(--bc-space-1, 4px);
       background: transparent; border: 1px solid var(--bc-border, #e5e7eb);
-      border-radius: 6px; padding: 2px 6px; font-size: 12px; cursor: pointer;
-      color: inherit; margin-left: 6px;
+      border-radius: var(--bc-radius-md, 6px); padding: 2px var(--bc-space-2, 6px); font-size: var(--bc-text-xs, 12px); cursor: pointer;
+      color: inherit; margin-left: var(--bc-space-2, 6px);
     }
     .bc-tts-btn.playing { background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); }
   `;
 
+  const TTS_SELECTOR = ".show-content, .description, .assignment-description, .announcement, .discussion-topic-body";
+
+  // apply() runs several times a second, so bail before the loop when the set of
+  // candidates has not changed. The count is what moves when Canvas mounts new
+  // content, and it resets on teardown so a re-enable rescans.
+  let ttsCount = -1;
   function installTts() {
     if (!("speechSynthesis" in window)) return;
-    const scope = document.querySelectorAll(".show-content, .description, .assignment-description, .announcement, .discussion-topic-body");
+    const scope = document.querySelectorAll(TTS_SELECTOR);
+    if (scope.length === ttsCount) return;
+    ttsCount = scope.length;
     for (const el of scope) {
       if (el._bcTts) continue; el._bcTts = true;
       const btn = document.createElement("button");
@@ -28,7 +36,7 @@
       btn.type = "button";
       btn.setAttribute("data-bc-node", "bc-tts-btn");   // declared below, so teardown removes it
       btn.setAttribute("aria-pressed", "false");
-      btn.textContent = "🔊 Speak";
+      btn.innerHTML = BC.icons.svg("speaker", { size: 13 }) + "<span>Speak</span>";
       btn.addEventListener("click", () => {
         try {
           if (window.speechSynthesis.speaking) {
@@ -73,6 +81,19 @@
     BC.injector.setStyle("bc-a11y-css", CSS);
     installCbFilters();
     if (a.tts) installTts();
+    // Switching the setting OFF had no branch at all, so the Speak buttons
+    // stayed on the page until a reload -- and the _bcTts expando meant they
+    // would not come back afterwards either. Same teardown the unmount hook
+    // does, so there is one definition of "no TTS here".
+    else if (ttsCount !== -1) removeTts();
+  }
+
+  function removeTts() {
+    ttsCount = -1;
+    for (const el of document.querySelectorAll(TTS_SELECTOR)) {
+      if (el._bcTts) delete el._bcTts;
+    }
+    BC.injector.removeNode("bc-tts-btn");
   }
 
   BC.registry.register({
@@ -81,9 +102,7 @@
     // installTts() skipped every element it had already marked and the Speak buttons
     // (which teardown had just removed) never came back.
     unmount() {
-      for (const el of document.querySelectorAll(".show-content, .description, .assignment-description, .announcement, .discussion-topic-body")) {
-        delete el._bcTts;
-      }
+      removeTts();
       if (window.speechSynthesis && window.speechSynthesis.speaking) window.speechSynthesis.cancel();
     },
   });

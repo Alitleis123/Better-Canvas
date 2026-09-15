@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Better Canvas",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "The most comprehensive Canvas LMS customizer. Dark mode everywhere, theme creator + rotation, kanban planner, Pomodoro, GPA + rubric predictor, quiz draft saver, module progress, study insights — free, local, no telemetry.",
   "browser_specific_settings": {
     "gecko": {
@@ -15,7 +15,7 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "permissions": ["storage", "scripting", "alarms", "contextMenus", "notifications"],
+  "permissions": ["storage", "scripting", "contextMenus"],
   "optional_host_permissions": ["*://*/*"],
   "host_permissions": ["*://*.instructure.com/*"],
   "background": {
@@ -29,10 +29,13 @@
       "js": [
         "src/shared/defaults.js",
         "src/shared/themes.js",
+        "src/shared/icons.js",
         "src/content/core/util.js",
         "src/content/core/datetime.js",
         "src/content/core/color.js",
         "src/shared/tokens.js",
+        "src/shared/skins.js",
+        "src/shared/skin-catalog.js",
         "src/content/core/storage.js",
         "src/content/core/detect.js",
         "src/content/core/injector.js",
@@ -51,6 +54,7 @@
         "src/content/features/cosmetics.js",
         "src/content/features/navigation.js",
         "src/content/features/dashboard.js",
+        "src/content/features/dashgrid.js",
         "src/content/features/todo.js",
         "src/content/features/grades.js",
         "src/content/features/notifications.js",
@@ -90,7 +94,6 @@
     }
   ],
   "action": {
-    "default_popup": "src/popup/popup.html",
     "default_title": "Better Canvas",
     "default_icon": {
       "16": "icons/icon-16.png",

@@ -8,3 +8,20 @@ body {
   font-family: var(--bc-font-sans, ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif);
 }
 #bc-settings-root { max-width: 1080px; margin: 0 auto; padding: 12px; }
+
+/* Custom-domain notice, shown only when the active tab is a Canvas we do not yet
+   have permission for. Same warm card as the settings panel's own sections. */
+.bc-site {
+  display: flex; align-items: center; gap: var(--bc-space-4, 10px); flex-wrap: wrap;
+  max-width: 1080px; margin: var(--bc-space-5, 12px) auto 0; padding: var(--bc-space-5, 12px) var(--bc-pad-card, 24px);
+  border: 1px solid var(--bc-warn, #a16207); border-radius: var(--bc-radius-xl, 14px);
+  background: var(--bc-warn-bg, #fffbeb); color: var(--bc-text, #1d1a16);
+  font-size: var(--bc-text-sm, 13px);
+}
+.bc-site[hidden] { display: none; }
+.bc-site button {
+  margin-left: auto; padding: var(--bc-space-3, 8px) var(--bc-space-5, 12px);
+  border: 0; border-radius: var(--bc-radius-md, 8px);
+  background: var(--bc-accent, #a8452c); color: var(--bc-accent-contrast, #fff);
+  font: inherit; font-weight: var(--bc-weight-semibold, 600); cursor: pointer; white-space: nowrap;
+}

@@ -54,6 +54,7 @@
     const dark = BC.isDarkActive ? BC.isDarkActive(settings) : false;
     const root = document.documentElement;
     if (root.classList.contains("bc-dark") !== dark) root.classList.toggle("bc-dark", dark);
+    BC.tokens.applyRootAttrs(document.documentElement, settings.theming);
   }
 
   let current = BC.cloneDefaults();
@@ -81,9 +82,54 @@
     getGpaData() { return fromTab("bc:gpaData"); },
   };
 
+  // Custom Canvas domains. This moved off the popup, which no longer exists:
+  // chrome.permissions.request needs a user gesture in a foreground extension
+  // page, so it cannot live in the service worker, and the toolbar click now
+  // lands here whenever the active tab is not a running Canvas page.
+  async function showSiteNotice() {
+    const box = document.getElementById("bc-site");
+    if (!box) return;
+    const say = (text, action) => {
+      box.hidden = false;
+      box.textContent = "";
+      box.appendChild(Object.assign(document.createElement("span"), { textContent: text }));
+      if (action) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = action.label;
+        b.addEventListener("click", action.run);
+        box.appendChild(b);
+      }
+    };
+    let tab;
+    try { [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); } catch (_) { return; }
+    if (!tab || !tab.url) return;
+    let url; try { url = new URL(tab.url); } catch (_) { return; }
+    if (!/^https?:$/.test(url.protocol)) return;
+    if (/(^|\.)instructure\.com$/.test(url.hostname)) return;   // covered by the manifest
+
+    const origin = url.origin + "/*";
+    const has = await new Promise((res) => chrome.permissions.contains({ origins: [origin] }, res));
+    if (has) {
+      say("Better Canvas is enabled on " + url.hostname + ". Reload that tab to start it.", {
+        label: "Reload " + url.hostname,
+        run: () => chrome.tabs.reload(tab.id),
+      });
+      return;
+    }
+    say("Is " + url.hostname + " your school's Canvas? Better Canvas needs your permission to run there.", {
+      label: "Enable on " + url.hostname,
+      run: () => chrome.permissions.request({ origins: [origin] }, (granted) => {
+        if (!granted) return;
+        chrome.runtime.sendMessage({ type: "bc:syncRegistration" }, () => chrome.tabs.reload(tab.id));
+      }),
+    });
+  }
+
   chrome.storage.local.get(KEY, (r) => {
     current = BC.mergeDefaults(r[KEY]);
     paintTokens(current);
     BC.SettingsUI.render(document.getElementById("bc-settings-root"), adapter);
+    showSiteNotice();
   });
 })();

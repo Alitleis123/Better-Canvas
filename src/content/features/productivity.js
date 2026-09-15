@@ -12,7 +12,7 @@
   const CSS = `
     .bc-focus #left-side, .bc-focus #right-side, .bc-focus .ic-app-header,
     .bc-focus .ic-app-crumbs, .bc-focus header { display: none !important; }
-    .bc-focus #main, .bc-focus #wrapper { margin: 0 !important; padding: 20px !important; max-width: 900px !important; }
+    .bc-focus #main, .bc-focus #wrapper { margin: 0 !important; padding: var(--bc-space-8, 20px) !important; max-width: 900px !important; }
 
     .bc-ruler {
       position: fixed; left: 0; right: 0; height: 30px;
@@ -29,17 +29,68 @@
       transition: width var(--bc-dur-2, 150ms) var(--bc-ease-out, ease);
     }
 
+    /* Bottom-RIGHT, sharing the corner budget with the Pomodoro dock and the
+       toast stack rather than competing with it. left:16px put these on top of
+       Canvas's global navigation rail, which is roughly 100px wide.
+
+       At rest each is a 32px disc showing only its glyph, so two rarely-used
+       utilities do not permanently occupy a labelled strip over the content.
+       The label slides out on hover or focus. The label text stays in the DOM
+       throughout (clipped, not hidden) so a screen reader always reads the full
+       name, and each button carries an aria-label regardless. */
     .bc-copyurl-btn, .bc-print-btn {
       position: fixed; right: 16px; z-index: var(--bc-z-dock, 2147480000);
-      background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); border: 0;
-      padding: 6px 10px; border-radius: var(--bc-radius-pill, 999px); cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: flex-start;
+      height: 32px; padding: 0; overflow: hidden;
+      background: var(--bc-surface-2, #fff); color: var(--bc-text, inherit);
+      border: 1px solid var(--bc-border-strong, var(--bc-border, #e5e7eb));
+      border-radius: var(--bc-radius-pill, 999px); cursor: pointer;
       font-family: var(--bc-font-sans); font-size: var(--bc-text-xs, 12px);
+      box-shadow: var(--bc-shadow-1, 0 1px 3px rgba(0,0,0,.12));
+      transition: background-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
+                  border-color var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
+    }
+    /* The glyph is the fixed part: a 30px square that keeps the disc round. */
+    .bc-util-ic {
+      flex: 0 0 30px; width: 30px; height: 30px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    /* Clipped rather than display:none, so it stays in the accessibility tree.
+       max-width animates; width:auto would not. */
+    .bc-util-label {
+      max-width: 0; opacity: 0; white-space: nowrap;
+      padding-right: 0;
+      transition: max-width var(--bc-dur-2, 160ms) var(--bc-ease-standard, ease),
+                  opacity var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease),
+                  padding-right var(--bc-dur-2, 160ms) var(--bc-ease-standard, ease);
+    }
+    .bc-copyurl-btn:hover .bc-util-label, .bc-print-btn:hover .bc-util-label,
+    .bc-copyurl-btn:focus-visible .bc-util-label, .bc-print-btn:focus-visible .bc-util-label {
+      max-width: 140px; opacity: 1; padding-right: var(--bc-space-4, 10px);
+    }
+    .bc-copyurl-btn:hover, .bc-print-btn:hover {
+      background: var(--bc-surface-4, rgba(0,0,0,.05));
+      border-color: var(--bc-accent-border, var(--bc-accent));
     }
     .bc-copyurl-btn:focus-visible, .bc-print-btn:focus-visible {
       outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px;
     }
-    .bc-copyurl-btn { bottom: 66px; }
-    .bc-print-btn { bottom: 100px; }
+    /* Nothing to animate when motion is reduced: the label simply appears. */
+    :root[data-bc-motion="0"] .bc-util-label { transition: none; }
+    @media (prefers-reduced-motion: reduce) { .bc-util-label { transition: none; } }
+    /* A touch device never hovers, so the label would otherwise be unreachable
+       and the icon alone would have to carry it. Show it outright instead. */
+    @media (hover: none) {
+      .bc-util-label { max-width: 140px; opacity: 1; padding-right: var(--bc-space-4, 10px); }
+    }
+    /* Stacked above whatever dock is mounted, and the toast host is told to
+       clear both via --bc-utility-h. */
+    .bc-copyurl-btn { bottom: calc(16px + var(--bc-dock-bottom, 0px)); }
+    .bc-print-btn { bottom: calc(60px + var(--bc-dock-bottom, 0px)); }
+    /* Printing the page should not print our own floating chrome. */
+    @media print {
+      .bc-copyurl-btn, .bc-print-btn, .bc-ruler, .bc-progress-bar { display: none !important; }
+    }
 
     /* Deliberately NOT theme surfaces — the paper metaphor is the point — but it
        needs a dark variant, which it never had: it was a glaring white rectangle
@@ -49,12 +100,12 @@
       background: var(--bc-note-bg, #fffbe6);
       color: var(--bc-note-text, #1f1a05);
       border: 1px solid var(--bc-note-border, #f6d67a);
-      padding: 6px 8px; border-radius: var(--bc-radius-md, 6px);
+      padding: var(--bc-space-2, 6px) var(--bc-space-3, 8px); border-radius: var(--bc-radius-md, 6px);
       font-family: var(--bc-font-sans); font-size: var(--bc-text-sm, 13px); min-width: 140px;
       box-shadow: var(--bc-shadow-2, 0 4px 12px rgba(0,0,0,.14));
       resize: both; overflow: auto;
     }
-    .bc-note-head { display: flex; justify-content: space-between; align-items: center; font-size: var(--bc-text-2xs, 11px); margin-bottom: 4px; cursor: move; }
+    .bc-note-head { display: flex; justify-content: space-between; align-items: center; font-size: var(--bc-text-2xs, 11px); margin-bottom: var(--bc-space-1, 4px); cursor: move; }
     .bc-note textarea { width: 100%; min-height: 60px; border: 0; background: transparent; resize: none; outline: none; font-family: inherit; }
     .bc-note-x { background: none; border: 0; cursor: pointer; }
 
@@ -63,7 +114,7 @@
       font-size: var(--bc-text-2xs, 11px); color: var(--bc-muted, #6b7280);
       /* was rgba(255,255,255,.85) — a white pill floating in dark mode */
       background: var(--bc-surface-2, #fff);
-      padding: 2px 6px; border-radius: var(--bc-radius-sm, 4px);
+      padding: 2px var(--bc-space-2, 6px); border-radius: var(--bc-radius-sm, 4px);
       pointer-events: none; font-variant-numeric: tabular-nums;
     }
   `;
@@ -114,26 +165,72 @@
     progressEl = null;
   }
 
+  // Inline SVG rather than a unicode glyph: at rest the icon is the entire
+  // affordance, and U+2302/U+26AD both render as tofu in fonts that lack them
+  // and mean the wrong thing in fonts that don't (a house, a marriage symbol).
+  // Stroke weight and caps match the sparkline in core/ui.js.
+  function utilIcon(paths) {
+    const ic = BC.util.el("span", { class: "bc-util-ic", "aria-hidden": "true" });
+    ic.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" ' +
+      'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" ' +
+      'stroke-linejoin="round">' + paths + '</svg>';
+    return ic;
+  }
+  const IC_LINK = '<path d="M6.75 9.25a2.5 2.5 0 0 0 3.54 0l2-2a2.5 2.5 0 0 0-3.54-3.54l-.6.6"/>' +
+    '<path d="M9.25 6.75a2.5 2.5 0 0 0-3.54 0l-2 2a2.5 2.5 0 0 0 3.54 3.54l.6-.6"/>';
+  const IC_PRINTER = '<path d="M4.5 6V2.5h7V6"/>' +
+    '<path d="M4.5 12H3.25A1.25 1.25 0 0 1 2 10.75v-3A1.25 1.25 0 0 1 3.25 6.5h9.5A1.25 1.25 0 0 1 14 7.75v3A1.25 1.25 0 0 1 12.75 12H11.5"/>' +
+    '<rect x="4.5" y="9.75" width="7" height="3.75" rx=".75"/>';
+
   // ---- Copy URL / Print ----
   function installUrlButton() {
     if (document.querySelector('[data-bc-node="bc-copyurl-btn"]')) return;
     const b = document.createElement("button");
     b.className = "bc-copyurl-btn";
+    b.type = "button";
     b.setAttribute("data-bc-node", "bc-copyurl-btn");
-    b.textContent = "🔗 Copy URL";
+    // aria-label as well as the clipped text: the name must not depend on a
+    // visual state.
+    b.setAttribute("aria-label", "Copy page URL");
+    b.appendChild(utilIcon(IC_LINK));
+    b.appendChild(BC.util.el("span", { class: "bc-util-label", text: "Copy URL" }));
     b.addEventListener("click", () => {
-      navigator.clipboard.writeText(location.href).then(() => BC.toast.success("URL copied"));
+      // Clipboard writes reject on a denied permission or an unfocused document,
+      // and the success toast used to fire from a chain with no catch, so a
+      // failure was both unreported and an unhandled rejection.
+      Promise.resolve()
+        .then(() => navigator.clipboard.writeText(location.href))
+        .then(() => BC.toast.success("URL copied"))
+        .catch((e) => { BC.diag.push("copyUrl", e); BC.toast.error("Couldn't copy the URL"); });
     });
     document.body.appendChild(b);
   }
   function uninstallUrlButton() { BC.injector.removeNode("bc-copyurl-btn"); }
 
+  // Publish the footprint so the toast stack starts above these rather than on
+  // top of them. Two 32px discs at 16px and 60px, so the upper one reaches 92px;
+  // the toast host already adds its own 16px base, leaving an 8px gap.
+  const UTILITY_CLEARANCE = "84px";
+  function setUtilityClearance(on) {
+    const root = document.documentElement;
+    if (on) {
+      if (root.style.getPropertyValue("--bc-utility-h") !== UTILITY_CLEARANCE) {
+        root.style.setProperty("--bc-utility-h", UTILITY_CLEARANCE);
+      }
+    } else if (root.style.getPropertyValue("--bc-utility-h")) {
+      root.style.removeProperty("--bc-utility-h");
+    }
+  }
+
   function installPrintButton() {
     if (document.querySelector('[data-bc-node="bc-print-btn"]')) return;
     const b = document.createElement("button");
     b.className = "bc-print-btn";
+    b.type = "button";
     b.setAttribute("data-bc-node", "bc-print-btn");
-    b.textContent = "🖨 Print";
+    b.setAttribute("aria-label", "Print this page");
+    b.appendChild(utilIcon(IC_PRINTER));
+    b.appendChild(BC.util.el("span", { class: "bc-util-label", text: "Print" }));
     b.addEventListener("click", () => window.print());
     document.body.appendChild(b);
   }
@@ -292,6 +389,32 @@
     }
   }
 
+  // apply() runs several times a second. Each of the passes below walks the DOM
+  // (querySelectorAll over every textarea, reconciling every note), so running
+  // them unconditionally was a continuous background scan on every Canvas page
+  // for work that only matters when something actually changed.
+  //
+  // The notes pass is keyed on the stored notes; the textarea passes are keyed on
+  // how many candidates exist, which is what changes when Canvas mounts a new
+  // editor. Both re-run for free after an SPA navigation because the keys reset.
+  let notesSig = null;
+  let textareaCount = -1;
+
+  function syncNotesIfChanged() {
+    const sig = JSON.stringify(loadNotes());
+    if (sig === notesSig && document.querySelector('[data-bc-node="bc-note"]')) return;
+    notesSig = sig;
+    syncNotes();
+  }
+
+  function scanTextareas(p) {
+    const n = document.querySelectorAll("textarea, [contenteditable=true]").length;
+    if (n === textareaCount) return;
+    textareaCount = n;
+    if (p.autoSaveDrafts) installDrafts();
+    if (p.wordCount) installWordCount();
+  }
+
   function apply(settings) {
     const p = settings.productivity || {};
     applyFocus(p.focusMode);
@@ -299,11 +422,14 @@
     p.readingProgress ? installProgress() : uninstallProgress();
     p.copyUrlButton ? installUrlButton() : uninstallUrlButton();
     p.printFriendly ? installPrintButton() : uninstallPrintButton();
+    setUtilityClearance(!!(p.copyUrlButton || p.printFriendly));
     BC.injector.setStyle("bc-productivity-css", CSS);
 
-    if (p.stickyNotes && BC.storage.loadLocal) BC.storage.loadLocal().then(syncNotes);
-    if (p.autoSaveDrafts && BC.storage.loadLocal) BC.storage.loadLocal().then(() => installDrafts());
-    if (p.wordCount) installWordCount();
+    if (p.stickyNotes && BC.storage.loadLocal) BC.storage.loadLocal().then(syncNotesIfChanged);
+    if (p.autoSaveDrafts || p.wordCount) {
+      if (BC.storage.loadLocal) BC.storage.loadLocal().then(() => scanTextareas(p));
+      else scanTextareas(p);
+    }
   }
 
   BC.registry.register({
@@ -318,6 +444,9 @@
       uninstallRuler();
       uninstallProgress();
       dragEl = null;
+      notesSig = null;
+      textareaCount = -1;
+      setUtilityClearance(false);
       for (const ta of document.querySelectorAll("textarea, [contenteditable=true]")) {
         delete ta._bcDraft;
         delete ta._bcWc;
