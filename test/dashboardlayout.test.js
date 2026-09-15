@@ -108,8 +108,18 @@ module.exports = {
     assert.equal(env.doc.querySelectorAll("[data-bc-carditem]").length, 0);
     const tag = env.doc.querySelector('style[data-better-canvas="bc-dashboard-ui"]');
     const css = tag ? tag.textContent : "";
-    assert.ok(!/data-bc-cardgrid/.test(css),
-      "layoutCss must not be emitted for a grid nobody can see");
+    // The CARD rules must not be emitted for a grid nobody can see. The page
+    // chrome around it still must be: the header bar and the content column's
+    // measure apply whichever renderer draws the cards, and dropping them put
+    // Canvas's white title bar and hairline back under our own grid.
+    assert.ok(!/\.ic-DashboardCard \{/.test(css),
+      "per-card rules must not be emitted for hidden cards");
+    assert.ok(!/grid-template-columns/.test(css),
+      "the Canvas-card grid must not be laid out");
+    assert.match(css, /\.ic-Dashboard-header__layout \{/,
+      "the header bar is page chrome and still applies");
+    assert.match(css, /\.ic-Layout-contentMain \{/,
+      "so is the measure the content column is held to");
   },
 
   "the filter box survives our own renderer taking the cards"() {
@@ -374,8 +384,10 @@ module.exports = {
       "the card must carry the ceiling, not the track");
     // And the column is capped, which is what makes 1920 and 2560 render the
     // same dashboard rather than merely a similar one.
-    assert.match(src, /const measure = `calc\(\$\{size \* maxCols\}px/,
-      "the dashboard column needs one measure, or nothing shares a right edge");
+    assert.match(src, /const measure = gm\s*\?\s*\(gm\.cap \? gm\.cap \+ "px" : "none"\)/,
+      "when dashgrid draws the cards the measure must be ITS cap, not a second copy of the sum");
+    assert.match(src, /: `calc\(\$\{size \* maxCols\}px/,
+      "and the Canvas-card fallback still needs one measure of its own");
     // The cap is a COLUMN COUNT, defaulting to five, and 0 lifts it.
     assert.match(src, /d\.maxColumns == null \? 5 : d\.maxColumns \| 0/,
       "the column cap should default to five and be user-settable");

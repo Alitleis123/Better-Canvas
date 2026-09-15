@@ -175,29 +175,30 @@ module.exports = {
       "the empty state must be re-attached when the tab changes");
   },
 
-  "the preview stage and the drawer agree on where the panel starts"() {
-    // They were two hardcoded widths for the same edge: the drawer took
-    // min(720px, 54vw) and the stage reserved min(600px, 48vw), so the drawer
-    // covered the stage's right ~120px. The preview box is centred and sized to
-    // fill the stage, so the covered part was the page preview's right edge.
+  "the drawer and the page it docks beside agree on one width"() {
+    // They were two hardcoded widths for the same edge once: the drawer took
+    // min(720px, 54vw) and the preview stage reserved min(600px, 48vw), so the
+    // drawer covered the stage's right ~120px. The stage is gone, but the same
+    // hazard is: the space the page gives up has to be exactly the space the
+    // drawer takes, or the page is either clipped or short.
     const src = read("src/content/features/settings-panel.js");
     assert.match(src, /const DRAWER_W = "min\([^"]+\)";/,
       "the panel width must have one definition");
-    const uses = [...src.matchAll(/DRAWER_W \+ ";"/g)].length;
-    assert.ok(uses >= 2, "both the drawer and the preview stage must read it; found " + uses);
-    assert.doesNotMatch(src, /right:min\(\d+px/, "the stage must not hardcode its own width again");
+    assert.match(src, /width:" \+ DRAWER_W/, "the drawer reads it");
+    assert.match(src, /margin-right: \$\{DRAWER_W\}/, "and so does the page's margin");
     assert.doesNotMatch(src, /width:min\(\d+px/, "the drawer must not hardcode its own width again");
   },
 
   "opening the drawer focuses something the user can see"() {
-    // The trap takes the first tabbable in DOM order, and that is now the master
-    // switch's visually hidden checkbox: a 1x1 box, so the focus ring landed
-    // somewhere invisible.
+    // The first tabbable in DOM order is the master switch's visually hidden
+    // checkbox: a 1x1 box, so landing there puts the focus ring somewhere
+    // invisible. Focus is aimed rather than trapped, because the page beside the
+    // drawer has to stay reachable.
     const panel = read("src/content/features/settings-panel.js");
-    const call = panel.match(/BC\.ui\.focusTrap\(shadow, \{[\s\S]*?\}\)/);
-    assert.ok(call, "the drawer does not install a focus trap");
-    assert.match(call[0], /initial:[^,]*\.bc-search/,
+    assert.match(panel, /const first = shadow\.querySelector\("\.bc-search"\)/,
       "the drawer must aim its initial focus at a visible control");
+    assert.match(panel, /first\.focus\(\{ preventScroll: true \}\)/,
+      "and must not scroll the docked page to do it");
   },
 
   "a tab that fails to render says so"() {

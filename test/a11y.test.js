@@ -56,15 +56,26 @@ module.exports = {
   },
 
   "every modal surface traps focus and restores it on close"() {
+    // The settings drawer is deliberately NOT in this list. It docks beside the
+    // page rather than covering it, so trapping focus would make the page it is
+    // previewing unreachable by keyboard -- the same mistake pointer-events:none
+    // made for the mouse.
     for (const [file, what] of [
       ["src/content/core/commandPalette.js", "command palette"],
-      ["src/content/features/settings-panel.js", "settings drawer"],
     ]) {
       const src = read(file);
       assert.match(src, /focusTrap\(/, `${what} does not trap focus`);
     }
     // The trap itself restores focus on release.
     assert.match(read("src/content/core/ui.js"), /previous\.focus\(\)/);
+  },
+
+  "the docked drawer does not claim to be modal"() {
+    // aria-modal tells a screen reader the rest of the document is inert. The
+    // page beside this drawer is live, clickable and the whole point.
+    const src = read("src/content/features/settings-panel.js");
+    assert.match(src, /root\.setAttribute\("role", "dialog"\)/);
+    assert.ok(!/setAttribute\("aria-modal"/.test(src), "a docked panel is not a modal");
   },
 
   "the focus trap reads activeElement through the shadow root"() {
@@ -76,7 +87,7 @@ module.exports = {
   "modal surfaces are labelled and marked modal"() {
     assert.match(read("src/content/core/commandPalette.js"), /aria-modal/);
     assert.match(read("src/content/core/commandPalette.js"), /aria-label", "Command palette/);
-    assert.match(read("src/content/features/settings-panel.js"), /aria-modal/);
+    // The drawer is labelled, but not marked modal -- see above.
     assert.match(read("src/content/features/settings-panel.js"), /aria-label", "Better Canvas settings/);
   },
 

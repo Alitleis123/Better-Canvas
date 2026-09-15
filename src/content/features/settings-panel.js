@@ -21,7 +21,6 @@
   let shadow = null;
   let store = null;
   let isOpen = false;
-  let trap = null;
 
   function makeAdapter() {
     return {
@@ -125,8 +124,11 @@
     `;
     const root = document.createElement("div");
     root.className = "root";
+    // A dialog, but NOT aria-modal. The drawer docks beside the page instead of
+    // covering it: the page stays scrollable, clickable and reachable by
+    // keyboard, so claiming modality here would tell a screen reader the rest of
+    // the document is inert when it is the very thing being previewed.
     root.setAttribute("role", "dialog");
-    root.setAttribute("aria-modal", "true");
     root.setAttribute("aria-label", "Better Canvas settings");
     shadow.appendChild(style);
     shadow.appendChild(root);
@@ -157,258 +159,60 @@
     // removed, stacking up handlers pointed at dead hosts.
     const bag = BC.lifecycle.bag("settingsPanel-persist");
     bag.once("global", () => {
-      bag.listen(document, "mousedown", (e) => {
-        if (!isOpen || !drawerHost) return;
-        if (e.target === drawerHost || drawerHost.contains(e.target)) return;
-        close();
-      });
+      // NO click-outside-to-close. The page beside the drawer is the live
+      // preview, so clicking it is the thing you are meant to do; closing the
+      // panel every time somebody tried would make the dock useless.
       bag.listen(document, "keydown", (e) => { if (e.key === "Escape" && isOpen) close(); });
     });
     return drawerHost;
   }
 
-  // A scrim gives the drawer depth and signals that the page behind is inert.
-  // Sliding in over an unchanged page was the single biggest thing making this feel
-  // unfinished.
-  function ensureScrim() {
-    let s = document.querySelector('[data-bc-node="bc-drawer-scrim"]');
-    if (!s) {
-      s = document.createElement("div");
-      s.setAttribute("data-bc-node", "bc-drawer-scrim");
-      s.style.cssText =
-        "position:fixed; inset:0; z-index:calc(var(--bc-z-drawer, 2147482000) - 1);" +
-        "background: var(--bc-overlay, rgba(15,20,28,.44)); opacity:0; pointer-events:none;" +
-        "transition: opacity var(--bc-dur-3, 220ms) var(--bc-ease-out, ease);";
-      s.addEventListener("mousedown", close);
-      document.body.appendChild(s);
+
+  // ---- Live preview: the page itself ----
+  //
+  // This used to be a scaled, inert CLONE of the page rendered beside the
+  // drawer, and it was wrong in three ways at once.
+  //
+  //  - It stripped [data-bc-node] from the clone, on the reasoning that "classes
+  //    stay, which is what our own styling actually targets". That stopped being
+  //    true the moment a feature scoped its sheet by node id, which dashgrid
+  //    does for every rule it has -- so the preview rendered the real card
+  //    markup with none of the card CSS, as a column of bare links.
+  //  - It was pointer-events:none, so every control in it was dead. Reasonable
+  //    for a photograph; baffling for something that looks like your page.
+  //  - It was a photograph. A snapshot rebuilt on a 200ms timer can only ever
+  //    approximate what the page would do, and anything driven by a real
+  //    re-render -- the To Do list rebuilding its layout, for one -- did not
+  //    show up in it at all without reloading the tab.
+  //
+  // So there is no preview any more. The drawer DOCKS, the real page shrinks to
+  // the space beside it, and what you are looking at is the page: correctly
+  // styled because it is the one the stylesheets are for, live because applyAll
+  // runs on it, and clickable because it is not a picture. It also costs about
+  // 120 lines less code than photographing it did.
+  const DOCK_STYLE = "bc-drawer-dock";
+
+  function dockPage(on) {
+    const root = document.documentElement;
+    if (!on) {
+      root.removeAttribute("data-bc-dock");
+      // The sheet stays: removing it would drop the transition mid-slide and the
+      // page would snap back rather than follow the drawer out.
+      return;
     }
-    return s;
-  }
-
-  // ---- Live preview ----
-  // The drawer is a shadow root, so a clone mounted inside it would lose every
-  // Canvas rule and render as unstyled markup. In the light DOM it inherits the
-  // page's own stylesheets, and because our theming is global CSS on :root it
-  // also inherits every token change for free: a colour or radius edit repaints
-  // the preview with no wiring at all. Only structural features (a To Do mode
-  // that rebuilds the list) need the rebuild below.
-  const PREVIEW_NODE = "bc-drawer-preview";
-  // The stage's padding, in one place, because buildPreview does arithmetic
-  // against it rather than measuring it.
-  const PREVIEW_PAD = 24;
-  let previewHost = null;
-  let previewUnsub = null;
-  let previewTimer = 0;
-  // A multiplier on top of the fit scale, so "100%" means "fills the stage" and
-  // the control is about seeing detail rather than about absolute pixels.
-  let previewZoom = 1;
-
-  function ensurePreview() {
-    if (previewHost && previewHost.isConnected) return previewHost;
-    previewHost = document.createElement("div");
-    previewHost.setAttribute("data-bc-node", PREVIEW_NODE);
-    // Inert and unreadable: it is a picture of the page, not a second copy of it.
-    previewHost.setAttribute("aria-hidden", "true");
-    previewHost.style.cssText =
-      "position:fixed; top:0; bottom:0; left:0; right:" + DRAWER_W + ";" +
-      "z-index:calc(var(--bc-z-drawer, 2147482000) - 1);" +
-      "display:flex; flex-direction:column; align-items:center; justify-content:center;" +
-      // Deliberately NOT on the spacing scale: buildPreview subtracts this
-      // padding numerically to size the stage, so a density multiplier here
-      // would leave the preview overflowing its own frame.
-      "gap:14px; padding:" + PREVIEW_PAD + "px; background: var(--bc-surface-1, #f6f7fb);" +
-      "overflow:hidden;" +
-      "pointer-events:auto; opacity:0;" +
-      "transition:opacity var(--bc-dur-3, 220ms) var(--bc-ease-out, ease);";
-    document.body.appendChild(previewHost);
-    return previewHost;
-  }
-
-  // The source is the app shell rather than just the content column, so the left
-  // nav is in frame and the nav hide/reorder settings are previewable too.
-  function previewSource() {
-    return document.querySelector("#application") ||
-           document.querySelector("#wrapper") ||
-           document.querySelector("#content");
-  }
-
-  function buildPreview() {
-    const host = ensurePreview();
-    const src = previewSource();
-    if (!src) return;
-    const vw = Math.max(320, window.innerWidth);
-    const vh = Math.max(240, window.innerHeight);
-    const paneW = host.clientWidth - PREVIEW_PAD * 2;
-    const paneH = host.clientHeight - PREVIEW_PAD * 2;
-    if (paneW <= 0 || paneH <= 0) return;
-
-    // The toolbar goes in first so its height can be MEASURED. It was a
-    // hardcoded 44 against an actual 36 plus a 14px gap, which is the kind of
-    // number that is wrong in one direction or the other forever.
-    host.textContent = "";
-    const bar = buildToolbar();
-    host.appendChild(bar);
-    const barH = Math.ceil(bar.getBoundingClientRect().height) + 14;
-    const availH = Math.max(120, paneH - barH);
-
-    // Scale from the WIDTH alone. Fitting both axes meant the stage's taller
-    // aspect went unused: at a 1280x900 window the picture came out 541x380
-    // inside 541x808 of space, so 47% of the stage was empty and the preview
-    // read as a small thumbnail floating in a panel.
-    const k = Math.max(0.1, (paneW / vw) * previewZoom);
-    // With the scale set by width, the spare height buys more PAGE instead of
-    // more blank stage: the frame is as tall as the stage can hold, capped at
-    // how tall the page actually is.
-    const pageH = Math.max(vh, src.scrollHeight || vh);
-    const frameH = Math.max(vh * 0.5, Math.min(pageH, availH / k));
-
-    const clone = src.cloneNode(true);
-    // Our install guards all ask document for an existing [data-bc-node]. A clone
-    // carrying those markers would answer for a component that is no longer on
-    // the real page, so a feature could skip reinstalling itself. Classes stay,
-    // which is what our own styling actually targets.
-    clone.querySelectorAll("[data-bc-node]").forEach((n) => n.removeAttribute("data-bc-node"));
-    clone.querySelectorAll("script,iframe,object,embed").forEach((n) => n.remove());
-    // Every id in a clone is a duplicate id, and document.querySelectorAll("#x ...")
-    // then reports the page twice for as long as the drawer is open. The nav is the
-    // one place we cannot strip: hiding a nav item is a rule on that item's id, so
-    // the menu keeps its ids and the rest of the shell loses them.
-    const navScope = clone.querySelector("#menu");
-    if (clone.id) clone.removeAttribute("id");
-    clone.querySelectorAll("[id]").forEach((n) => {
-      if (navScope && (n === navScope || navScope.contains(n))) return;
-      n.removeAttribute("id");
-    });
-
-    const frame = document.createElement("div");
-    frame.style.cssText =
-      "width:" + vw + "px; height:" + Math.round(frameH) + "px; transform:scale(" + k + ");" +
-      "transform-origin: top left; pointer-events:none; user-select:none;";
-    frame.appendChild(clone);
-
-    const box = document.createElement("div");
-    box.style.cssText =
-      "width:" + Math.round(Math.min(vw * k, paneW)) + "px;" +
-      "height:" + Math.round(Math.min(frameH * k, availH)) + "px;" +
-      "overflow:hidden; border-radius: var(--bc-radius-xl, 12px);" +
-      "border:1px solid var(--bc-border-strong, var(--bc-border, #e5e7eb));" +
-      "box-shadow: var(--bc-shadow-4, 0 24px 64px rgba(0,0,0,.3));" +
-      "background: var(--bc-surface-1, #f6f7fb);";
-    box.appendChild(frame);
-
-    host.appendChild(box);
-  }
-
-  // The stage swallows pointer events so the preview can never be mistaken for
-  // the real page; the toolbar is the one part that takes them back.
-  function buildToolbar() {
-    const bar = document.createElement("div");
-    bar.style.cssText =
-      "display:inline-flex; align-items:center; gap:2px; pointer-events:auto;" +
-      "padding:4px; border-radius: var(--bc-radius-pill, 999px);" +
-      "background: var(--bc-surface-2, #fff);" +
-      "border:1px solid var(--bc-border-strong, var(--bc-border, #e5e7eb));" +
-      "box-shadow: var(--bc-shadow-1, 0 1px 3px rgba(0,0,0,.12));" +
-      "font: 12px/1 var(--bc-font-sans, system-ui); color: var(--bc-text, #1b2430);";
-
-    // The two steppers were a MINUS SIGN and an ASCII plus: different widths,
-    // different optical weights, and the minus written as an escape so it read
-    // as ASCII in the source while rendering as a glyph on screen.
-    const step = (icon, aria, delta) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.setAttribute("aria-label", aria);
-      b.title = aria;
-      b.innerHTML = BC.icons.svg(icon, { size: 14 });
-      b.style.cssText =
-        "width:26px; height:26px; display:inline-flex; align-items:center; justify-content:center;" +
-        "border:0; border-radius:50%; background:transparent; color:inherit; cursor:pointer;" +
-        "font:inherit; line-height:0;";
-      b.addEventListener("mouseenter", () => { b.style.background = "var(--bc-surface-4, rgba(0,0,0,.05))"; });
-      b.addEventListener("mouseleave", () => { b.style.background = "transparent"; });
-      b.addEventListener("click", () => {
-        previewZoom = Math.min(3, Math.max(0.4, Math.round((previewZoom + delta) * 20) / 20));
-        BC.util.guard(buildPreview, "drawer preview");
-      });
-      return b;
-    };
-
-    const pct = document.createElement("button");
-    pct.type = "button";
-    pct.setAttribute("aria-label", "Reset preview zoom to fit");
-    pct.textContent = Math.round(previewZoom * 100) + "%";
-    pct.style.cssText =
-      "min-width:52px; height:26px; padding:0 var(--bc-space-3, 8px); border:0; border-radius: var(--bc-radius-pill, 999px);" +
-      "background:transparent; color:inherit; cursor:pointer; font:inherit; font-variant-numeric: tabular-nums;";
-    pct.addEventListener("click", () => { previewZoom = 1; BC.util.guard(buildPreview, "drawer preview"); });
-
-    bar.addEventListener("mousedown", (e) => e.stopPropagation());
-    bar.appendChild(step("minus", "Zoom out", -0.1));
-    bar.appendChild(pct);
-    bar.appendChild(step("plus", "Zoom in", 0.1));
-    return bar;
-  }
-
-  function refreshPreview() {
-    clearTimeout(previewTimer);
-    // Settings can land in bursts while a slider moves; rebuilding the shell on
-    // every one of those would be the most expensive thing on the page.
-    previewTimer = setTimeout(() => { BC.util.guard(buildPreview, "drawer preview"); }, 200);
-  }
-
-  // Off the opening frame entirely: the drawer is what the click asked for, the
-  // preview is what it can afford a moment later.
-  function schedulePreview() {
-    const go = () => { if (isOpen) showPreview(); };
-    if (typeof requestIdleCallback === "function") requestIdleCallback(go, { timeout: 200 });
-    else setTimeout(go, 0);
-  }
-
-  function showPreview() {
-    BC.util.guard(buildPreview, "drawer preview");
-    if (previewHost) requestAnimationFrame(() => { if (previewHost) previewHost.style.opacity = "1"; });
-    if (!previewUnsub && BC.storage && BC.storage.subscribe) {
-      previewUnsub = BC.storage.subscribe(refreshPreview);
-    }
-  }
-
-  function hidePreview() {
-    clearTimeout(previewTimer);
-    if (previewUnsub) { BC.util.guard(() => previewUnsub(), "drawer preview"); previewUnsub = null; }
-    if (previewHost) {
-      previewHost.style.opacity = "0";
-      // Drop the clone rather than leave a stale copy of the page in the DOM.
-      const h = previewHost;
-      setTimeout(() => { if (h && !isOpen) h.textContent = ""; }, 240);
-    }
-  }
-
-  // A fixed overlay does not stop a wheel event: it keeps scrolling the document
-  // underneath, so the page drifted behind a preview that could not follow it.
-  // Locking the document is the only thing that actually holds it still. The
-  // padding compensates for the scrollbar the lock removes, which would
-  // otherwise shift the whole page sideways as the drawer opens.
-  let scrollLock = null;
-  function lockPageScroll() {
-    if (scrollLock) return;
-    const el = document.documentElement;
-    const bd = document.body;
-    const bar = window.innerWidth - el.clientWidth;
-    // Both, because which element actually scrolls depends on the page: locking
-    // only the one Canvas is not using leaves the page free to move.
-    scrollLock = { htmlOv: el.style.overflow, bodyOv: bd ? bd.style.overflow : "", padRight: el.style.paddingRight };
-    el.style.overflow = "hidden";
-    if (bd) bd.style.overflow = "hidden";
-    if (bar > 0) el.style.paddingRight = bar + "px";
-  }
-  function unlockPageScroll() {
-    if (!scrollLock) return;
-    const el = document.documentElement;
-    const bd = document.body;
-    el.style.overflow = scrollLock.htmlOv;
-    if (bd) bd.style.overflow = scrollLock.bodyOv;
-    el.style.paddingRight = scrollLock.padRight;
-    scrollLock = null;
+    BC.injector.setStyle(DOCK_STYLE, `
+      /* The transition lives outside the [data-bc-dock] guard so it applies on
+         the way out as well as the way in. */
+      body { transition: margin-right var(--bc-dur-4, 300ms) var(--bc-ease-spring, ease); }
+      :root[data-bc-dock] body { margin-right: ${DRAWER_W}; }
+      /* Canvas pins a few things to the right edge of the VIEWPORT rather than
+         to the content column, and a viewport-fixed element does not know the
+         page got narrower -- it would sit under the drawer. */
+      :root[data-bc-dock] #right-side-wrapper,
+      :root[data-bc-dock] .ic-app-course-nav-toggle { max-width: 100%; }
+      @media (prefers-reduced-motion: reduce) { body { transition: none; } }
+    `);
+    root.setAttribute("data-bc-dock", "");
   }
 
   function setExpanded(v) {
@@ -420,39 +224,29 @@
     ensureDrawer();
     if (isOpen) return;
     isOpen = true;
-    const scrim = ensureScrim();
     // Asymmetric on purpose: slow-in reads as considered, quick-out as responsive.
     drawerHost.style.transition = "transform var(--bc-dur-4, 300ms) var(--bc-ease-spring, ease), visibility 0s";
     drawerHost.style.visibility = "visible";
-    scrim.style.pointerEvents = "auto";
     requestAnimationFrame(() => {
       if (!drawerHost) return;
       drawerHost.style.transform = "translateX(0)";
-      scrim.style.opacity = "1";
     });
     setExpanded(true);
-    lockPageScroll();
-    schedulePreview();
-    // Aim the initial focus. The trap otherwise takes the first tabbable in DOM
-    // order, and that is now the master switch's visually hidden checkbox -- a
-    // 1x1 box, so opening the drawer put the focus ring somewhere invisible.
-    // The search field is both visible and the most useful place to land.
-    if (BC.ui && BC.ui.focusTrap) {
-      trap = BC.ui.focusTrap(shadow, {
-        initial: shadow.querySelector(".bc-search") || undefined,
-        returnTo: document.getElementById("bc-open-settings"),
-      });
-    }
+    dockPage(true);
+    // Focus is AIMED, not trapped. A trap is correct for a modal and wrong for a
+    // dock: it would make the page beside the drawer unreachable by keyboard,
+    // which is the same mistake pointer-events:none made for the mouse.
+    // The search field is both visible and the most useful place to land -- the
+    // first tabbable in DOM order is the master switch's visually hidden
+    // checkbox, a 1x1 box, so landing there puts the ring somewhere invisible.
+    const first = shadow.querySelector(".bc-search");
+    if (first) BC.util.guard(() => first.focus({ preventScroll: true }), "drawer focus");
   }
 
   function close() {
     if (!isOpen) return;
     isOpen = false;
-    if (trap) { BC.util.guard(() => trap.release(), "drawer focus"); trap = null; }
-    hidePreview();
-    unlockPageScroll();
-    const scrim = document.querySelector('[data-bc-node="bc-drawer-scrim"]');
-    if (scrim) { scrim.style.opacity = "0"; scrim.style.pointerEvents = "none"; }
+    dockPage(false);
     if (drawerHost) {
       // Delay visibility until the slide-out finishes, so the panel doesn't vanish
       // mid-transition but also can't keep eating clicks once it's gone.

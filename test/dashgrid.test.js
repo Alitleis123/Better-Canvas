@@ -82,8 +82,13 @@ module.exports = {
     const css = (() => { e.apply(e.settings({ maxColumns: 5, cardSize: "m" })); e.deliver(CARDS); return null; })();
     // The sheet is only written once the cards arrive, so assert on the source's
     // own arithmetic rather than waiting on a promise.
-    assert.match(SRC, /const cap = d\.maxColumns > 0 \? \(d\.maxColumns \* w \+ \(d\.maxColumns - 1\) \* gap\) : 0;/,
+    assert.match(SRC, /cap: cols > 0 \? cols \* w \+ \(cols - 1\) \* GAP : 0/,
       "the cap has to be maxColumns cards plus the gaps between them");
+    // And it lives in ONE place, because the page chrome around the grid has to
+    // end exactly where the cards end.
+    assert.match(SRC, /function metrics\(d\)/);
+    assert.match(SRC, /BC\.dashgrid = \{[\s\S]{0,200}metrics,/,
+      "the page chrome reads the cap from here rather than recomputing it");
     assert.ok(css === null);
   },
 
@@ -91,7 +96,7 @@ module.exports = {
     // 250, not 260. At 260 a five-column cap is 1364px and a 15" MacBook -- which
     // leaves about 1357px of content column -- falls to four columns while a 24"
     // gets five, which is exactly the inconsistency this is meant to remove.
-    assert.match(SRC, /\{ s: 210, m: 250, l: 300 \}/,
+    assert.match(SRC, /const CARD_W = \{ s: 210, m: 250, l: 300 \};/,
       "the medium width sets the cap; changing it changes which monitors agree");
   },
 

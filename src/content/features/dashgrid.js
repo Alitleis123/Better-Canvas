@@ -45,7 +45,30 @@
   // This is the resolved colour -- a user override, then Canvas's, then our
   // deterministic fallback -- so a course is the same colour in both places,
   // including the ones Canvas has no colour for at all.
-  BC.dashgrid = { colourFor: (id) => colours.get(String(id)) || null };
+  // The card width table and the cap arithmetic, in ONE place. The page chrome
+  // around the grid -- the header bar, the content column's measure -- has to end
+  // exactly where the cards end, and it used to compute that from its own copy of
+  // the numbers. They agreed at the medium size and disagreed at the other two,
+  // so a small or large card left the header running wider than the grid under it.
+  // 250 for medium is not a taste call, it is the number that makes the cap
+  // reachable. The cap is maxColumns cards wide, and a layout is only identical
+  // across monitors for windows at least that wide -- so it has to clear the
+  // SMALLEST target. A 15" MacBook at 1710 CSS px leaves about 1357px of content
+  // column once Canvas's nav and sidebar are out; at 260 the five-column cap is
+  // 1364 and that machine falls to four columns while a 24" gets five. At 250 the
+  // cap is 1314, all three clear it, and all three render five columns of 250.
+  const CARD_W = { s: 210, m: 250, l: 300 };
+  const GAP = 16;
+  function metrics(d) {
+    const w = CARD_W[(d && d.cardSize) || "m"] || CARD_W.m;
+    const cols = Math.max(0, Math.min(12, d && d.maxColumns == null ? 5 : (d.maxColumns | 0)));
+    return { w, gutter: GAP, cols, cap: cols > 0 ? cols * w + (cols - 1) * GAP : 0 };
+  }
+
+  BC.dashgrid = {
+    colourFor: (id) => colours.get(String(id)) || null,
+    metrics,
+  };
 
   // ---- data ---------------------------------------------------------------
 
@@ -139,6 +162,41 @@
 
   // ---- one card -----------------------------------------------------------
 
+  // Canvas's dashboard_cards payload is camelCase at the top level (shortName,
+  // courseCode, backgroundColor) but its `links` array is SNAKE_CASE. Reading
+  // only `cssClass` meant every link resolved to undefined and fell through to
+  // the default glyph, so every card's footer was the same document icon
+  // repeated two to four times -- the quick links were decoration. The fixture
+  // used cssClass too, which is why the harness agreed.
+  //
+  // Both spellings, then the `icon` field (icon-announcement, icon-assignment),
+  // then the path itself, because a link that cannot be identified is worse than
+  // useless: it looks like the one next to it.
+  function linkKind(l) {
+    const raw = l.css_class || l.cssClass || "";
+    if (raw) return String(raw).toLowerCase();
+    const icon = String(l.icon || "").replace(/^icon-/, "").toLowerCase();
+    if (icon) return ICON_ALIAS[icon] || icon;
+    const m = /\/(announcements|assignments|discussion_topics|files|quizzes|grades|users|syllabus|modules|pages)\b/
+      .exec(String(l.path || ""));
+    return m ? (ICON_ALIAS[m[1]] || m[1]) : "";
+  }
+
+  // Canvas's icon names are singular and its paths are not always the same word
+  // as the section.
+  const ICON_ALIAS = {
+    announcement: "announcements",
+    assignment: "assignments",
+    discussion: "discussions",
+    discussion_topics: "discussions",
+    document: "files",
+    folder: "files",
+    quiz: "quizzes",
+    users: "people",
+    user: "people",
+    gradebook: "grades",
+  };
+
   const LINK_ICON = {
     announcements: "megaphone",
     assignments: "checklist",
@@ -148,6 +206,8 @@
     syllabus: "file",
     grades: "trend",
     people: "star",
+    modules: "columns",
+    pages: "file",
   };
 
   function buildCard(card, opts) {
@@ -231,9 +291,13 @@
       const nav = el("nav", { class: "bc-dc-links", "aria-label": name + " quick links" });
       if (!links.length) nav.classList.add("is-empty");
       for (const l of links.slice(0, 5)) {
-        const a = el("a", { class: "bc-dc-ln", href: l.path, title: l.label || l.cssClass });
-        a.setAttribute("aria-label", (l.label || l.cssClass) + " — " + name);
-        a.appendChild(BC.icons.el(LINK_ICON[l.cssClass] || "file"));
+        const kind = linkKind(l);
+        // The label is what a screen reader reads and what the tooltip shows, so
+        // it falls back to the resolved kind rather than to an empty string.
+        const label = l.label || (kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : "Open");
+        const a = el("a", { class: "bc-dc-ln", href: l.path, title: label });
+        a.setAttribute("aria-label", label + " — " + name);
+        a.appendChild(BC.icons.el(LINK_ICON[kind] || "file"));
         if (l.icon && /unread|new/i.test(String(l.icon))) a.classList.add("is-new");
         nav.appendChild(a);
       }
@@ -252,17 +316,7 @@
   // ---- the sheet ----------------------------------------------------------
 
   function sheet(d) {
-    // 250 for medium is not a taste call, it is the number that makes the cap
-    // reachable. The cap below is maxColumns cards wide, and a layout is only
-    // identical across monitors for windows at least that wide -- so the cap has
-    // to clear the SMALLEST target. A 15" MacBook at 1710 CSS px leaves about
-    // 1357px of content column once Canvas's nav and sidebar are out; at 260 the
-    // five-column cap is 1364 and that machine falls to four columns while a 24"
-    // gets five. At 250 the cap is 1314, every one of the three clears it, and
-    // all three render five columns of 250.
-    const w = { s: 210, m: 250, l: 300 }[d.cardSize || "m"] || 250;
-    const gap = 16;
-    const cap = d.maxColumns > 0 ? (d.maxColumns * w + (d.maxColumns - 1) * gap) : 0;
+    const { w, gutter: gap, cap } = metrics(d);
     const rad = (d.cardRadius | 0);
 
     // THE LAYOUT, and the reason a 15", a 24" and a 27" now agree.

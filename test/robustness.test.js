@@ -82,71 +82,66 @@ module.exports = {
     assert.match(src, /BC\.diag\.push/);
   },
 
-  "the drawer preview clone cannot answer for the real page"() {
-    // The preview is a live copy of the shell sitting in the light DOM, so every
-    // marker it carries is a second answer to a document query. Install guards
-    // ask for [data-bc-node], and ids make querySelectorAll report the page
-    // twice, so both are stripped. The nav is the exception: hiding a nav item
-    // is a rule on that item's id.
+  // The drawer used to render a scaled, inert CLONE of the page beside itself.
+  // These tests pinned that machinery; it is gone, and what replaced it has the
+  // opposite contract, so they assert the opposite things.
+
+  "the drawer docks the real page rather than photographing it"() {
+    // A clone could never be right. It stripped [data-bc-node] on the reasoning
+    // that our styling targets classes -- true until a feature scoped its sheet
+    // by node id, which dashgrid does for every rule, so the preview showed the
+    // real card markup with none of the card CSS.
     const src = read("src/content/features/settings-panel.js");
-    assert.match(src, /clone\.querySelectorAll\("\[data-bc-node\]"\)\.forEach\(\(n\) => n\.removeAttribute\("data-bc-node"\)\)/,
-      "the clone must not carry our install markers");
-    assert.match(src, /clone\.querySelectorAll\("\[id\]"\)/,
-      "the clone must not carry duplicate ids");
-    assert.match(src, /clone\.querySelector\("#menu"\)/,
-      "the nav keeps its ids so nav hiding stays previewable");
-    assert.match(src, /clone\.querySelectorAll\("script,iframe,object,embed"\)\.forEach\(\(n\) => n\.remove\(\)\)/,
-      "the clone must not re-run or re-fetch anything");
+    assert.ok(!/cloneNode\(true\)/.test(src), "there must be no clone of the page");
+    assert.ok(!/removeAttribute\("data-bc-node"\)/.test(src),
+      "nothing may strip the markers our own stylesheets are scoped by");
+    assert.match(src, /function dockPage/, "the page is docked instead");
+    assert.match(src, /:root\[data-bc-dock\] body \{ margin-right/,
+      "docking is the page making room, not a second copy of it");
   },
 
-  "the drawer locks the page it is covering"() {
-    // A fixed overlay does not stop a wheel event, so without this the page
-    // scrolled underneath a preview that could not follow it. Both elements are
-    // locked because which one scrolls depends on the page.
+  "the docked page keeps its scroll, and the drawer does not lock it"() {
+    // The lock existed because a fixed overlay does not stop a wheel event and
+    // the page drifted behind a preview that could not follow it. There is no
+    // preview to follow now: the page IS the preview, and freezing it would
+    // stop you scrolling to the part you are trying to restyle.
     const src = read("src/content/features/settings-panel.js");
-    assert.match(src, /function lockPageScroll/, "the drawer must lock page scroll");
-    const i = src.indexOf("function lockPageScroll");
-    const body = src.slice(i, src.indexOf("function unlockPageScroll"));
-    assert.match(body, /el\.style\.overflow = "hidden"/);
-    assert.match(body, /bd\.style\.overflow = "hidden"/);
-    assert.match(body, /paddingRight/, "the removed scrollbar must be compensated or the page shifts");
-    const u = src.slice(src.indexOf("function unlockPageScroll"));
-    assert.match(u.slice(0, 400), /scrollLock\.htmlOv/, "the original value must be restored, not assumed empty");
-    assert.match(u.slice(0, 400), /scrollLock\.bodyOv/);
+    assert.ok(!/function lockPageScroll/.test(src), "the page must not be frozen");
+    assert.ok(!/style\.overflow = "hidden"/.test(src));
   },
 
-  "the preview stage does not punch a hole in the modal"() {
-    // The stage sits above the scrim. With pointer-events:none it let clicks and
-    // wheel through to the page; the clone inside stays inert instead.
+  "the docked page stays usable: no scrim, no trap, no click-to-close"() {
+    // All three are correct for a modal and wrong for a dock. The scrim made the
+    // page inert, the focus trap made it unreachable by keyboard, and
+    // click-outside-to-close dismissed the panel the moment you touched the very
+    // thing you were previewing.
     const src = read("src/content/features/settings-panel.js");
-    const i = src.indexOf("previewHost.style.cssText");
-    const css = src.slice(i, i + 700);
-    assert.match(css, /pointer-events:auto/, "the stage must take events, not pass them on");
-    assert.match(css, /overflow:hidden/, "the stage must clip a zoomed preview");
-    assert.match(src, /transform-origin: top left; pointer-events:none/,
-      "the cloned page itself must stay inert");
+    assert.ok(!/bc-drawer-scrim/.test(src), "the scrim is gone");
+    assert.ok(!/focusTrap\(shadow/.test(src), "focus is aimed, not trapped");
+    assert.match(src, /NO click-outside-to-close/,
+      "clicking the page is the point of the dock");
+    assert.match(src, /first\.focus\(\{ preventScroll: true \}\)/,
+      "focus still has to land somewhere visible");
+    // Escape is the one dismissal that still makes sense.
+    assert.match(src, /e\.key === "Escape" && isOpen/);
   },
 
-  "opening the drawer does not wait for the preview"() {
-    // Cloning the shell is the expensive part and nothing about it needs to
-    // happen in the frame that shows the panel.
+  "closing the drawer lets the page slide back"() {
+    // The transition is declared outside the [data-bc-dock] guard on purpose: a
+    // rule that only exists while docked cannot animate the undock, so the page
+    // would snap back while the drawer slid out.
     const src = read("src/content/features/settings-panel.js");
-    assert.match(src, /schedulePreview\(\);/, "open must schedule the preview, not build it");
-    assert.match(src, /function schedulePreview[\s\S]{0,240}requestIdleCallback/,
-      "the preview build must be deferred to idle");
-    assert.match(src, /function prewarm[\s\S]{0,240}requestIdleCallback/,
-      "the settings form must be built before the first click, not during it");
+    const i = src.indexOf("function dockPage");
+    const body = src.slice(i, src.indexOf("\n  }", i));
+    assert.match(body, /body \{ transition: margin-right/);
+    const guarded = body.indexOf(":root[data-bc-dock] body");
+    const plain = body.indexOf("body { transition: margin-right");
+    assert.ok(plain < guarded, "the transition must not be inside the docked-only rule");
+    assert.match(body, /prefers-reduced-motion/);
   },
 
-  "the drawer preview releases its subscription on close"() {
-    // It rebuilds the whole shell on every settings change, so a subscription
-    // left running after close is a rebuild of a hidden element for the rest of
-    // the page's life.
+  "the settings form is built before the first click, not during it"() {
     const src = read("src/content/features/settings-panel.js");
-    const i = src.indexOf("function hidePreview");
-    assert.ok(i > 0, "hidePreview is missing");
-    const body = src.slice(i, i + 420);
-    assert.match(body, /previewUnsub/, "hidePreview must release the store subscription");
-    assert.match(body, /clearTimeout\(previewTimer\)/, "a pending rebuild must be cancelled");
+    assert.match(src, /function prewarm[\s\S]{0,240}requestIdleCallback/);
   },
 };

@@ -44,7 +44,7 @@
   // which is why the cards stacked in a single column.
   const GRID = "[data-bc-cardgrid]";
 
-  function layoutCss(d, cardCount) {
+  function layoutCss(d, cardCount, own) {
     const size = { s: 200, m: 250, l: 320 }[d.cardSize || "m"] || 250;
 
     // AUTO-FIT, a flexible track, and a ceiling on the CARD rather than on the
@@ -99,7 +99,14 @@
     // dropped every wide monitor to four. Capping the boxes that lay out means
     // the measure is exactly the budget, whatever Canvas pads.
     const maxCols = Math.max(0, Math.min(12, d.maxColumns == null ? 5 : d.maxColumns | 0));
-    const measure = `calc(${size * maxCols}px + ${maxCols - 1} * var(--bc-space-7, 16px))`;
+    // When dashgrid draws the cards it owns the arithmetic, so the measure is ITS
+    // cap rather than a second copy of the sum. The two agreed at the medium card
+    // and disagreed at small and large, which left the header bar ending a few
+    // hundred pixels wide of the grid beneath it.
+    const gm = own && BC.dashgrid && BC.dashgrid.metrics ? BC.dashgrid.metrics(d) : null;
+    const measure = gm
+      ? (gm.cap ? gm.cap + "px" : "none")
+      : `calc(${size * maxCols}px + ${maxCols - 1} * var(--bc-space-7, 16px))`;
     // The track minimum is the LARGER of the chosen card size and the width that
     // makes the courses we actually have fill the row exactly.
     //
@@ -240,6 +247,14 @@
         color: var(--bc-text-subtle, var(--bc-muted)) !important;
         margin: 0 0 var(--bc-space-5, 12px) !important;
       }`;
+
+    // The header bar, the container's padding and the measure the content column
+    // is held to are PAGE chrome, not card chrome: they apply whichever renderer
+    // draws the cards. Skipping them along with the rest of layoutCss is what put
+    // Canvas's white title bar and its hairline back on a dashboard whose cards we
+    // were drawing -- with the filter box sitting on the rule, and the header
+    // running the full window while the grid under it stopped at its cap.
+    if (own) return `${shell}\n${chrome}`;
 
     let css = `
       ${shell}
@@ -817,7 +832,11 @@
     // The card count shapes the grid, so it has to be read BEFORE the sheet is
     // written rather than after.
     const cardNodes = document.querySelectorAll(".ic-DashboardCard");
-    BC.injector.setStyle("bc-dashboard-ui", (own ? "" : layoutCss(d, cardNodes.length)) + `
+    // The overlays -- grade pill, progress bar, due badges, sparkline -- are drawn
+    // ON Canvas's cards and are meaningless when ours are the ones on screen.
+    // dashgrid draws its own from the same data, so emitting these too would be
+    // dead CSS carrying a `position: relative` for a card nobody can see.
+    const overlayCss = own ? "" : `
       .bc-inline-grade {
         position: absolute; top: 8px; right: 8px; z-index: 2;
         padding: 2px var(--bc-space-3, 8px); border-radius: 999px; font-size: var(--bc-text-2xs, 11px); font-weight: 700;
@@ -839,8 +858,16 @@
       }
       .bc-badge.due { background: var(--bc-warn, #a16207); color: var(--bc-warn-fg, #fff); }
       .ic-DashboardCard { position: relative; }
+      .bc-card-spark {
+        position: absolute; left: 8px; bottom: 12px; z-index: 2;
+        line-height: 0; pointer-events: none;
+      }`;
 
-      .bc-course-search { margin: 0 0 var(--bc-space-7, 16px); }
+    BC.injector.setStyle("bc-dashboard-ui", layoutCss(d, cardNodes.length, own) + overlayCss + `
+      /* A top margin as well as a bottom one. With none, the box butted straight
+         against the header block above it and read as sitting ON the rule rather
+         than below it. */
+      .bc-course-search { margin: var(--bc-space-5, 12px) 0 var(--bc-space-7, 16px); }
       .bc-course-search-input {
         width: min(320px, 100%);
         padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px);
@@ -851,10 +878,6 @@
       }
       .bc-course-search-input:focus-visible {
         outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 1px;
-      }
-      .bc-card-spark {
-        position: absolute; left: 8px; bottom: 12px; z-index: 2;
-        line-height: 0; pointer-events: none;
       }
       .bc-gpa-card { margin-bottom: var(--bc-space-7, 16px); }
       /* Canvas's own sidebar blocks carry three different bottom margins, so the
