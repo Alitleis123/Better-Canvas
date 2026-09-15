@@ -63,7 +63,9 @@ the real engine, and `test/panel.test.js` holds them there.
 
 One screenshot of one tab at one width cannot see either failure, so
 `test/browser/panel.sh` renders all thirteen tabs at six drawer widths and exits
-non-zero on a starved label or a hint over two lines.
+non-zero on a starved label or a hint over two lines. `test/browser/all.sh` runs
+that and every other sweep — roughly 900 rendered states — alongside the node
+suite, and is the release gate.
 
 ---
 

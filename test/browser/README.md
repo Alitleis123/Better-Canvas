@@ -102,16 +102,24 @@ the dashboard's own card-radius control so that slider moved nothing. Three
 apparent failures were wrong selectors on my part, which is the other thing this
 is good for.
 
-## Five commands that answer a question
+## Commands that answer a question
 
 The console helpers above and the screenshots below are ways to *look*. These
-are ways to **ask**: each one exits non-zero, so they can gate a release. All of
-them need `serve.js` running.
+are ways to **ask**: each one exits non-zero, so they can gate a release.
+
+```sh
+test/browser/all.sh          # everything below, plus the node suite
+```
+
+That is the release gate — 617 node tests and roughly 900 rendered states. It
+starts `serve.js` itself if it is not already up. The individual ones need the
+server running:
 
 ```sh
 test/browser/measure.sh      # the dashboard at ten widths, 1280 to 3440
 test/browser/panel.sh        # 13 settings tabs x 6 drawer widths
 test/browser/overflow.sh     # 4 densities x 3 text scales x 19 surfaces
+test/browser/contrast.sh     # 6 dark tones x 4 layouts, 44 skins, light
 test/browser/live.sh         # 37 settings, round-tripped off/on/off
 test/browser/probe.sh SIZE Q EXPR   # one expression, at any width, as TEXT
 ```
@@ -147,6 +155,11 @@ What each one is actually watching for:
   state: the two floating utility buttons park their labels at `max-width: 0` so
   a screen reader can still read them, and a naive check flags that in all 231
   states, which buries everything else.
+- **contrast.sh** — every palette we ship against every element carrying text,
+  with the background resolved the way the browser paints it rather than the way
+  the CSS declares it. Two sweeps, because they fail differently: a dark tone
+  re-tints a palette that is otherwise ours, while a skin replaces the whole
+  token layer and can fail where every tone passes.
 - **live.sh** — the settings round-trip described in the section above.
 
 ## Photograph it
