@@ -78,7 +78,11 @@
     const w = gm ? gm.w : ({ s: 200, m: 250, l: 320 }[d.cardSize || "m"] || 250);
     const g = gm ? gm.gutter : 16;
 
-    const row = document.querySelector(".ic-Layout-columns, #main");
+    // The flex container first: what we need is the width available to
+    // [content + gap + sidebar], which is that element's content box. On a live
+    // Canvas that is #not_right_side.ic-app-main-content; .ic-Layout-columns is
+    // the block around it and #main the fallback for versions with neither.
+    const row = document.querySelector(".ic-app-main-content, .ic-Layout-columns, #main");
     if (!row) return clear();
     const rs = getComputedStyle(row);
     let avail = row.clientWidth - (parseFloat(rs.paddingLeft) || 0) - (parseFloat(rs.paddingRight) || 0);
@@ -125,7 +129,11 @@
   // so dragging a window between monitors kept whatever measure it booted with.
   function watchMeasure(d, own) {
     snapMeasure(d, own);
-    const row = document.querySelector(".ic-Layout-columns, #main");
+    // The flex container first: what we need is the width available to
+    // [content + gap + sidebar], which is that element's content box. On a live
+    // Canvas that is #not_right_side.ic-app-main-content; .ic-Layout-columns is
+    // the block around it and #main the fallback for versions with neither.
+    const row = document.querySelector(".ic-app-main-content, .ic-Layout-columns, #main");
     if (!row || typeof ResizeObserver === "undefined") return;
     if (snapRO) snapRO.disconnect();
     // Deferred to the next frame rather than run inside the delivery. Writing a
@@ -264,7 +272,15 @@
          about how wide Canvas's sidebar is -- which is 320px on Canvas and
          280px in the replica, and would have been a guess wrong by 40px on one
          of them, every time. */
-      .ic-Layout-columns { justify-content: center !important; }
+      /* BOTH, because which one is the flex container depends on the Canvas
+         version. On a live dashboard .ic-Layout-columns is display: BLOCK and
+         the flex parent of the content wrapper is
+         #not_right_side.ic-app-main-content one level inside it — so this rule
+         on .ic-Layout-columns alone was landing on a block element and doing
+         exactly nothing, while the replica (which had no such level) reported
+         the layout centred at ten widths. justify-content on a block element is
+         inert, so naming both is safe rather than a guess between them. */
+      .ic-Layout-columns, .ic-app-main-content { justify-content: center !important; }
       .ic-Layout-contentWrapper {
         flex: 0 1 ${M} !important;
         min-width: 0 !important;

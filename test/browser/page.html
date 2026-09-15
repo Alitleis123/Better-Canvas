@@ -15,8 +15,16 @@
     </ul>
   </header>
   <div id="wrapper" class="ic-Layout-wrapper">
+    <!-- #not_right_side is the real flex container on Canvas, and this replica
+         did not have it: it made .ic-Layout-columns the flex parent of the
+         content wrapper directly. On a live dashboard .ic-Layout-columns is
+         display: BLOCK and #not_right_side.ic-app-main-content is the flex one,
+         so a justify-content rule aimed at the former does nothing at all —
+         which is how the dashboard shipped uncentred while this fixture showed
+         it centred at ten widths. Structure verified against a real Canvas DOM. -->
     <div id="main" class="ic-Layout-columns">
-      <div id="content-wrapper" class="ic-Layout-contentWrapper" style="flex:1;min-width:0">
+     <div id="not_right_side" class="ic-app-main-content">
+      <div id="content-wrapper" class="ic-Layout-contentWrapper" style="flex:1 1 auto;min-width:0">
         <div id="content" class="ic-Layout-contentMain">
 
           <div class="ic-Dashboard-header__layout">
@@ -164,6 +172,7 @@
           <a class="Button button-sidebar-wide" href="/grades">View Grades</a>
         </aside>
       </div>
+     </div>
     </div>
   </div>
 </div>

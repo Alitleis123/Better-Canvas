@@ -10,8 +10,13 @@ a { color: #0374b5; text-decoration: none; }
 .ic-app-header__menu-list-item { list-style: none; }
 .ic-app-header__menu-list-link { color: #fff; }
 
-.ic-Layout-columns { display: flex; gap: 16px; padding: 16px; align-items: flex-start; }
-.ic-Layout-contentMain { flex: 1; background: #f5f5f5; padding: 0 12px; min-width: 0; }
+/* .ic-Layout-columns is a BLOCK on a live Canvas dashboard; the flex container
+   is #not_right_side.ic-app-main-content inside it. Modelling the flex on the
+   wrong element is what let a justify-content rule aimed at .ic-Layout-columns
+   pass here and do nothing in production. */
+.ic-Layout-columns { display: block; padding: 16px; }
+.ic-app-main-content { display: flex; gap: 16px; align-items: flex-start; }
+.ic-Layout-contentMain { background: #f5f5f5; padding: 0 12px; min-width: 0; }
 #right-side-wrapper { width: 280px; flex: 0 0 280px; }
 #right-side { background: #f5f5f5; }
 
