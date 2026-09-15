@@ -71,6 +71,25 @@ module.exports = {
       "the contrast boost belongs in the composed inline filter, not in a rule");
   },
 
+  "closing the settings drawer gives the keyboard back its place"() {
+    // The host goes visibility:hidden on close, which stops anything inside it
+    // being focusable, and the browser answers that by dropping focus to
+    // <body> -- so closing with Escape lost the user's place on the page and
+    // the next Tab started again from the top of Canvas.
+    //
+    // Focus inside a shadow root reports as the HOST, which is the only way to
+    // ask "was that ours" from outside it, and the restore has to be conditional
+    // on it: closing by clicking something on the page should leave the click
+    // where it landed rather than yanking the ring back to the nav.
+    const src = read("src/content/features/settings-panel.js");
+    const close = /function close\(\) \{[\s\S]*?\n  \}/.exec(src);
+    assert.ok(close, "close() not found");
+    assert.match(close[0], /document\.activeElement === drawerHost/,
+      "close() must ask whether focus was inside the drawer before moving it");
+    assert.match(close[0], /getElementById\("bc-open-settings"\)[\s\S]*?\.focus\(/,
+      "and hand it back to the control that opened the drawer");
+  },
+
   "the file star is a real button with a pressed state"() {
     const src = read("src/content/features/files.js");
     assert.match(src, /<button type="button" class="bc-file-star/);

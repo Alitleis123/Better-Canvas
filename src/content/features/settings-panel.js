@@ -247,6 +247,17 @@
   function close() {
     if (!isOpen) return;
     isOpen = false;
+    // Give the keyboard back what it had. The host is about to go
+    // visibility:hidden, which stops anything inside it being focusable, and the
+    // browser answers that by dropping focus to <body> -- so closing the drawer
+    // with Escape lost the user's place on the page entirely and the next Tab
+    // started again from the top of Canvas.
+    //
+    // Only when focus is actually OURS. Focus inside a shadow root reports as
+    // the host, so that is the check. Closing by clicking something on the page
+    // should leave the click where it landed rather than yanking the ring back
+    // to the nav.
+    const fromInside = drawerHost && document.activeElement === drawerHost;
     dockPage(false);
     if (drawerHost) {
       // Delay visibility until the slide-out finishes, so the panel doesn't vanish
@@ -257,6 +268,10 @@
       drawerHost.style.visibility = "hidden";
     }
     setExpanded(false);
+    if (fromInside) {
+      const trigger = document.getElementById("bc-open-settings");
+      if (trigger) BC.util.guard(() => trigger.focus({ preventScroll: true }), "drawer refocus");
+    }
   }
   // An explicit flag, not a string match on style.transform: open() sets the
   // transform inside requestAnimationFrame, so a toggle() immediately after an
