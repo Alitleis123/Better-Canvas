@@ -32,8 +32,12 @@ function env(cardsPayload) {
   sb.BC.isDarkActive = () => false;
   sb.BC.storage = { current: null, local: {} };
   let resolveCards, rejectCards;
+  let colours = { custom_colors: {} };
   sb.BC.api = {
     dashboardCards: () => new Promise((res, rej) => { resolveCards = res; rejectCards = rej; }),
+    // Canvas's own colour picker reads and writes this; the card payload's own
+    // colour field has moved between versions, so this is the reliable source.
+    customColors: () => Promise.resolve(colours),
   };
   sb.BC.requestApply = () => {};
   load(sb, "src/content/features/dashgrid.js");
@@ -54,6 +58,7 @@ function env(cardsPayload) {
       sb.BC.features.dashgrid.apply(s, { page: "dashboard", courseId: null, path: "/" });
     },
     deliver(list) { resolveCards(list == null ? cardsPayload : list); },
+    setColours(map) { colours = { custom_colors: map }; },
     fail(e) { rejectCards(e || new Error("nope")); },
     grid() { return sb.document.querySelector('[data-bc-node="bc-dashgrid"]'); },
     sheet() {
@@ -115,6 +120,7 @@ module.exports = {
       "and Canvas's own cards stay visible in the meantime");
     e.deliver(CARDS);
     await Promise.resolve(); await Promise.resolve();
+    await Promise.resolve(); await Promise.resolve();
     e.apply(e.settings({}));
     const g = e.grid();
     assert.ok(g, "our grid mounts");
@@ -129,6 +135,7 @@ module.exports = {
     e.apply(e.settings({}));
     e.fail();
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    await Promise.resolve(); await Promise.resolve();
     e.apply(e.settings({}));
     assert.equal(e.grid(), null, "no empty grid is left behind");
     assert.equal(e.container.hasAttribute("data-bc-dashgrid-off"), false,
@@ -142,6 +149,7 @@ module.exports = {
     const e = env();
     e.apply(e.settings({}));
     e.deliver(CARDS);
+    await Promise.resolve(); await Promise.resolve();
     await Promise.resolve(); await Promise.resolve();
     e.apply(e.settings({}));
     const navs = e.grid().querySelectorAll(".bc-dc-links");
@@ -158,6 +166,7 @@ module.exports = {
     const e = env();
     e.apply(e.settings({}));
     e.deliver(CARDS);
+    await Promise.resolve(); await Promise.resolve();
     await Promise.resolve(); await Promise.resolve();
     e.apply(e.settings({}));
     const cards = e.grid().querySelectorAll(".bc-dc");
@@ -200,6 +209,31 @@ module.exports = {
     assert.match(block, /rgba\(0,0,0,\.34\) 100%/, "and bottom");
   },
 
+  async "the colour the user actually chose wins over everything we could guess"() {
+    // On a real dashboard every course came out painted with our FALLBACK -- a
+    // purple course rendered brown -- because the only field read was
+    // card.backgroundColor, and that has moved between Canvas versions. The
+    // picker's own endpoint is the one place the choice is definitely recorded.
+    const e = env();
+    e.setColours({ "course_1": "#7b2fb5" });
+    e.apply(e.settings({}));
+    e.deliver(CARDS);
+    await Promise.resolve(); await Promise.resolve();
+    await Promise.resolve(); await Promise.resolve();
+    e.apply(e.settings({}));
+    const card = e.grid().querySelector('.bc-dc[data-bc-course="1"]');
+    assert.equal(card.style.getPropertyValue("--dc-c"), "#7b2fb5",
+      "the picker's colour must beat the card payload's own");
+  },
+
+  "a missing colours response still renders a dashboard"() {
+    // Fallback colours beat no dashboard, so the colour fetch is caught
+    // separately rather than failing the pair.
+    assert.match(SRC, /BC\.api\.customColors\(\)\.catch\(/,
+      "a failed colour fetch must not take the cards down with it");
+    assert.match(SRC, /Promise\.all\(\[/, "and it is fetched alongside them, not after");
+  },
+
   "the art is derived only from the course id, so it never moves"() {
     assert.match(SRC, /hash\(String\(card\.id \|\| card\.assetString \|\| card\.shortName \|\| ""\)\)/,
       "anything viewport- or order-dependent would repaint the card on resize");
@@ -210,6 +244,7 @@ module.exports = {
     e.apply(e.settings({}));
     e.deliver(CARDS);
     await Promise.resolve(); await Promise.resolve();
+    await Promise.resolve(); await Promise.resolve();
     e.apply(e.settings({ courses: { "1": { hidden: true } } }));
     assert.equal(e.grid().querySelectorAll(".bc-dc").length, 1);
   },
@@ -219,6 +254,7 @@ module.exports = {
     e.apply(e.settings({}));
     e.deliver(CARDS);
     await Promise.resolve(); await Promise.resolve();
+    await Promise.resolve(); await Promise.resolve();
     e.apply(e.settings({ courses: { "1": { nickname: "Poetry" } } }));
     const t = e.grid().querySelector(".bc-dc-a");
     assert.equal(t.textContent, "Poetry");
@@ -227,6 +263,42 @@ module.exports = {
   "the quick links sit above the stretched link, or they would all open the course"() {
     assert.match(SRC, /\.bc-dc-a::after \{ content: ""; position: absolute; inset: 0; z-index: 1; \}/);
     assert.match(SRC, /\.bc-dc-ln \{\s*position: relative; z-index: 2;/);
+  },
+
+  async "each card can be recoloured, renamed and hidden from the card itself"() {
+    // Replacing Canvas's cards took away its kebab -- colour, rename,
+    // unfavourite -- and left the settings drawer as the only way to do any of
+    // it, which is a long walk for something you are looking straight at. The
+    // menu writes the SAME per-course overrides the drawer's course editor
+    // writes, so the two are one setting seen twice.
+    const e = env();
+    e.apply(e.settings({}));
+    e.deliver(CARDS);
+    await Promise.resolve(); await Promise.resolve();
+    await Promise.resolve(); await Promise.resolve();
+    e.apply(e.settings({}));
+    const card = e.grid().querySelector('.bc-dc[data-bc-course="1"]');
+    assert.ok(card.querySelector(".bc-dc-kebab"), "every card carries the options button");
+    assert.match(SRC, /function write\(id, patch\)/);
+    assert.match(SRC, /d\.dashboard\.courses = d\.dashboard\.courses \|\| \{\}/,
+      "it must write the same override shape the settings course editor writes");
+    assert.match(SRC, /if \(patch\[k\] === null\) delete cur\[k\]/,
+      "Reset has to delete the key, not write an empty one");
+  },
+
+  "opening the card menu does not open the course"() {
+    // The whole card is one stretched link, so the kebab has to stop the click
+    // or every attempt to recolour a course navigates away from the dashboard.
+    assert.match(SRC, /e\.preventDefault\(\); e\.stopPropagation\(\);/);
+    assert.match(SRC, /z-index: 4;/, "and it has to sit above the link's ::after");
+  },
+
+  "the rename field commits on blur or Enter, not per keystroke"() {
+    // Every write re-renders the grid, which would take the field out from under
+    // the caret mid-word.
+    assert.match(SRC, /name\.addEventListener\("blur", commit\)/);
+    assert.match(SRC, /if \(e\.key === "Enter"\)/);
+    assert.ok(!/name\.addEventListener\("input"/.test(SRC));
   },
 
   "teardown removes our grid and unhides Canvas's"() {

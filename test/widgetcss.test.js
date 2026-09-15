@@ -293,6 +293,26 @@ module.exports = {
       "the segmented view control must report which option is active");
   },
 
+  "a kanban lane in a sidebar is a section, not a grey slab"() {
+    // Stacked one-per-row, three filled boxes read as chrome rather than as
+    // columns -- and with one task and two empty lanes, which is the ordinary
+    // case in a 280px sidebar, the widget was mostly empty boxes announcing that
+    // they were empty.
+    const narrow = todoSrc.slice(todoSrc.indexOf("@container bctodo (max-width: 340px)",
+      todoSrc.indexOf(".bc-todo-kanban {")));
+    const block = narrow.slice(0, narrow.indexOf("\n    }\n"));
+    assert.match(block, /\.bc-kan-col \{[^}]*background: none/, "no box");
+    assert.match(block, /\.bc-kan-col\.bc-kan-empty h4 \{ opacity/, "an empty lane recedes");
+    assert.match(block, /\.bc-todo-kanban\.bc-kan-dragging .bc-kan-col\.bc-kan-empty/,
+      "but becomes a real drop target while something is being dragged");
+    assert.match(block, /\.bc-todo-kanban \.bc-todo-item \{ grid-template-columns: 22px/,
+      "and the checkbox goes back beside the title once the card has full width");
+    // The class the CSS keys on has to actually be emitted.
+    assert.match(todoSrc, /bc-kan-col\$\{arr\.length \? "" : " bc-kan-empty"\}/);
+    assert.match(todoSrc, /board\.classList\.add\("bc-kan-dragging"\)/);
+    assert.match(todoSrc, /board\.classList\.remove\("bc-kan-dragging"\)/);
+  },
+
   "a task carries its course's colour, the same one the card is painted with"() {
     // The planner sits beside the dashboard cards and had no idea what colour
     // any course was, so the two halves of the dashboard read as two products.

@@ -375,6 +375,11 @@ window.__bcApply = function (overrides) {
   BC.features.theming.apply(s, ctx);
   BC.features.dashboard.apply(s, ctx);
   if (BC.features.dashgrid) BC.features.dashgrid.apply(s, ctx);
+  // The real applyAll runs EVERY feature on every pass. Leaving todo out meant
+  // any re-apply -- and dashgrid's fetch causes one -- rendered the dashboard
+  // without re-rendering the planner beside it, so the widget vanished behind
+  // Canvas's native list and every kanban screenshot showed the wrong thing.
+  if (BC.features.todo) BC.features.todo.apply(s, ctx);
   if (BC.features.productivity) BC.features.productivity.apply(s, ctx);
   // apply() throttles the sweep; run it directly so a test does not have to wait.
   BC.theming.sweepLightSurfaces();

@@ -868,14 +868,22 @@
          against the header block above it and read as sitting ON the rule rather
          than below it. */
       .bc-course-search { margin: var(--bc-space-5, 12px) 0 var(--bc-space-7, 16px); }
+      /* !important throughout. Canvas styles its own search inputs with rules far
+         more specific than one class (.ic-app .ic-Input, and friends), so every
+         one of these lost and the filter box rendered as a white Canvas field
+         sitting on a dark dashboard. */
       .bc-course-search-input {
         width: min(320px, 100%);
-        padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px);
-        border: 1px solid var(--bc-border, #e5e7eb);
-        border-radius: var(--bc-radius-md, 8px);
-        background: var(--bc-surface-2, #fff); color: var(--bc-text, #1b2430);
-        font-family: var(--bc-font-sans); font-size: var(--bc-text-sm, 13px);
+        padding: var(--bc-space-2, 6px) var(--bc-space-4, 10px) !important;
+        border: 1px solid var(--bc-border, #e5e7eb) !important;
+        border-radius: var(--bc-radius-md, 8px) !important;
+        background: var(--bc-surface-2, #fff) !important;
+        color: var(--bc-text, #1b2430) !important;
+        box-shadow: none !important;
+        font-family: var(--bc-font-sans) !important; font-size: var(--bc-text-sm, 13px) !important;
+        height: auto !important;
       }
+      .bc-course-search-input::placeholder { color: var(--bc-text-subtle, var(--bc-muted)) !important; }
       .bc-course-search-input:focus-visible {
         outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 1px;
       }

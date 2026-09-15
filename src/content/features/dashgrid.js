@@ -36,6 +36,7 @@
   const CANVAS_GRID = "#DashboardCard_Container";
 
   let cards = null;            // the dashboard_cards payload
+  let custom = null;           // /users/self/colors -> { course_123: "#hex" }
   let state = "idle";          // idle | loading | done | failed
   let fails = 0;               // consecutive fetch failures, for the retry
   const colours = new Map();   // course id -> the colour we actually painted
@@ -75,8 +76,15 @@
   function load() {
     if (state !== "idle") return;
     state = "loading";
-    BC.api.dashboardCards().then((list) => {
+    // The colours are fetched ALONGSIDE the cards, not after them, and failing to
+    // get them is not failing to render: a dashboard with fallback colours beats
+    // no dashboard.
+    Promise.all([
+      BC.api.dashboardCards(),
+      BC.api.customColors().catch((e) => { BC.diag.push("dashgrid:colors", e); return null; }),
+    ]).then(([list, cc]) => {
       cards = Array.isArray(list) ? list : [];
+      custom = (cc && cc.custom_colors) || null;
       state = "done";
       if (BC.requestApply) BC.requestApply();
     }).catch((e) => {
@@ -150,7 +158,17 @@
   // fallback must not be the theme's own surface or the card loses its edge.
   function courseColour(card, spec, dark) {
     if (spec && spec.color && BC.color.isHex(spec.color)) return spec.color;
-    const c = card.backgroundColor || card.color;
+    // Canvas's own colour picker, first: it is the one place the user's choice is
+    // definitely recorded, and it is keyed by asset string ("course_123").
+    if (custom) {
+      const cc = custom[card.assetString || ("course_" + card.id)];
+      if (cc && BC.color.isHex(cc)) return BC.color.normalizeHex(cc);
+    }
+    // Then whatever the card itself carries. Three spellings, because this field
+    // has moved between Canvas versions and reading only one of them is how every
+    // course on a real dashboard ended up painted with our fallback instead of
+    // the colour its owner actually chose -- a purple course came out brown.
+    const c = card.backgroundColor || card.background_color || card.color;
     if (c && BC.color.isHex(c)) return BC.color.normalizeHex(c);
     // Deterministic, and picked from a fixed set rather than computed, so every
     // fallback colour is one somebody chose: evenly spaced around the wheel,
@@ -209,6 +227,84 @@
     modules: "columns",
     pages: "file",
   };
+
+  // Canvas's own card carried a kebab: colour, rename, unfavourite. Replacing
+  // its cards with ours took that away and left the settings drawer as the only
+  // way to recolour or rename a course -- which is a long walk for something you
+  // are looking straight at. The menu writes the SAME per-course overrides the
+  // drawer's course editor writes, so the two are one setting seen twice.
+  const SWATCHES = ["#b4341f", "#c2703a", "#a98407", "#4f7a3a", "#2f7d6b",
+                    "#2f6a9a", "#4f5bb8", "#7a4f9e", "#a8447a", "#5c6675"];
+
+  let openMenu = null;
+  function closeMenu() {
+    if (openMenu) { openMenu.remove(); openMenu = null; }
+  }
+  // One document listener for the lifetime of the feature, not one per card.
+  if (typeof document !== "undefined" && !BC.__dashgridMenuWired) {
+    BC.__dashgridMenuWired = true;
+    document.addEventListener("mousedown", (e) => {
+      if (openMenu && !openMenu.contains(e.target) && !e.target.closest(".bc-dc-kebab")) closeMenu();
+    }, true);
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+  }
+
+  function write(id, patch) {
+    BC.storage.update((d) => {
+      d.dashboard.courses = d.dashboard.courses || {};
+      const cur = Object.assign({}, d.dashboard.courses[String(id)] || {});
+      for (const k of Object.keys(patch)) {
+        if (patch[k] === null) delete cur[k];
+        else cur[k] = patch[k];
+      }
+      d.dashboard.courses[String(id)] = cur;
+    });
+  }
+
+  function buildMenu(card, spec, anchor) {
+    const el = BC.ui.el;
+    const id = String(card.id);
+    const menu = el("div", { class: "bc-dc-menu", role: "dialog", "aria-label": "Course options" });
+
+    const swatches = el("div", { class: "bc-dc-sw" });
+    for (const c of SWATCHES) {
+      const b = el("button", { type: "button", class: "bc-dc-swatch", "aria-label": "Set colour " + c });
+      b.style.background = c;
+      if ((spec.color || "").toLowerCase() === c) b.setAttribute("aria-current", "true");
+      b.addEventListener("click", () => { write(id, { color: c }); closeMenu(); });
+      swatches.appendChild(b);
+    }
+    menu.appendChild(el("p", { class: "bc-dc-mh", text: "Colour" }));
+    menu.appendChild(swatches);
+
+    menu.appendChild(el("p", { class: "bc-dc-mh", text: "Name" }));
+    const name = el("input", { class: "bc-dc-mi", type: "text",
+      placeholder: card.originalName || card.shortName || "Course name",
+      "aria-label": "Rename this course" });
+    name.value = spec.nickname || "";
+    // Commit on Enter or on blur, not per keystroke: every write re-renders the
+    // grid, which would take the field out from under the caret mid-word.
+    const commit = () => write(id, { nickname: name.value.trim() || null });
+    name.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); commit(); closeMenu(); }
+    });
+    name.addEventListener("blur", commit);
+    menu.appendChild(name);
+
+    const row = el("div", { class: "bc-dc-mr" });
+    const reset = el("button", { type: "button", class: "bc-dc-mb", text: "Reset" });
+    reset.addEventListener("click", () => { write(id, { color: null, nickname: null }); closeMenu(); });
+    const hide = el("button", { type: "button", class: "bc-dc-mb", text: "Hide card" });
+    hide.addEventListener("click", () => { write(id, { hidden: true }); closeMenu(); });
+    row.appendChild(reset);
+    row.appendChild(hide);
+    menu.appendChild(row);
+
+    anchor.appendChild(menu);
+    const f = menu.querySelector(".bc-dc-swatch");
+    if (f) BC.util.guard(() => f.focus(), "dashgrid menu focus");
+    return menu;
+  }
 
   function buildCard(card, opts) {
     const el = BC.ui.el;
@@ -323,6 +419,20 @@
     }
 
     const root = el("article", { class: "bc-dc", "data-bc-course": String(card.id) }, kids);
+
+    const kebab = el("button", { type: "button", class: "bc-dc-kebab",
+      "aria-label": "Options for " + name, "aria-haspopup": "dialog" });
+    kebab.appendChild(BC.icons.el("more"));
+    kebab.addEventListener("click", (e) => {
+      // The card is one big stretched link; without this the menu opens the
+      // course instead.
+      e.preventDefault(); e.stopPropagation();
+      const wasMine = openMenu && openMenu.parentElement === root;
+      closeMenu();
+      if (!wasMine) openMenu = buildMenu(card, spec, root);
+    });
+    root.appendChild(kebab);
+
     colours.set(String(card.id), colour);
     root.style.setProperty("--dc-c", colour);
     // Ink that is guaranteed legible on this course's colour, for the chip and
@@ -400,7 +510,7 @@
     }
     [data-bc-node="${NODE}"] .bc-dc-chip,
     [data-bc-node="${NODE}"] .bc-dc-due {
-      position: absolute; top: 8px;
+      position: absolute;
       display: inline-flex; align-items: center;
       height: 22px; padding: 0 var(--bc-space-3, 8px);
       border-radius: var(--bc-radius-pill, 999px);
@@ -409,7 +519,9 @@
       background: rgba(0,0,0,.52); color: #fff;
       backdrop-filter: blur(6px);
     }
-    [data-bc-node="${NODE}"] .bc-dc-chip { right: 8px; }
+    /* Bottom-right. It used to be top-right, which is where the options kebab
+       now lives -- the grade sat under it and the two overlapped on hover. */
+    [data-bc-node="${NODE}"] .bc-dc-chip { right: 8px; bottom: 8px; }
     /* Bottom-left of the art: the chip is top-right, so the two never collide
        however long either gets. */
     [data-bc-node="${NODE}"] .bc-dc-spark {
@@ -418,7 +530,73 @@
       color: #fff; opacity: .9;
       filter: drop-shadow(0 1px 2px rgba(0,0,0,.55));
     }
-    [data-bc-node="${NODE}"] .bc-dc-due { left: 8px; background: var(--bc-accent, #b4341f); }
+    [data-bc-node="${NODE}"] .bc-dc-due { left: 8px; top: 8px; background: var(--bc-accent, #b4341f); }
+
+    /* Top-right, where Canvas put its own. Each corner of the artwork holds one
+       thing: due badge top-left, kebab top-right, trend bottom-left, grade
+       bottom-right, so nothing ever collides with anything else. */
+    [data-bc-node="${NODE}"] .bc-dc-kebab {
+      position: absolute; top: 6px; right: 6px; z-index: 4;
+      width: 26px; height: 26px; padding: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: 0; border-radius: var(--bc-radius-md, 8px);
+      background: rgba(0,0,0,.45); color: #fff; cursor: pointer;
+      opacity: 0; transition: opacity var(--bc-dur-1, 90ms) var(--bc-ease-standard, ease);
+    }
+    [data-bc-node="${NODE}"] .bc-dc:hover .bc-dc-kebab,
+    [data-bc-node="${NODE}"] .bc-dc:focus-within .bc-dc-kebab { opacity: 1; }
+    /* No hover to reveal it with, so it stays put. */
+    @media (hover: none) { [data-bc-node="${NODE}"] .bc-dc-kebab { opacity: 1; } }
+    [data-bc-node="${NODE}"] .bc-dc-kebab:focus-visible {
+      outline: 2px solid var(--bc-focus-ring, var(--bc-accent)); outline-offset: 2px;
+    }
+    [data-bc-node="${NODE}"] .bc-dc-menu {
+      position: absolute; top: 34px; right: 6px; z-index: 6;
+      width: 216px; padding: var(--bc-space-4, 10px);
+      background: var(--bc-surface-2, #fff); color: var(--bc-text);
+      border: 1px solid var(--bc-border, #e5e7eb);
+      border-radius: var(--bc-radius-lg, 10px);
+      box-shadow: var(--bc-shadow-3, 0 12px 32px rgba(0,0,0,.24));
+      text-align: left;
+    }
+    [data-bc-node="${NODE}"] .bc-dc-mh {
+      margin: 0 0 var(--bc-space-2, 6px);
+      font-size: var(--bc-text-2xs, 11px); font-weight: var(--bc-weight-semibold, 600);
+      letter-spacing: var(--bc-tracking-caps, .06em); text-transform: uppercase;
+      color: var(--bc-text-subtle, var(--bc-muted));
+    }
+    [data-bc-node="${NODE}"] .bc-dc-sw {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--bc-space-2, 6px);
+      margin-bottom: var(--bc-space-4, 10px);
+    }
+    [data-bc-node="${NODE}"] .bc-dc-swatch {
+      height: 22px; border: 0; border-radius: var(--bc-radius-sm, 6px);
+      cursor: pointer; padding: 0;
+    }
+    [data-bc-node="${NODE}"] .bc-dc-swatch[aria-current="true"] {
+      outline: 2px solid var(--bc-text); outline-offset: 2px;
+    }
+    [data-bc-node="${NODE}"] .bc-dc-swatch:focus-visible {
+      outline: 2px solid var(--bc-focus-ring, var(--bc-accent)); outline-offset: 2px;
+    }
+    [data-bc-node="${NODE}"] .bc-dc-mi {
+      width: 100%; box-sizing: border-box;
+      padding: var(--bc-space-2, 6px) var(--bc-space-3, 8px);
+      border: 1px solid var(--bc-border, #e5e7eb);
+      border-radius: var(--bc-radius-md, 8px);
+      background: var(--bc-surface-1, #fff); color: var(--bc-text);
+      font: inherit; font-size: var(--bc-text-sm, 13px);
+      margin-bottom: var(--bc-space-4, 10px);
+    }
+    [data-bc-node="${NODE}"] .bc-dc-mr { display: flex; gap: var(--bc-space-2, 6px); }
+    [data-bc-node="${NODE}"] .bc-dc-mb {
+      flex: 1 1 auto; padding: var(--bc-space-2, 6px);
+      border: 1px solid var(--bc-border, #e5e7eb);
+      border-radius: var(--bc-radius-md, 8px);
+      background: var(--bc-surface-3, #f7fafc); color: var(--bc-text);
+      font: inherit; font-size: var(--bc-text-xs, 12px); cursor: pointer;
+    }
+    [data-bc-node="${NODE}"] .bc-dc-mb:hover { background: var(--bc-surface-4, rgba(0,0,0,.06)); }
 
     [data-bc-node="${NODE}"] .bc-dc-body {
       display: flex; flex-direction: column;
@@ -646,6 +824,10 @@
     // Rebuild wholesale. These are a few dozen small nodes at most, the data
     // only changes on a real settings or fetch change, and diffing them would be
     // a cache to keep correct for no measurable gain.
+    // Rebuilding the grid drops any open menu with it; reopening it after the
+    // rebuild would fight the caret in the rename field. Closing is the honest
+    // behaviour and it is what a colour click wants anyway.
+    closeMenu();
     const frag = document.createDocumentFragment();
     for (const c of list) frag.appendChild(buildCard(c, opts));
     root.textContent = "";
@@ -658,6 +840,6 @@
     styles: [STYLE],
     nodes: [NODE],
     apply,
-    unmount() { teardown(); state = "idle"; cards = null; fails = 0; colours.clear(); },
+    unmount() { teardown(); state = "idle"; cards = null; custom = null; fails = 0; colours.clear(); },
   });
 })();

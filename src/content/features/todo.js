@@ -534,8 +534,35 @@
     /* Three columns inside a sidebar are three words wide. One column each,
        stacked, is still a kanban and is actually readable. */
     @container bctodo (max-width: 340px) {
-      .bc-todo-kanban { grid-template-columns: 1fr; }
-      .bc-kan-col { min-height: 0; }
+      .bc-todo-kanban { grid-template-columns: 1fr; gap: 0; }
+      /* No box. Stacked one-per-row, three filled grey slabs read as chrome
+         rather than as columns -- and with one task and two empty lanes, which is
+         the ordinary case in a sidebar, the widget was mostly empty boxes
+         announcing that they were empty. A section heading in the same language
+         as the list view's day headers says the same thing and costs nothing. */
+      .bc-kan-col {
+        min-height: 0; background: none; padding: 0;
+        margin-bottom: var(--bc-space-4, 10px);
+      }
+      .bc-kan-col:last-child { margin-bottom: 0; }
+      .bc-kan-col h4 { margin: var(--bc-space-4, 10px) 0 var(--bc-space-2, 6px); }
+      .bc-kan-col:first-child h4 { margin-top: 0; }
+      /* An empty lane keeps its heading -- it is still a drop target and still
+         tells you the lane exists -- but it recedes, and it only draws a target
+         while something is actually being dragged. */
+      .bc-kan-col.bc-kan-empty h4 { opacity: .55; }
+      .bc-kan-col.bc-kan-empty { margin-bottom: var(--bc-space-2, 6px); }
+      /* The checkbox goes back beside the title. Stacking it above was right for
+         a column three words wide; stacked one-per-row the card has the whole
+         sidebar, so stacking just spent a line of height per task to put a
+         22px circle on a row of its own. */
+      .bc-todo-kanban .bc-todo-item { grid-template-columns: 22px minmax(0, 1fr); }
+      .bc-todo-kanban.bc-kan-dragging .bc-kan-col.bc-kan-empty {
+        min-height: 34px;
+        border: 1px dashed var(--bc-border, #e5e7eb);
+        border-radius: var(--bc-radius-md, 8px);
+        padding: var(--bc-space-2, 6px);
+      }
     }
 
     /* ---- detail popover ------------------------------------------------- */
@@ -1287,7 +1314,7 @@
       else cols.todo.push(it);
     }
     const col = (id, title, arr) =>
-      `<div class="bc-kan-col" data-col="${id}"><h4>${title}<span class="bc-num">${arr.length}</span></h4>` +
+      `<div class="bc-kan-col${arr.length ? "" : " bc-kan-empty"}" data-col="${id}"><h4>${title}<span class="bc-num">${arr.length}</span></h4>` +
       arr.slice(0, 25).map((it) => itemHtml(it, settings, true)).join("") + `</div>`;
     list.innerHTML = `<div class="bc-todo-kanban">
       ${col("todo", "To do", cols.todo)}
@@ -1300,10 +1327,16 @@
       card.setAttribute("draggable", "true");
       card.addEventListener("dragstart", (e) => {
         card.classList.add("bc-dragging");
+        const board = list.querySelector(".bc-todo-kanban");
+        if (board) board.classList.add("bc-kan-dragging");
         e.dataTransfer.setData("text/plain", card.dataset.i);
         e.dataTransfer.effectAllowed = "move";
       });
-      card.addEventListener("dragend", () => card.classList.remove("bc-dragging"));
+      card.addEventListener("dragend", () => {
+        card.classList.remove("bc-dragging");
+        const board = list.querySelector(".bc-todo-kanban");
+        if (board) board.classList.remove("bc-kan-dragging");
+      });
     });
     list.querySelectorAll(".bc-kan-col").forEach((colEl) => {
       colEl.addEventListener("dragover", (e) => { e.preventDefault(); colEl.classList.add("bc-drop"); });

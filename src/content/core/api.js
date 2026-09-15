@@ -103,6 +103,17 @@
 
     self() { return api.getJSON("/api/v1/users/self", { ttl: TTL.self }); },
 
+    // The authoritative course colours -- this is the endpoint Canvas's own colour
+    // picker reads and writes. dashboard_cards is supposed to carry the colour on
+    // each card, but the field name has moved between Canvas versions (and its
+    // `links` array is snake_case while the rest of the payload is camelCase), so
+    // reading the card alone left every course painted with our fallback instead
+    // of the colour the user actually chose.
+    // Shape: { custom_colors: { "course_123": "#RRGGBB", ... } }
+    customColors() {
+      return api.getJSON("/api/v1/users/self/colors", { ttl: TTL.cards });
+    },
+
     dashboardCards() {
       return api.getJSON("/api/v1/dashboard/dashboard_cards", { ttl: TTL.cards });
     },

@@ -64,7 +64,16 @@ document.getElementById('f').onload = async function () {
       if (root) root.scrollTop = +q.get('y');
     }
   } else if (mode === 'todo') {
-    w.__bcTodo(q.get('p') || 'ring', dark);
+    // v=<list|kanban|timeblock> and g=<grouping>, because the kanban board in a
+    // sidebar is a different shape from the list and was never photographed.
+    const over = Object.assign({}, dark);
+    if (q.get('v') || q.get('g') || q.get('lay')) {
+      over.todo = Object.assign({}, over.todo,
+        q.get('v') ? { view: q.get('v') } : null,
+        q.get('g') ? { groupBy: q.get('g') } : null,
+        q.get('lay') ? { layout: q.get('lay') } : null);
+    }
+    w.__bcTodo(q.get('p') || 'ring', over);
   } else if (mode === 'skin') {
     w.__bcSkin(q.get('s') || 'matcha-strawberry', dark);
   } else {
