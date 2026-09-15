@@ -1795,7 +1795,13 @@
      allowed to take the slack (minmax(0,1fr)) and the only one allowed to
      shrink, which is what stopped Redo being clipped off the right edge and
      landing under the drawer's close button. The 46px reserves that corner. */
+  /* Its own container. The chrome bar is a SIBLING of .bc-shell-wrap, so a
+     bc-shell query cannot reach it — which is why hiding the wordmark on a
+     narrow panel did nothing the first time. The overflow menu is absolute
+     against .bc-menu-wrap rather than fixed, so the containment this adds does
+     not move it. */
   .bc-header {
+    container-type: inline-size; container-name: bc-header;
     position: sticky; top: 0; z-index: 3;
     display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto;
     align-items: center; gap: var(--bc-space-4, 10px);
@@ -1806,6 +1812,14 @@
     border-bottom: 1px solid var(--border);
   }
   @supports not (backdrop-filter: blur(1px)) { .bc-header { background: var(--bg); } }
+  /* The wordmark goes, and the version with it. The search box was the only
+     flexible thing in this bar, so it paid for everything else: measured at a
+     420px drawer it was 51px wide, which is not a search box. The brand block
+     is a constant 134px and is the thing worth spending — the mark stays, so
+     the panel is still identifiably ours. */
+  @container bc-header (max-width: 600px) {
+    .bc-brand-name, .bc-brand-sub { display: none; }
+  }
   .bc-brand { display: flex; align-items: center; gap: var(--bc-space-3, 8px); min-width: 0; }
   .bc-logo {
     width: 30px; height: 30px; flex: none;
@@ -1834,13 +1848,24 @@
   }
   .bc-master.bc-on { color: var(--bc-accent-text, var(--accent)); background: var(--bc-accent-weak, rgba(168,69,44,.12)); }
 
-  .bc-search-wrap { position: relative; display: flex; align-items: center; min-width: 0; }
+  /* A floor on the search box, and the brand yields to it rather than the other
+     way round. The wrap was min-width: 0 and the only flexible thing in the
+     chrome bar, so it absorbed all the slack: measured at a 420px drawer the
+     field was 51px, which is not a search box. The brand block is a constant
+     134px and is the thing worth spending first — the mark stays, so the panel
+     is still identifiably ours. */
+  .bc-search-wrap { position: relative; display: flex; align-items: center; min-width: 165px; }
   .bc-search-ic { position: absolute; left: var(--bc-space-3, 8px); display: inline-flex; color: var(--muted); pointer-events: none; }
   .bc-search {
     width: 100%; min-width: 0;
     padding: var(--bc-space-3, 8px) var(--bc-space-4, 10px) var(--bc-space-3, 8px) 30px;
     border: 1px solid var(--border); border-radius: var(--bc-radius-pill, 999px);
     background: var(--panel); color: inherit; font: inherit;
+    /* Ellipsis rather than a hard cut. The floor above fits the placeholder at
+       the default type scale, but the scale goes up to xl and the placeholder
+       grows with it, and "Search this ta" cut mid-word reads as a broken box
+       where "Search this…" reads as a narrow one. */
+    text-overflow: ellipsis;
   }
   .bc-search::placeholder { color: var(--muted); }
   .bc-header-actions { display: flex; gap: var(--bc-space-1, 4px); align-items: center; }
@@ -1932,7 +1957,14 @@
      There was a .bc-shell-collapsed variant of every rule below, for a class no
      code has ever set -- six dead rules that the a11y test was reading as proof
      of a second mechanism. */
-  @container bc-shell (max-width: 470px) {
+  /* 600, not 470. The rail is 200px wide and the body needs 380 to hold two
+     columns, so a shell between those two numbers keeps a full-height rail
+     beside a body too narrow to use it: at a 520px drawer that is 200px of
+     navigation against 252px of settings, every row stacked, and the panel
+     twice as tall as it needs to be. And that band is not exotic — the drawer
+     is min(720px, 54vw), so it is every window from about 960px to 1200px.
+     Below 600 the rail goes horizontal and the body gets the whole width. */
+  @container bc-shell (max-width: 600px) {
     .bc-shell { grid-template-columns: minmax(0, 1fr); }
     .bc-nav { position: static; top: auto; }
     .bc-nav-groups { flex-direction: row; overflow-x: auto; overflow-y: hidden; gap: var(--bc-space-5, 12px); padding-bottom: var(--bc-space-2, 6px); }
@@ -2070,7 +2102,11 @@
      width anyway. Measured at a 600px drawer with that cap in place, the GPA
      "Scale" row still came out with a 26px label and a seven-line hint. A fixed
      ceiling is the only thing the track actually honours. */
-  .bc-select { max-width: 190px; }
+  /* min-width: 0 as well as the cap. The control sits in an auto track, whose
+     minimum is the content's minimum -- and a select's minimum is its widest
+     option, which would fight the label's 144px floor for the same pixels and
+     win by overflowing the row. */
+  .bc-select { max-width: 190px; min-width: 0; }
   .bc-number, .bc-color-text, .bc-key { max-width: 100%; }
   .bc-row-wide .bc-select { max-width: 100%; }
 
