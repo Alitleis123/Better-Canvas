@@ -59,6 +59,10 @@
   // 1364 and that machine falls to four columns while a 24" gets five. At 250 the
   // cap is 1314, all three clear it, and all three render five columns of 250.
   const CARD_W = { s: 210, m: 250, l: 300 };
+  // The list layout's art is a fixed strip at every card size. Both the flex
+  // basis that sizes it and the monogram that has to fit inside it read this,
+  // because when they were two literals the monogram outgrew the strip.
+  const LIST_ART = 132;
   const GAP = 16;
   function metrics(d) {
     const w = CARD_W[(d && d.cardSize) || "m"] || CARD_W.m;
@@ -535,7 +539,15 @@
     [data-bc-node="${NODE}"] .bc-dc-mono {
       position: absolute; left: var(--bc-pad-row, 14px); bottom: 6px;
       font-family: var(--bc-font-sans);
-      font-size: calc(var(--bc-text-2xl, 20px) * 2.3); line-height: .8;
+      /* Sized off the CARD, not off the reading scale. This was
+         calc(--bc-text-2xl * 2.3), which ties a decorative mark on a piece of
+         artwork to the user's text-size preference: at xl the monogram grew
+         past the art it sits on and "COMM" lost 4px of its last stem to the
+         overflow clip, while the card it was drawn on had not changed size at
+         all. A monogram is texture, not text to be read, so it follows the one
+         box it belongs to. 0.184 reproduces the previous default exactly at a
+         250px card. */
+      font-size: ${Math.round(w * 0.184)}px; line-height: .8;
       font-weight: var(--bc-weight-bold, 700);
       letter-spacing: -.03em;
       color: var(--dc-mono, rgba(255,255,255,.22));
@@ -544,7 +556,17 @@
       max-width: calc(100% - var(--bc-pad-row, 14px) * 2);
       overflow: hidden; white-space: nowrap;
     }
-    [data-bc-node="${NODE}"][data-layout="list"] .bc-dc-mono { font-size: calc(var(--bc-text-2xl, 20px) * 1.4); bottom: 4px; left: 8px; }
+    /* The list layout's art is a fixed 132px strip whatever the card size, so
+       its monogram is a fixed size too — and for the same reason as above, not
+       a multiple of the reading scale. */
+    [data-bc-node="${NODE}"][data-layout="list"] .bc-dc-mono {
+      font-size: ${Math.round(LIST_ART * 0.212)}px; bottom: 4px; left: 8px;
+      /* The inset moved to 8px here but the ceiling kept subtracting the row
+         padding, which density owns — so at cozy the box shrank to 88px around
+         a 93px monogram while 116px of art sat unused beside it. The ceiling
+         has to be derived from the same inset the rule above it sets. */
+      max-width: calc(100% - 16px);
+    }
     [data-bc-node="${NODE}"] .bc-dc-scrim {
       position: absolute; inset: 0;
       /* Dark at BOTH ends, clear through the middle. The chip and the due badge
@@ -767,7 +789,7 @@
     [data-bc-node="${NODE}"][data-layout="list"] { grid-template-columns: 1fr; max-width: none; gap: var(--bc-space-3, 8px); }
     [data-bc-node="${NODE}"][data-layout="list"] .bc-dc { flex-direction: row; align-items: stretch; }
     [data-bc-node="${NODE}"][data-layout="list"] .bc-dc-artwrap {
-      flex: 0 0 132px; border-bottom: 0; border-right: 3px solid var(--dc-c, transparent);
+      flex: 0 0 ${LIST_ART}px; border-bottom: 0; border-right: 3px solid var(--dc-c, transparent);
     }
     [data-bc-node="${NODE}"][data-layout="list"] .bc-dc-art { height: 100%; aspect-ratio: auto; }
     [data-bc-node="${NODE}"][data-layout="list"] .bc-dc-body { justify-content: center; }
