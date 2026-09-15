@@ -19,6 +19,13 @@ const out = document.getElementById('out');
 // on a different monitor, which is the thing the cap exists to prevent.
 const CARD_MIN = 240, CARD_MAX = 275;
 
+// And a sweep of COURSE COUNTS at one width. The cap is a column count, so a
+// five-column measure around four courses fills four tracks and leaves the
+// fifth empty -- a 266px hole between the last card and the sidebar, landing on
+// anyone taking fewer courses than the cap. Nine courses cannot show that.
+const COUNTS = [1, 2, 3, 4, 5, 7, 9, 12];
+const COUNT_AT = 1920;
+
 (async () => {
   const rows = [];
   for (const w of WIDTHS) {
@@ -83,6 +90,38 @@ const CARD_MIN = 240, CARD_MAX = 275;
     f.remove();
   }
 
+  const counts = [];
+  for (const n of COUNTS) {
+    const f = document.createElement('iframe');
+    f.style.cssText = "width:" + COUNT_AT + "px;height:900px;border:0;position:absolute;left:-99999px";
+    f.src = "/test/browser/page.html?t=" + Date.now() + "&n=" + n;
+    document.body.appendChild(f);
+    await new Promise((r) => { f.onload = r; });
+    const cw = f.contentWindow;
+    await cw.__bcReady;
+    cw.__bcApply({});
+    await new Promise((r) => setTimeout(r, 400));
+    const d = cw.document;
+    const grid = d.querySelector('[data-bc-node="bc-dashgrid"]');
+    const cards = grid ? [...grid.querySelectorAll(".bc-dc")] : [];
+    const gb = grid ? grid.getBoundingClientRect() : null;
+    const aside = d.querySelector("#right-side-wrapper");
+    const ab = aside ? aside.getBoundingClientRect() : null;
+    const widths = [...new Set(cards.map((c) => Math.round(c.getBoundingClientRect().width)))];
+    const right = cards.length ? Math.max(...cards.map((c) => c.getBoundingClientRect().right)) : 0;
+    counts.push({
+      n,
+      drawn: cards.length,
+      cardW: widths.length === 1 ? widths[0] : widths,
+      // The gap from the LAST CARD to the sidebar, not from the grid box: an
+      // empty track is inside the box, so a box measurement cannot see the hole.
+      cardToAside: ab ? Math.round(ab.left - right) : null,
+      padL: gb ? Math.round(gb.left) : null,
+      padR: ab ? Math.round(COUNT_AT - ab.right) : null,
+    });
+    f.remove();
+  }
+
   // A measurement nobody reads is a measurement that drifts. Each width gets a
   // verdict so this page can be run headlessly and believed.
   const fail = [];
@@ -97,8 +136,18 @@ const CARD_MIN = 240, CARD_MAX = 275;
     if (Math.abs(r.padL - r.padR) > 1) fail.push(`${r.vw}: off centre — ${r.padL}px left, ${r.padR}px right`);
     if (r.edges !== 1) fail.push(`${r.vw}: header, grid and content column do not share a right edge`);
   }
+  for (const c of counts) {
+    if (c.drawn !== Math.min(c.n, 40)) fail.push(`n=${c.n}: drew ${c.drawn} cards`);
+    if (Array.isArray(c.cardW)) fail.push(`n=${c.n}: cards are ${c.cardW.join("/")}px wide`);
+    else if (c.cardW < CARD_MIN || c.cardW > CARD_MAX) fail.push(`n=${c.n}: card is ${c.cardW}px`);
+    if (c.cardToAside !== 16) fail.push(`n=${c.n}: ${c.cardToAside}px from the last card to the sidebar, expected 16`);
+    if (Math.abs(c.padL - c.padR) > 1) fail.push(`n=${c.n}: off centre — ${c.padL}px left, ${c.padR}px right`);
+  }
+
   out.textContent = rows.map((r) => JSON.stringify(r)).join("\n")
-    + "\n\n" + (fail.length ? "FAIL\n" + fail.join("\n") : "PASS — every width agrees");
+    + "\n\n" + counts.map((c) => JSON.stringify(c)).join("\n")
+    + "\n\n" + (fail.length ? "FAIL\n" + fail.join("\n")
+                              : "PASS — every width and every course count agrees");
   document.title = "ready";
 })();
 </script>

@@ -98,6 +98,16 @@
 
     let n = Math.floor((avail + g) / (w + g));
     n = Math.max(1, Math.min(maxCols, n));
+    // ...and never wider than the courses actually there. A five-column measure
+    // around four courses fills four tracks and leaves the fifth empty, which
+    // is a 266px hole between the last card and the sidebar: the same defect as
+    // the uncapped page, one level down, and it lands on anyone taking fewer
+    // courses than the cap. Zero means the cards have not arrived yet, which is
+    // not the same as having none.
+    const have = own
+      ? (BC.dashgrid && BC.dashgrid.count) || 0
+      : document.querySelectorAll(".ic-DashboardCard").length;
+    if (have > 0) n = Math.min(n, have);
     // Only write when the answer CHANGES. Re-setting the same value still
     // invalidates layout, and since a new measure can lengthen the page enough
     // to add or remove a scrollbar -- which changes the row's width, which is

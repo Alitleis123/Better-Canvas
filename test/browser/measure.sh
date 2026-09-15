@@ -3,11 +3,15 @@
 #
 #   test/browser/measure.sh          # needs test/browser/serve.js running
 #
-# _measure.html lays the dashboard out at ten viewport widths and checks the
-# invariants that have each broken at least once: one card size, one card
-# height, metadata that lines up, no ragged gutter, a constant gap to the
-# sidebar, equal margins either side, and one shared right edge. Exits non-zero
-# on any failure so it can gate a release.
+# _measure.html lays the dashboard out at ten viewport widths, and then at eight
+# course COUNTS, and checks the invariants that have each broken at least once:
+# one card size, one card height, metadata that lines up, no ragged gutter, a
+# constant gap to the sidebar, equal margins either side, and one shared right
+# edge. Exits non-zero on any failure so it can gate a release.
+#
+# The counts matter separately from the widths because the cap is a column
+# count: a five-column measure around four courses fills four tracks and leaves
+# the fifth empty, which nine courses at any width cannot show.
 #
 # Chrome does not exit after --dump-dom, so this polls a file rather than
 # piping, exactly like shoot.sh and probe.sh.
@@ -17,12 +21,12 @@ PROFILE=$(mktemp -d /tmp/bcmeas.XXXXXX)
 DOM=$(mktemp /tmp/bcmdom.XXXXXX)
 
 "$CHROME" --headless --disable-gpu --hide-scrollbars --force-device-scale-factor=1 \
-  --virtual-time-budget="${BUDGET:-30000}" --window-size=1000,800 \
+  --virtual-time-budget="${BUDGET:-60000}" --window-size=1000,800 \
   --user-data-dir="$PROFILE" --dump-dom \
   "http://localhost:8731/test/browser/_measure.html" > "$DOM" 2>/dev/null &
 PID=$!
 i=0
-while [ $i -lt "${POLL:-240}" ]; do
+while [ $i -lt "${POLL:-480}" ]; do
   if [ -s "$DOM" ]; then break; fi
   sleep 0.25
   i=$((i + 1))

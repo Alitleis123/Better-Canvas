@@ -73,6 +73,10 @@
   BC.dashgrid = {
     colourFor: (id) => colours.get(String(id)) || null,
     metrics,
+    // How many courses we actually have. The measure is capped at maxColumns,
+    // but a five-column measure around four courses leaves the fifth track
+    // empty, so the cap has to know the count as well as the width.
+    get count() { return cards ? cards.length : 0; },
   };
 
   // ---- data ---------------------------------------------------------------

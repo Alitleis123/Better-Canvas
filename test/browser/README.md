@@ -181,10 +181,12 @@ CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
   `p=<progress style>`, `s=<skin id>`, `layout=<grid|list|compact|masonry>`,
   `n=<course count>`, `dark=1`.
 
-  `n=` clones the fixture's cards. The fixture ships four, which is the one count
-  that cannot show whether a row packs, wraps, or strands a card on a row of its
-  own — four courses in a five-column measure left a 266px notch that only turned
-  up at `n=4`, and seven were what showed the second row was right.
+  `n=` sets how many courses the API stub reports. It is passed through to
+  page.html rather than applied to the DOM, because the dashboard is rendered
+  from that stub now and not from Canvas's markup — which is what made this knob
+  quietly inert for a while: it resized cards nobody was looking at. The fixture
+  ships nine; the knob is for the counts nine cannot show, like four courses in a
+  five-column measure, which left a 266px notch that only turned up at `n=4`.
 
 - **`shoot.sh`** — the capture command above, as a script, because every one of
   these findings needed the same shot at three widths.

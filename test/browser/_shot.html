@@ -12,19 +12,25 @@
     m=todo    the planner widget       p=<progress style>
     m=skin    a skin on the dashboard  s=<skin id>
     m=plain   the dashboard, no panel      layout=<grid|list|compact|masonry>
-    n=<count> clone the fixture's cards up to this many courses. The fixture
-              ships four, which is the one count that cannot show whether a row
-              packs, wraps or strands a card on a row of its own.
+    n=<count> how many courses the API stub reports. The fixture ships nine;
+              this is for the counts nine cannot show — whether a row packs,
+              wraps, or strands a card on a row of its own. It is passed through
+              to page.html rather than applied to the DOM here, because the
+              dashboard is rendered from the stub, not from Canvas's markup.
     dark=1    apply dark mode to whichever of the above you chose
     y=<px>    scroll the drawer down, for a section below the fold
     s=<text>  type into the tab search, to photograph a filtered or empty state
 -->
 <meta charset=utf-8><title>shot</title>
 <body style="margin:0;background:#e8e9ea">
-<iframe id=f src="/test/browser/page.html" style="width:100vw;height:100vh;border:0"></iframe>
+<iframe id=f style="width:100vw;height:100vh;border:0"></iframe>
 <script>
 const q = new URLSearchParams(location.search);
-document.getElementById('f').onload = async function () {
+// The src is set here, not in the markup, so the handler below is already
+// assigned when it loads -- and it carries this page's query string, because
+// n= has to reach page.html's API stub rather than only its DOM.
+const frame = document.getElementById('f');
+frame.onload = async function () {
   const w = this.contentWindow; await w.__bcReady;
   // Clone cards BEFORE applying, so the grid is laid out against the count we
   // asked for rather than re-laid-out after it.
@@ -85,4 +91,5 @@ document.getElementById('f').onload = async function () {
   // will happily photograph a half-painted frame.
   setTimeout(() => { document.title = "ready"; }, 500);
 };
+frame.src = '/test/browser/page.html' + location.search;
 </script>

@@ -281,6 +281,21 @@ window.__bcReady = (async () => {
     { id: "4", name: "HIST1100 Modern History",     courseCode: "HIST1100", color: "#c0562e" },
     { id: "5", name: "BIOL1105 Cell Biology",       courseCode: "BIOL1105", color: "#3d7ea6" },
   ];
+  // How many courses the stub should report, from ?n=. 0 or absent means the
+  // fixture's own nine, which is the realistic load; the knob exists for the
+  // counts that a nine-course list cannot show, like four courses in a
+  // five-column measure.
+  const WANT = Math.max(0, Math.min(40, +(new URLSearchParams(location.search).get("n")) || 0));
+  function sizedCards(list) {
+    if (!WANT || WANT === list.length) return list;
+    const out = [];
+    for (let i = 0; i < WANT; i++) {
+      const src = list[i % list.length];
+      out.push(i < list.length ? src : Object.assign({}, src, { id: String(1000 + i) }));
+    }
+    return out;
+  }
+
   BC.api = {
     coursesWithScores: () => Promise.resolve(courseFixture().map((c, i) => ({
       id: c.id, name: c.name, course_code: c.courseCode,
@@ -298,7 +313,13 @@ window.__bcReady = (async () => {
     // title short enough to sit on one line next to two-line neighbours, and a
     // course with NO colour and NO image, which on a real dashboard rendered as
     // an identity-less black slab.
-    dashboardCards: () => Promise.resolve([
+    // n=<count> in the query string resizes this list. It used to resize only
+    // Canvas's own cards in the DOM, which stopped meaning anything the day we
+    // started rendering the dashboard ourselves from this stub -- so the one
+    // knob for "does a row pack, wrap, or strand a card on a row of its own"
+    // had been quietly inert. Extra courses are clones with fresh ids, so the
+    // colours and monograms stay distinguishable.
+    dashboardCards: () => Promise.resolve(sizedCards([
       { id: "1", shortName: "ENGL2700 55077 Creative Writing SEC 01 Summer 2026",
         courseCode: "ENGL2700.55077.202650", color: "#b58a3c", term: { name: "Summer 2026" },
         image: "data:image/svg+xml;utf8," + encodeURIComponent(
@@ -337,7 +358,7 @@ window.__bcReady = (async () => {
       { id: "9", shortName: "BIOL1105 Cell Biology", courseCode: "BIOL1105.10021.202630",
         color: "#3d7ea6", term: { name: "Spring 2026" },
         links: [{ css_class: "files", path: "#", label: "Files" }] },
-    ]),
+    ])),
     createPlannerNote: () => Promise.resolve({}),
     setPlannerComplete: () => Promise.resolve({}),
     TTL: 60000,

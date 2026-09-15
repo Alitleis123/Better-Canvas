@@ -100,10 +100,24 @@ window.__bcLiveReady = (async () => {
   const termStart = new Date(Date.now() - 40 * 864e5).toISOString();
   const termEnd = new Date(Date.now() + 60 * 864e5).toISOString();
   const term = { id: 9, name: "Fall 2025", start_at: termStart, end_at: termEnd };
-  const courses = [
-    { id: "1", shortName: "ENGL2700 Creative Writing", originalName: "ENGL2700 Creative Writing", courseCode: "ENGL2700", color: "#b58a3c", term },
-    { id: "2", shortName: "SOCL2320 Statistical Analysis", originalName: "SOCL2320 Statistical Analysis", courseCode: "SOCL2320", color: "#4a9d7f", term },
+  // Eight courses, not two. The dashboard measure is a COLUMN COUNT capped at
+  // maxColumns, so with two courses the grid is two columns wide whatever the
+  // cap says -- correct behaviour, and it made the sweep report that setting as
+  // permanently stuck. Eight is above every cap the control offers.
+  const NAMED = [
+    ["ENGL2700 Creative Writing", "ENGL2700", "#b58a3c"],
+    ["SOCL2320 Statistical Analysis", "SOCL2320", "#4a9d7f"],
+    ["COMM3750 Special Effects", "COMM3750", "#8c5a9e"],
+    ["CS3100 Object-Oriented Design", "CS3100", "#9c6b52"],
+    ["CS1210 Professional Development", "CS1210", "#2f6b4f"],
+    ["MATH1365 Intro to Math Reasoning", "MATH1365", "#7a8a45"],
+    ["BIOL1105 Cell Biology", "BIOL1105", "#3d7ea6"],
+    ["HIST1100 Modern History", "HIST1100", "#a8452c"],
   ];
+  const courses = NAMED.map(([name, code, color], i) => ({
+    id: String(i + 1), shortName: name, originalName: name,
+    courseCode: code, color, term,
+  }));
   BC.api = Object.assign(BC.api || {}, {
     dashboardCards: () => Promise.resolve(courses),
     activeCourses: () => Promise.resolve(courses),
@@ -112,7 +126,8 @@ window.__bcLiveReady = (async () => {
     // fallback dashboard instead of ours.
     customColors: () => Promise.resolve({ custom_colors: {} }),
     coursesWithScores: () => Promise.resolve(courses.map((c, i) => ({
-      id: c.id, name: c.shortName, enrollments: [{ computed_current_score: [91, 84][i] }],
+      id: c.id, name: c.shortName,
+      enrollments: [{ computed_current_score: [91, 84, 79, 95, 71, 88, 64, 92][i % 8] }],
     }))),
     // Real items, not an empty list. Every To Do setting -- grouping, range,
     // layout, the progress indicator, show-completed -- only has an observable
