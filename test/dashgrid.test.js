@@ -234,6 +234,45 @@ module.exports = {
     assert.match(SRC, /Promise\.all\(\[/, "and it is fetched alongside them, not after");
   },
 
+  async "a course with no artwork gets a gradient and a monogram, not wallpaper"() {
+    // The skin engine's pattern generator is right for wallpapering a page at
+    // low contrast. On a 250x140 card face it became the subject: eight cards of
+    // gingham and polka dots beside four carrying real course artwork made the
+    // artwork look like the exception and the rest like placeholder swatches.
+    const e = env();
+    e.apply(e.settings({}));
+    e.deliver(CARDS);
+    await Promise.resolve(); await Promise.resolve();
+    await Promise.resolve(); await Promise.resolve();
+    e.apply(e.settings({}));
+    const plain = e.grid().querySelector('.bc-dc[data-bc-course="2"]');
+    const art = plain.querySelector(".bc-dc-art").getAttribute("style") || "";
+    assert.match(art, /linear-gradient/, "a soft ramp in the course's own colour");
+    assert.ok(!/repeating|url\(/.test(art), "and no repeating pattern");
+    const mono = plain.querySelector(".bc-dc-mono");
+    assert.ok(mono, "and a monogram to be recognised by");
+    assert.equal(mono.textContent, "BBB", "taken from the letters the course code opens with");
+  },
+
+  async "a course WITH artwork gets no monogram over it"() {
+    const e = env();
+    e.apply(e.settings({}));
+    e.deliver([Object.assign({}, CARDS[0], { image: "https://x.test/a.png" })]);
+    await Promise.resolve(); await Promise.resolve();
+    await Promise.resolve(); await Promise.resolve();
+    e.apply(e.settings({}));
+    const card = e.grid().querySelector(".bc-dc");
+    assert.equal(card.querySelector(".bc-dc-mono"), null,
+      "over a real photograph a monogram is graffiti");
+  },
+
+  "the monogram ink is chosen against the course colour"() {
+    // One fixed white vanishes on a pale course; one fixed black is a smudge on
+    // a dark one.
+    assert.match(SRC, /--dc-mono/);
+    assert.match(SRC, /relLuminance\(colour\) < 0\.5 \? "rgba\(255,255,255,\.20\)" : "rgba\(0,0,0,\.16\)"/);
+  },
+
   "the art is derived only from the course id, so it never moves"() {
     assert.match(SRC, /hash\(String\(card\.id \|\| card\.assetString \|\| card\.shortName \|\| ""\)\)/,
       "anything viewport- or order-dependent would repaint the card on resize");

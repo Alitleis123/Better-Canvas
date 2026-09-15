@@ -139,7 +139,7 @@ module.exports = {
                          "--bc-note-border", "--bc-note-text", "--bc-course",
                          // One colour per card and one per planner row, so
                          // neither can be a stylesheet rule.
-                         "--dc-c", "--dc-ink", "--bc-todo-course-c"]) emitted.add(extra);
+                         "--dc-c", "--dc-ink", "--dc-mono", "--bc-todo-course-c"]) emitted.add(extra);
 
     const missing = new Map();
     for (const abs of jsFiles(path.join(ROOT, "src"))) {

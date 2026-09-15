@@ -100,6 +100,10 @@ window.__bcLiveReady = (async () => {
   BC.api = Object.assign(BC.api || {}, {
     dashboardCards: () => Promise.resolve(courses),
     activeCourses: () => Promise.resolve(courses),
+    // Canvas's own colour picker. dashgrid fetches this ALONGSIDE the cards, so
+    // a missing stub rejected the pair and the harness silently showed Canvas's
+    // fallback dashboard instead of ours.
+    customColors: () => Promise.resolve({ custom_colors: {} }),
     coursesWithScores: () => Promise.resolve(courses.map((c, i) => ({
       id: c.id, name: c.shortName, enrollments: [{ computed_current_score: [91, 84][i] }],
     }))),

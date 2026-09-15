@@ -267,6 +267,10 @@ window.__bcReady = (async () => {
       concluded: i === 4,
     }))),
     activeCourses: () => Promise.resolve(courseFixture()),
+    // Canvas's own colour picker. dashgrid fetches this ALONGSIDE the cards, so
+    // a missing stub rejected the pair and the harness silently showed Canvas's
+    // fallback dashboard instead of ours.
+    customColors: () => Promise.resolve({ custom_colors: {} }),
     plannerItems: () => Promise.resolve(plannerFixture()),
     // Shaped like a real /api/v1/dashboard/dashboard_cards row, and deliberately
     // covering the cases a real dashboard has and the old fixture did not: a
@@ -522,6 +526,13 @@ window.__bcAudit = function () {
   const hasOwnText = (el) => [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
   for (const el of document.querySelectorAll("#application *")) {
     if (!hasOwnText(el) || !el.getClientRects().length) continue;
+    // Decorative text, hidden from assistive tech, is exempt -- WCAG grades what
+    // a user has to READ. The dashboard card's monogram is the case: a 46px
+    // subject code at 20% alpha, behind the same code printed in full two lines
+    // below it. Grading it reports a 1:1 failure on every card, and a permanent
+    // known failure is worse than no check at all, because it is what a real one
+    // hides behind.
+    if (el.closest('[aria-hidden="true"]')) continue;
     const fg = getComputedStyle(el).color;
     const bg = behind(el);
     const r = ratio(fg, bg);

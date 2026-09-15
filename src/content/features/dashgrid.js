@@ -130,27 +130,46 @@
     return Math.abs(h);
   }
 
+  // The subject code, for the monogram: the letters a course code opens with,
+  // before the numbers. "SOCL3441.38190.202630" -> SOCL, "CS3100.MERGED" -> CS.
+  // Falls back to the initials of the name, so there is always something.
+  function monogram(card) {
+    const code = String(card.courseCode || "").trim();
+    const m = code.match(/^[A-Za-z]{2,5}/);
+    if (m) return m[0].toUpperCase();
+    const words = String(card.shortName || card.originalName || "")
+      .split(/[\s\-_]+/).filter(Boolean).slice(0, 3);
+    return words.map((x) => x[0]).join("").toUpperCase() || "\u00b7";
+  }
+
   function artStyle(card, colour, dark) {
     if (card.image && BC.util.isSafeUrl(card.image)) {
       return 'background-image: url("' + BC.util.cssSafe(card.image) + '");' +
              "background-size: cover; background-position: center;";
     }
-    if (!BC.skins || !BC.skins.patternCss) return "background-color: " + colour + ";";
+    // A GRADIENT and a monogram, not a repeating pattern.
+    //
+    // The pattern engine is the skins feature's, and it is right for wallpapering
+    // a whole page at low contrast. On a 250x140 card face it is not a texture,
+    // it is the subject: eight cards of gingham and polka dots next to four cards
+    // carrying real course artwork made the artwork look like the exception and
+    // the rest look like placeholder swatches. Photographed on a real dashboard,
+    // that is the single thing that read as cheap.
+    //
+    // A soft gradient in the course's own colour sits underneath its monogram
+    // instead. It is calm next to a photograph, it is unmistakably that course's
+    // colour, and the monogram gives the card something to be recognised by at a
+    // glance -- which is what the pattern was reaching for.
     const h = hash(String(card.id || card.assetString || card.shortName || ""));
-    const kind = ART_KINDS[h % ART_KINDS.length];
-    // The pattern sits on the course colour, drawn in a tint of itself. Toward
-    // white on a dark base and toward black on a light one, so the figure is
-    // always visible against its own ground without ever inventing a new hue:
-    // the card still reads as the course's colour, not as decoration.
     const lum = BC.color.relLuminance(colour);
-    const fg = lum < 0.5 ? BC.color.lighten(colour, 0.28) : BC.color.darken(colour, 0.24);
-    return BC.skins.patternCss({
-      kind,
-      fg,
-      bg: colour,
-      scale: 0.7 + (h % 5) * 0.2,
-      angle: [45, 90, 135, 60][h % 4],
-    });
+    // Lift the top-left and drop the bottom-right, always in the card's own hue.
+    const a = lum < 0.5 ? BC.color.lighten(colour, 0.16) : BC.color.lighten(colour, 0.10);
+    const b = lum < 0.5 ? BC.color.darken(colour, 0.14) : BC.color.darken(colour, 0.08);
+    // Four angles, chosen by id, so a wall of cards is not four identical ramps
+    // -- deterministic, so a card never changes on reload.
+    const angle = [135, 120, 160, 200][h % 4];
+    return "background-image: linear-gradient(" + angle + "deg, " + a + " 0%, " +
+           colour + " 52%, " + b + " 100%);";
   }
 
   // Canvas hands back the colour it shows in its own colour picker. A course
@@ -321,6 +340,11 @@
     // chip there is nothing to protect, and a gradient over a flat pattern just
     // reads as a smudge across the top of every card, so it is not emitted.
     const arts = [art];
+    // Only when there is no photograph to speak for the course. Over real
+    // artwork it would be graffiti.
+    if (!(card.image && BC.util.isSafeUrl(card.image))) {
+      arts.push(el("span", { class: "bc-dc-mono", "aria-hidden": "true", text: monogram(card) }));
+    }
     const wantsChip = (opts.showGrade && opts.grades.get(String(card.id)) != null) ||
                       (opts.showBadges && opts.due.get(String(card.id))) ||
                       (opts.showSparkline && (opts.history[String(card.id)] || []).length >= 2);
@@ -438,6 +462,11 @@
     // Ink that is guaranteed legible on this course's colour, for the chip and
     // anything else that sits directly on the art.
     root.style.setProperty("--dc-ink", BC.color.contrastText(colour));
+    // White on a dark course colour, black on a light one, both at low alpha.
+    // A single fixed white would vanish on a pale course and a single black
+    // would look like a smudge on a dark one.
+    root.style.setProperty("--dc-mono",
+      BC.color.relLuminance(colour) < 0.5 ? "rgba(255,255,255,.20)" : "rgba(0,0,0,.16)");
     return root;
   }
 
@@ -499,6 +528,23 @@
     /* A scrim, always, image or pattern. It is what lets the chip sit on top of
        arbitrary artwork and stay readable — a course photograph can be any
        brightness at all, and per-image sampling is not something CSS can do. */
+    /* The monogram. Big, tight, and deliberately low contrast: it is the card's
+       texture, not a second label -- the course code is already printed in full
+       two lines below it. Ink is chosen against the course colour so it works on
+       a pale yellow and a near-black alike. */
+    [data-bc-node="${NODE}"] .bc-dc-mono {
+      position: absolute; left: var(--bc-pad-row, 14px); bottom: 6px;
+      font-family: var(--bc-font-sans);
+      font-size: calc(var(--bc-text-2xl, 20px) * 2.3); line-height: .8;
+      font-weight: var(--bc-weight-bold, 700);
+      letter-spacing: -.03em;
+      color: var(--dc-mono, rgba(255,255,255,.22));
+      pointer-events: none; user-select: none;
+      /* Never wider than the card, however long the subject code is. */
+      max-width: calc(100% - var(--bc-pad-row, 14px) * 2);
+      overflow: hidden; white-space: nowrap;
+    }
+    [data-bc-node="${NODE}"][data-layout="list"] .bc-dc-mono { font-size: calc(var(--bc-text-2xl, 20px) * 1.4); bottom: 4px; left: 8px; }
     [data-bc-node="${NODE}"] .bc-dc-scrim {
       position: absolute; inset: 0;
       /* Dark at BOTH ends, clear through the middle. The chip and the due badge
