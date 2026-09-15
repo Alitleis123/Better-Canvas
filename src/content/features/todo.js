@@ -256,6 +256,12 @@
       background: var(--bc-surface-3, #f7fafc);
       margin-bottom: var(--bc-space-2, 6px);
     }
+    /* The course rail. Same colour as that course's dashboard card, so the two
+       halves of the dashboard read as one product rather than two. An inset
+       shadow costs no layout and cannot be covered by a child's background. */
+    .bc-todo-item.has-course {
+      box-shadow: inset 3px 0 0 0 var(--bc-todo-course-c, transparent);
+    }
     /* Tokens rather than opacity: fading already-AA text pushes it below AA. */
     .bc-todo-item.done .bc-todo-name { color: var(--bc-text-subtle, var(--bc-muted, #6b7280)); text-decoration: line-through; }
     .bc-todo-check {
@@ -294,9 +300,37 @@
     /* Below this the actions squeeze the task name into a column two words
        wide, so they take their own row under it instead. */
     @container bctodo (max-width: 340px) {
-      .bc-todo-item { grid-template-columns: 22px minmax(0, 1fr); }
-      .bc-todo-actions { grid-column: 2; justify-content: flex-start; margin-top: var(--bc-space-1, 4px); }
-      .bc-todo-actions .bc-todo-ibtn { opacity: 1; }
+      .bc-todo-item { grid-template-columns: 22px minmax(0, 1fr); position: relative; }
+      /* Out of the grid entirely rather than onto a row of their own. A real
+         Canvas sidebar is about 280px, so this branch -- not the cards layout --
+         is what every sidebar actually gets, and giving the actions their own
+         row cost a whole extra line of height on EVERY task and left three grey
+         icons sitting under each one permanently.
+         The row reserves the gutter they sit in rather than letting them float
+         over the title: a starred task keeps its star visible at rest (it is a
+         state, not just an action), and an icon overlapping the task's own name
+         is worse than the width it costs. */
+      .bc-todo-item { padding-right: var(--bc-space-9, 24px); }
+      .bc-todo-actions { position: absolute; top: 4px; right: 4px; }
+      /* The pill backing is painted only while the actions are actually shown.
+         On the container it painted whenever the row existed -- the buttons
+         inside were transparent but the plate behind them was not, so every
+         task had a blank lozenge stamped over the end of its title. */
+      .bc-todo-item:hover .bc-todo-actions,
+      .bc-todo-item:focus-within .bc-todo-actions {
+        background: var(--bc-surface-2, #fff);
+        border-radius: var(--bc-radius-pill, 999px);
+        box-shadow: 0 0 0 4px var(--bc-surface-2, #fff);
+      }
+      /* Touch has no hover to reveal them with, so there they keep their row. */
+      @media (hover: none) {
+        .bc-todo-item { padding-right: var(--bc-space-4, 10px); }
+        .bc-todo-actions {
+          position: static; grid-column: 2; justify-content: flex-start;
+          margin-top: var(--bc-space-1, 4px); background: none; box-shadow: none;
+        }
+        .bc-todo-actions .bc-todo-ibtn { opacity: 1; }
+      }
     }
 
     /* ---- layouts ---------------------------------------------------------
@@ -352,9 +386,10 @@
     }
     [data-bc-layout="cards"] .bc-todo-course { font-size: var(--bc-text-xs, 12px); }
     [data-bc-layout="cards"] .bc-todo-check { margin-top: 1px; }
-    /* Actions stay visible here: a card has the room, and hiding them on an
-       object this deliberate reads as the card being inert. */
-    [data-bc-layout="cards"] .bc-todo-actions .bc-todo-ibtn { opacity: 1; }
+    /* Actions are revealed on hover here too. "A card has the room" was true of
+       a card in a wide column and false of one in a 280px sidebar, which is
+       where these actually render: three grey icons on every task, every time,
+       competing with the task's own name. */
 
     /* minimal: no boxes anywhere. The only separators are the group headers and
        a hairline, so the type hierarchy has to do all the work. */
@@ -1513,8 +1548,15 @@
                   aria-label="Details for ${title}" title="Details"
             >${BC.icons.svg("more", { size: 14 })}</button>
         </div>`;
+    // The course colour the dashboard cards are painted with, so a task and its
+    // course card are recognisably the same course. Null until the cards have
+    // loaded, in which case the rail simply does not paint.
+    const cid = it.course_id ? String(it.course_id)
+              : (it.context_type === "Course" ? String(it.context_id) : null);
+    const ccol = cid && BC.dashgrid ? BC.dashgrid.colourFor(cid) : null;
     return `
-      <div class="bc-todo-item ${complete ? "done" : ""}" data-key="${esc(key)}" data-i="${idx}">
+      <div class="bc-todo-item ${complete ? "done" : ""}${ccol ? " has-course" : ""}" data-key="${esc(key)}" data-i="${idx}"
+           ${ccol ? `style="--bc-todo-course-c:${esc(ccol)}"` : ""}>
         <button type="button" class="bc-todo-check ${complete ? "done" : ""}" data-i="${idx}"
                 aria-pressed="${complete ? "true" : "false"}"
                 aria-label="${complete ? "Mark incomplete" : "Mark complete"}: ${title}"

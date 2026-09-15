@@ -261,4 +261,44 @@ module.exports = {
     assert.match(todoSrc, /aria-pressed="\$\{view === id\}"/,
       "the segmented view control must report which option is active");
   },
+
+  "a task carries its course's colour, the same one the card is painted with"() {
+    // The planner sits beside the dashboard cards and had no idea what colour
+    // any course was, so the two halves of the dashboard read as two products.
+    assert.match(todoSrc, /--bc-todo-course-c/, "the row has to be stamped with it");
+    assert.match(todoSrc, /BC\.dashgrid \? BC\.dashgrid\.colourFor\(cid\) : null/,
+      "and it has to come from the renderer that paints the cards, not a second guess");
+    assert.match(todoSrc, /\.bc-todo-item\.has-course \{\s*box-shadow: inset 3px 0 0 0 var\(--bc-todo-course-c/,
+      "an inset shadow costs no layout and cannot be covered by a child background");
+  },
+
+  "the row actions do not sit on every task permanently in a real sidebar"() {
+    // A Canvas sidebar is about 280px, so the narrow branch -- not the cards
+    // layout -- is what every sidebar actually gets. It used to give the actions
+    // a row of their own with opacity 1, which cost a line of height on every
+    // task and left three grey icons under each one.
+    const narrow = todoSrc.slice(todoSrc.indexOf("@container bctodo (max-width: 340px)"));
+    const block = narrow.slice(0, narrow.indexOf("\n    }\n"));
+    assert.noMatch(block.split("@media (hover: none)")[0], /\.bc-todo-ibtn \{ opacity: 1/,
+      "the pointer branch must leave the hover reveal in place");
+    assert.match(block, /\.bc-todo-actions \{ position: absolute/,
+      "they come out of the grid rather than taking a row");
+    assert.match(block, /@media \(hover: none\)/,
+      "touch has no hover to reveal them with, so it keeps the row");
+  },
+
+  "the action pill is painted only when the actions are actually shown"() {
+    // On the container it painted whenever the row existed: the buttons inside
+    // were transparent but the plate behind them was not, so every task had a
+    // blank lozenge stamped over the end of its title.
+    const narrow = todoSrc.slice(todoSrc.indexOf("@container bctodo (max-width: 340px)"));
+    const block = narrow.slice(0, narrow.indexOf("\n    }\n"));
+    const bare = block.slice(block.indexOf(".bc-todo-actions { position: absolute"),
+                             block.indexOf(".bc-todo-item:hover .bc-todo-actions"));
+    assert.noMatch(bare, /background:/, "the resting state must not paint a plate");
+    assert.match(block, /\.bc-todo-item:hover \.bc-todo-actions,[\s\S]*?background: var\(--bc-surface-2/,
+      "the backing belongs on the revealed state");
+    assert.match(block, /padding-right: var\(--bc-space-9/,
+      "and the row reserves the gutter so a starred icon never overlaps the title");
+  },
 };

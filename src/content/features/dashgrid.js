@@ -37,6 +37,14 @@
 
   let cards = null;            // the dashboard_cards payload
   let state = "idle";          // idle | loading | done | failed
+  const colours = new Map();   // course id -> the colour we actually painted
+
+  // The planner widget renders beside these cards and had no idea what colour
+  // any course was, so the two halves of the dashboard looked like two products.
+  // This is the resolved colour -- a user override, then Canvas's, then our
+  // deterministic fallback -- so a course is the same colour in both places,
+  // including the ones Canvas has no colour for at all.
+  BC.dashgrid = { colourFor: (id) => colours.get(String(id)) || null };
 
   // ---- data ---------------------------------------------------------------
 
@@ -207,6 +215,7 @@
     }
 
     const root = el("article", { class: "bc-dc", "data-bc-course": String(card.id) }, kids);
+    colours.set(String(card.id), colour);
     root.style.setProperty("--dc-c", colour);
     // Ink that is guaranteed legible on this course's colour, for the chip and
     // anything else that sits directly on the art.
@@ -536,6 +545,6 @@
     styles: [STYLE],
     nodes: [NODE],
     apply,
-    unmount() { teardown(); state = "idle"; cards = null; },
+    unmount() { teardown(); state = "idle"; cards = null; colours.clear(); },
   });
 })();
