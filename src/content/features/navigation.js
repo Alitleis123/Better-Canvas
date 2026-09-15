@@ -32,6 +32,35 @@
     anchorList.parentNode.insertBefore(list, anchorList.nextSibling);
   }
 
+  // Reordering is done with `order`, which needs a flex parent — so the flex
+  // parent is set only when there is an order to apply, and removed again when
+  // there is not.
+  //
+  // This used to run unconditionally on every apply tick, which is several times
+  // a second, forever: every Canvas user got their global nav's layout replaced
+  // by ours whether or not they had ever reordered anything, and the writes went
+  // onto one of Canvas's own elements rather than one of ours. It is not a
+  // rendering loop -- the mutation observer filters attributes down to class and
+  // data-testid, so a style write is not read back -- but overriding the layout
+  // of a third-party nav nobody asked us to touch is how a Canvas release we
+  // have not seen yet breaks.
+  //
+  // The marker is what makes it reversible: without it, clearing the properties
+  // on a nav we never set would wipe an inline display Canvas itself had put
+  // there.
+  function setNavFlex(list, want) {
+    const MARK = "data-bc-navflex";
+    if (want) {
+      if (list.style.display !== "flex") list.style.display = "flex";
+      if (list.style.flexDirection !== "column") list.style.flexDirection = "column";
+      if (!list.hasAttribute(MARK)) list.setAttribute(MARK, "1");
+    } else if (list.hasAttribute(MARK)) {
+      list.style.display = "";
+      list.style.flexDirection = "";
+      list.removeAttribute(MARK);
+    }
+  }
+
   function applyGlobalNav(nav) {
     const list = document.querySelector("#menu");
     if (!list) return;
@@ -49,7 +78,7 @@
       const id = a && a.id;
       if (id && orderMap.has(id)) { li.style.order = String(orderMap.get(id)); li.style.display = ""; }
     }
-    list.style.display = "flex"; list.style.flexDirection = "column";
+    setNavFlex(list, orderMap.size > 0);
 
     syncCustomLinks("bc-nav-custom", list, nav.customLinks,
       "display:flex; align-items:center; gap:var(--bc-space-3, 8px); padding:var(--bc-space-3, 8px) var(--bc-space-4, 10px); color:inherit; text-decoration:none;");
@@ -66,7 +95,7 @@
       li.style.display = hiddenSet.has(label) ? "none" : "";
       if (orderIdx.has(label)) { li.style.order = String(orderIdx.get(label)); }
     }
-    list.style.display = "flex"; list.style.flexDirection = "column";
+    setNavFlex(list, orderIdx.size > 0);
 
     syncCustomLinks("bc-course-custom", list, nav.customLinks,
       "display:block; padding:var(--bc-space-2, 6px) var(--bc-space-4, 10px); color:inherit; text-decoration:none; border-radius:var(--bc-radius-md, 6px);");

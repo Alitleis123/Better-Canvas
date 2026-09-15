@@ -106,6 +106,21 @@ module.exports = {
     }
   },
 
+  "work deferred on a timer re-checks that it should still happen"() {
+    // The first-run tour is scheduled 800ms out. 800ms is long enough to be
+    // overtaken: dismissing it in another Canvas tab marks it seen here through
+    // the storage subscription, and this tab opened it anyway, over whatever the
+    // person had started doing. Deciding at schedule time is not the same as
+    // deciding at fire time, and this one has to be the latter.
+    const src = fs.readFileSync(path.join(ROOT, "src/content/features/onboarding.js"), "utf8");
+    const timer = /bag\.timeout\(([\s\S]*?), 800\)/.exec(src);
+    assert.ok(timer, "the tour is still scheduled on a timer");
+    assert.doesNotMatch(timer[1], /^\s*show\s*$/,
+      "the timer must not call show() directly; by the time it fires the answer may have changed");
+    assert.match(timer[1], /onboarding\.seen/,
+      "the timer has to re-read onboarding.seen at the moment it would open the dialog");
+  },
+
   "every registered feature declares its own teardown keys"() {
     // A node injected but never declared is stranded on the page when the
     // extension is disabled.

@@ -82,7 +82,12 @@
   }
 
   function installPeopleTools(ctx, settings) {
-    const onPeople = ctx.page === "course" && ctx.courseId && /\/users\/?$/.test(location.pathname);
+    // ctx.path, not location.pathname. They are the same string in production,
+    // which is exactly why the mismatch survived: this was the one place that
+    // reached past the context object every other feature reasons about, so it
+    // was also the one place a page could not be reasoned about without being
+    // navigated to.
+    const onPeople = ctx.page === "course" && ctx.courseId && /\/users\/?$/.test(ctx.path);
     if (!onPeople) { BC.injector.removeNode("bc-roster-btn"); return; }
 
     const rows = document.querySelectorAll("tr[id^='user_']");

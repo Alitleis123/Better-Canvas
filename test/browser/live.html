@@ -129,6 +129,15 @@ window.__bcLiveReady = (async () => {
         submissions: i === 0 ? { submitted: true } : false,
       };
     })),
+    // Requirements, not just modules: the progress bars count completed
+    // requirements and remove themselves when a course has none, so a stub of
+    // bare modules made the feature look permanently stuck.
+    courseModules: () => Promise.resolve([
+      { id: 1, name: "Week 1", items: [
+        { id: 11, completion_requirement: { type: "must_view", completed: true } },
+        { id: 12, completion_requirement: { type: "must_view", completed: false } },
+      ] },
+    ]),
     announcements: () => Promise.resolve([]),
     filesForCourse: () => Promise.resolve([]),
     submissions: () => Promise.resolve([]),
@@ -162,6 +171,43 @@ window.__bcLiveReady = (async () => {
   }
   return true;
 })();
+
+// Pretend to be on another kind of Canvas page.
+//
+// BC.detect.context() derives the page TYPE from location.pathname, which a
+// harness served from /test/browser/ cannot change — so every sweep here ran
+// against a dashboard, and the features that only exist on a course page
+// (grade tools, module progress, discussion tools, the syllabus reader, the
+// quiz saver, the roster tools) were never applied even once. They are gated on
+// ctx.page, so overriding the one function that produces it is the whole seam.
+//
+// The fixture already carries the markup those features mount into:
+// #grades_summary, .context_module/.ig-list, .discussion_entry and .user_content.
+//
+//   __bcPage("grades"); await __bcLive({});   // apply as if on a grades page
+//   __bcPage(null);                            // back to the dashboard
+window.__bcPage = function (page, courseId) {
+  if (!window.__bcRealContext) window.__bcRealContext = BC.detect.context.bind(BC.detect);
+  if (!page) { BC.detect.context = window.__bcRealContext; return null; }
+  const id = String(courseId || 1);
+  // The page TYPE is not enough on its own. Several features re-read the path
+  // and want the specific shape Canvas uses -- discussion tools only mount on
+  // /discussion_topics/<id>, the syllabus reader only on /assignments/syllabus,
+  // the roster tools only on a path ending /users. A bare "/courses/1/<page>"
+  // satisfies the page check and then fails the path check, which reads as the
+  // feature being stuck when it is the harness that is wrong.
+  const PATHS = {
+    discussions: "/discussion_topics/1",
+    assignments: "/assignments/syllabus",
+    course: "/users",
+    grades: "/grades",
+    modules: "/modules",
+    assignment: "/assignments/500",
+  };
+  const path = "/courses/" + id + (PATHS[page] != null ? PATHS[page] : "/" + page);
+  BC.detect.context = () => ({ page, courseId: id, path, search: "" });
+  return path;
+};
 
 // Change a setting the way the settings panel does, then wait for the applyAll
 // that the storage subscription schedules.
@@ -197,7 +243,10 @@ window.__bcSeen = (sel) => document.querySelectorAll(sel).length;
     await window.__bcLiveReady;
     // The tour is modal and would sit over everything being measured.
     await BC.storage.update((d) => { d.onboarding = Object.assign(d.onboarding || {}, { seen: true, done: true }); });
-    document.querySelectorAll('[data-bc-node="bc-dialog"],[data-bc-node="bc-scrim"]').forEach((n) => n.remove());
+    // bc-tour, not bc-dialog: the tour passes its own nodeId, so the generic
+    // dialog id never matched and the modal sat over everything being measured.
+    document.querySelectorAll('[data-bc-node="bc-tour"],[data-bc-node="bc-dialog"],[data-bc-node="bc-scrim"]')
+      .forEach((n) => n.remove());
     const r = await window.eval(decodeURIComponent(code));
     out.textContent = "RESULT: " + JSON.stringify(r, null, 1);
   } catch (e) {
@@ -218,7 +267,8 @@ window.__bcStyleSweep = async function (cases) {
   };
   const stuck = [];
   for (const c of cases) {
-    await __bcLive(c.a); const a = read(c.sel ? c : c);
+    __bcPage(c.page || null);
+    await __bcLive(c.a); const a = read(c);
     await __bcLive(c.b); const b = read(c);
     await __bcLive(c.a); const d = read(c);
     if (a === b || d !== a) stuck.push(c.name + " [a=" + a + " b=" + b + " a=" + d + "]");
@@ -231,6 +281,7 @@ window.__bcStyleSweep = async function (cases) {
 window.__bcNeedsReload = async function (cases) {
   const stuck = [];
   for (const c of cases) {
+    __bcPage(c.page || null);
     await __bcLive(c.off); const a = __bcSeen(c.sel);
     await __bcLive(c.on);  const b = __bcSeen(c.sel);
     await __bcLive(c.off); const d = __bcSeen(c.sel);

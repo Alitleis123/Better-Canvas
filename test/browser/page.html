@@ -111,13 +111,34 @@
           </table>
 
           <h2 style="margin-top:24px">Discussion</h2>
-          <div class="discussion_entry">
-            <div class="header"><a class="author" href="#">Megan Hahn</a></div>
-            <div class="message user_content"><p>Welcome to the course discussion board.</p></div>
+          <!-- Replies live inside #discussion_subentries on Canvas, and the
+               discussion tools count them from there. Without the container the
+               bar rendered "0 replies - 0 words" against a visible reply. -->
+          <div id="discussion_subentries">
+            <div class="discussion_entry">
+              <div class="header"><a class="author" href="/users/7">Megan Hahn</a></div>
+              <div class="message user_content"><p>Welcome to the course discussion board.</p></div>
+            </div>
+            <div class="discussion_entry unread">
+              <div class="header"><a class="author" href="/users/8">Alex Roy</a></div>
+              <div class="message user_content"><p>Posting my reading response for week one here.</p></div>
+            </div>
           </div>
 
+          <h2 style="margin-top:24px">Syllabus (course page body)</h2>
+          <div id="course_syllabus" class="user_content">
+            <p>Midterm on October 14. Final project due December 3.</p>
+            <table><tr><td>Sep 22</td><td>Reading response due</td></tr></table>
+          </div>
+
+          <h2 style="margin-top:24px">People</h2>
+          <table class="roster"><tbody>
+            <tr id="user_1"><td>Megan Hahn</td><td>Student</td></tr>
+            <tr id="user_2"><td>Alex Roy</td><td>Student</td></tr>
+          </tbody></table>
+
           <h2 style="margin-top:24px">Modules</h2>
-          <div class="context_module">
+          <div class="context_module" id="context_module_1">
             <div class="header ig-header"><span class="name">Week 1</span></div>
             <ul class="ig-list">
               <li class="ig-row"><a class="ig-title" href="#">Lecture slides</a></li>

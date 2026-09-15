@@ -48,6 +48,26 @@ window.__BC_NODE_CASES = [
     off: { dashboard: { showInlineGrade: false } }, on: { dashboard: { showInlineGrade: true } } },
   { name: "dashboard.showProgressBar", sel: '.bc-dc-bar:not(.is-empty), [data-bc-node="bc-progress-bar"]',
     off: { dashboard: { showProgressBar: false } }, on: { dashboard: { showProgressBar: true } } },
+
+  // ---- course pages -------------------------------------------------------
+  // Every case above is a dashboard case, because until __bcPage existed the
+  // harness could only ever BE a dashboard: page type comes from the pathname.
+  // These ten features are gated on ctx.page and had never been applied once in
+  // any sweep.
+  { name: "grades.panelEnabled", page: "grades", sel: '[data-bc-node="bc-grade-tools"]',
+    off: { grades: { panelEnabled: false } }, on: { grades: { panelEnabled: true } } },
+  { name: "modules.progressBars", page: "modules", sel: '[data-bc-node="bc-mod-summary"], [data-bc-node="bc-mod-bar"]',
+    off: { modules: { progressBars: false } }, on: { modules: { progressBars: true } } },
+  { name: "discussions.collapse", page: "discussions", sel: '[data-bc-node="bc-disc-bar"]',
+    off: { discussions: { collapse: false, jumpToUnread: false, wordCount: false, instructorHighlight: false } },
+    on: { discussions: { collapse: true, jumpToUnread: true, wordCount: true, instructorHighlight: true } } },
+  { name: "calendar.syllabusExtract", page: "assignments", sel: '[data-bc-node="bc-syllabus"]',
+    off: { calendar: { syllabusExtract: false } }, on: { calendar: { syllabusExtract: true } } },
+  // Both, not just one: the bar is shared, so it correctly stays up while
+  // either tool is still on.
+  { name: "instructor people tools", page: "course", sel: '[data-bc-node="bc-roster-btn"]',
+    off: { instructor: { rosterExport: false, attendanceQuick: false } },
+    on: { instructor: { rosterExport: true, attendanceQuick: true } } },
 ];
 
 window.__BC_STYLE_CASES = [

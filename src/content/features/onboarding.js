@@ -70,7 +70,17 @@
     // of firing into a page that moved on, and the mark clears on navigation so the
     // tour re-arms if the user comes back to the dashboard.
     const bag = BC.lifecycle.pageBag("onboarding");
-    bag.once("tour", () => bag.timeout(show, 800));
+    // Re-checked when the timer FIRES, not only when it is set. 800ms is long
+    // enough to be overtaken: dismissing the tour in another Canvas tab marks it
+    // seen here through the storage subscription, and this tab would still open
+    // it — over whatever the person had started doing in the meantime. The
+    // decision has to be made against the settings that are current at the
+    // moment the dialog would appear.
+    bag.once("tour", () => bag.timeout(() => {
+      const cur = BC.storage.current;
+      if (cur && cur.onboarding && cur.onboarding.seen) return;
+      show();
+    }, 800));
   }
 
   // Styling now comes entirely from the shared kit's tokens — this used to hardcode
