@@ -1967,7 +1967,18 @@
   @container bc-shell (max-width: 600px) {
     .bc-shell { grid-template-columns: minmax(0, 1fr); }
     .bc-nav { position: static; top: auto; }
-    .bc-nav-groups { flex-direction: row; overflow-x: auto; overflow-y: hidden; gap: var(--bc-space-5, 12px); padding-bottom: var(--bc-space-2, 6px); }
+    /* The horizontal rail always overflows -- thirteen tabs do not fit in a
+       600px shell -- and on macOS the scrollbar is an overlay that is not there
+       until you scroll, so there was nothing at all to say more tabs existed.
+       The fade is the affordance. It is unconditional because at every width
+       this rule applies to, the row is wider than the box. */
+    .bc-nav-groups {
+      flex-direction: row; overflow-x: auto; overflow-y: hidden;
+      gap: var(--bc-space-5, 12px); padding-bottom: var(--bc-space-2, 6px);
+      -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+      mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+      scrollbar-width: thin;
+    }
     .bc-nav-group { flex-direction: row; align-items: center; gap: 2px; }
     .bc-nav-group-label { display: none; }
     .bc-tab { flex: none; white-space: nowrap; }
