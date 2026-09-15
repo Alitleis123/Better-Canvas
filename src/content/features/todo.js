@@ -926,8 +926,22 @@
     const pct = total ? Math.round((done / total) * 100) : 0;
 
     // Skip observer-tick rebuilds when nothing changed or the user is typing.
-    const sig = [state.lastFetchKey, total, done, state.filterCourse, t.rangeDays, t.groupBy,
-                 t.view || "", t.layout || "", t.showCompleted ? 1 : 0, accent].join("|");
+    //
+    // The settings half of this key is the WHOLE todo object, not a hand-listed
+    // subset of it. The list it replaces named rangeDays, groupBy, view, layout,
+    // showCompleted and accent -- and missed progress, allowNewTask, mode and
+    // streaks. A setting absent from this key cannot repaint the widget: the
+    // value changes, applyAll runs, render() is reached, and returns here
+    // because the key it computed is the one already on the container. Changing
+    // the progress indicator did nothing until some OTHER setting happened to
+    // move the key, which is why the settings drawer's live preview looked
+    // broken for the To Do section specifically.
+    //
+    // Serialising the object cannot drift the way a list does. It is a few dozen
+    // small fields, once per render, against a bug class that has already cost
+    // four settings.
+    const sig = [state.lastFetchKey, total, done, state.filterCourse,
+                 JSON.stringify(t)].join("|");
     const ae = document.activeElement;
     const typing = ae && container.contains(ae) && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA");
     const popoverOpen = !!container.querySelector(".bc-todo-pop");

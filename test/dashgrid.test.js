@@ -163,6 +163,17 @@ module.exports = {
     assert.ok(/background-image/.test(art), "and a pattern rather than a flat fill");
   },
 
+  "a course with no planner data still reserves the progress slot"() {
+    // The term is pinned to the bottom of the body, so a card missing an
+    // optional element below it drops its term a row below every neighbour's.
+    // Hidden rather than drawn at 0%, which would read as "none of it is done"
+    // about a course that simply has nothing due.
+    assert.match(SRC, /class: "bc-dc-bar is-empty"/,
+      "the slot has to be reserved, not omitted");
+    assert.match(SRC, /\.bc-dc-bar\.is-empty \{ visibility: hidden; \}/,
+      "and reserved without drawing a misleading empty track");
+  },
+
   "the art is derived only from the course id, so it never moves"() {
     assert.match(SRC, /hash\(String\(card\.id \|\| card\.assetString \|\| card\.shortName \|\| ""\)\)/,
       "anything viewport- or order-dependent would repaint the card on resize");

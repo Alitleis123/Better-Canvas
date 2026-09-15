@@ -37,6 +37,7 @@
 
   let cards = null;            // the dashboard_cards payload
   let state = "idle";          // idle | loading | done | failed
+  let fails = 0;               // consecutive fetch failures, for the retry
   const colours = new Map();   // course id -> the colour we actually painted
 
   // The planner widget renders beside these cards and had no idea what colour
@@ -57,7 +58,21 @@
       if (BC.requestApply) BC.requestApply();
     }).catch((e) => {
       state = "failed";
+      fails++;
       BC.diag.push("dashgrid:load", e);
+      // One dropped request should not cost somebody their dashboard until they
+      // reload the tab. "failed" latched forever, so a single timeout on a slow
+      // connection -- or a request that went out before the session was ready --
+      // meant Canvas's own cards for the rest of the visit with no way back.
+      // Back off, then try again; after three it stays down and the fallback
+      // dashboard is the answer.
+      if (fails <= 3) {
+        setTimeout(() => {
+          if (state !== "failed") return;
+          state = "idle";
+          if (BC.requestApply) BC.requestApply();
+        }, 1000 * fails);
+      }
       if (BC.requestApply) BC.requestApply();
     });
   }
@@ -192,6 +207,17 @@
         bar.setAttribute("role", "img");
         bar.setAttribute("aria-label", p.done + " of " + p.total + " done");
         body.appendChild(bar);
+      } else {
+        // A course with nothing in the planner window still reserves the slot.
+        // The term is pinned to the bottom of the body, so a card missing its
+        // bar drops its term a row below every neighbour's -- the same defect
+        // the missing footer caused, from the same cause.
+        //
+        // Hidden rather than drawn at 0%: an empty track reads as "none of it is
+        // done", which is a different and wrong statement about a course that
+        // simply has nothing due.
+        const ph = el("div", { class: "bc-dc-bar is-empty", "aria-hidden": "true" });
+        body.appendChild(ph);
       }
     }
 
@@ -358,6 +384,7 @@
       overflow: hidden;
     }
     [data-bc-node="${NODE}"] .bc-dc-bar i { display: block; height: 100%; background: var(--dc-c); }
+    [data-bc-node="${NODE}"] .bc-dc-bar.is-empty { visibility: hidden; }
 
     [data-bc-node="${NODE}"] .bc-dc-links {
       display: flex; gap: 2px;
@@ -545,6 +572,6 @@
     styles: [STYLE],
     nodes: [NODE],
     apply,
-    unmount() { teardown(); state = "idle"; cards = null; colours.clear(); },
+    unmount() { teardown(); state = "idle"; cards = null; fails = 0; colours.clear(); },
   });
 })();

@@ -103,7 +103,21 @@ window.__bcLiveReady = (async () => {
     coursesWithScores: () => Promise.resolve(courses.map((c, i) => ({
       id: c.id, name: c.shortName, enrollments: [{ computed_current_score: [91, 84][i] }],
     }))),
-    plannerItems: () => Promise.resolve([]),
+    // Real items, not an empty list. Every To Do setting -- grouping, range,
+    // layout, the progress indicator, show-completed -- only has an observable
+    // effect when there is something in the list, so an empty planner made the
+    // whole widget unsweepable and its stuck settings invisible.
+    plannerItems: () => Promise.resolve([0, 1, 2, 3].map((i) => {
+      const d = new Date(); d.setDate(d.getDate() + i);
+      return {
+        plannable_id: 500 + i, plannable_type: "assignment",
+        course_id: courses[i % 2].id, context_name: courses[i % 2].shortName,
+        plannable_date: d.toISOString(),
+        plannable: { id: 500 + i, title: "Task " + (i + 1), due_at: d.toISOString() },
+        html_url: "/courses/" + courses[i % 2].id + "/assignments/" + (500 + i),
+        submissions: i === 0 ? { submitted: true } : false,
+      };
+    })),
     announcements: () => Promise.resolve([]),
     filesForCourse: () => Promise.resolve([]),
     submissions: () => Promise.resolve([]),
@@ -114,6 +128,26 @@ window.__bcLiveReady = (async () => {
   // content.js boots on its own; wait for it to have applied once.
   for (let i = 0; i < 60 && !document.querySelector("style[data-better-canvas]"); i++) {
     await new Promise((r) => setTimeout(r, 50));
+  }
+
+  // The API stub is necessarily installed AFTER the bundle loads, because BC
+  // does not exist until it does -- so any feature that fetched during its first
+  // apply did so against the real BC.api, got a 404 off localhost, and latched a
+  // failed state. dashgrid then correctly fell back to Canvas's own cards and
+  // was untestable here. Reset the features that fetch, and apply again now that
+  // the stub is the thing they will reach.
+  for (const id of ["dashgrid", "dashboard", "todo"]) {
+    const f = BC.features && BC.features[id];
+    if (f && f.unmount) { try { f.unmount(); } catch (_) {} }
+  }
+  // applyAll directly, NOT applyNow: applyNow coalesces onto requestAnimationFrame,
+  // and under --virtual-time-budget rAF does not reliably fire, so the re-apply
+  // never happened and every sweep reported "(no .bc-dc)" -- i.e. every setting
+  // looked stuck when nothing was.
+  BC.applyAll(BC.storage.current);
+  for (let i = 0; i < 60 && !document.querySelector('[data-bc-node="bc-dashgrid"]'); i++) {
+    await new Promise((r) => setTimeout(r, 50));
+    BC.applyAll(BC.storage.current);
   }
   return true;
 })();
@@ -130,8 +164,13 @@ window.__bcLive = async function (patch) {
     return dst;
   };
   await BC.storage.update((d) => merge(d, patch));
-  if (BC.applyNow) BC.applyNow();
-  await new Promise((r) => setTimeout(r, 260));
+  // Direct, for the same reason the boot path is: rAF is not dependable under
+  // virtual time, and a sweep that silently never re-applies reports every
+  // setting as stuck.
+  BC.applyAll(BC.storage.current);
+  await new Promise((r) => setTimeout(r, 200));
+  BC.applyAll(BC.storage.current);
+  await new Promise((r) => setTimeout(r, 120));
   return true;
 };
 

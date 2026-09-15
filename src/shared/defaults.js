@@ -92,9 +92,18 @@
       maxColumns: 5,               // 0 = fill the window, else 3-12
       cardRadius: 8,               // 0-24
       hoverLift: true,
-      showInlineGrade: false,
-      showProgressBar: false,
-      showBadges: false,           // due-count badge on each card
+      // On by default. A card that shows only a name and a colour is decoration;
+      // these three are what make the dashboard tell you something you would
+      // otherwise open four tabs to learn, and every one of them reads data the
+      // dashboard ALREADY fetches -- maybeFetchConcluded pulls the scores and
+      // the planner window is loaded for the term-progress bar -- so none of
+      // them costs an extra request.
+      //
+      // showInlineGrade puts your grade on screen, which is a real thing to be
+      // aware of on a shared or projected display. One switch turns it off.
+      showInlineGrade: true,
+      showProgressBar: true,
+      showBadges: true,            // due-count badge on each card
       showSparkline: false,        // grade trend sparkline from local history
       courseSearch: true,          // filter box above the card grid
       semesterProgress: true,      // "Week 9 of 15" term progress bar

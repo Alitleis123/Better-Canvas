@@ -115,13 +115,44 @@ module.exports = {
     assert.deepEqual(offenders, [], "layouts that hide a control: " + offenders.join(", "));
   },
 
-  "the layout attribute is part of the render signature"() {
-    // The widget skips rebuilds when its signature is unchanged. A layout not in
-    // that signature means switching layouts does nothing until something else
-    // happens to change.
+  "EVERY To Do setting is part of the render signature, not a hand-listed few"() {
+    // The widget skips rebuilds when its signature is unchanged, so a setting
+    // missing from that signature simply does not take effect: the value
+    // changes, applyAll runs, render() is reached and returns early because the
+    // key it computed already matches the container's.
+    //
+    // This test used to assert `t.layout` was in the list. It was -- along with
+    // rangeDays, groupBy, view, showCompleted and accent -- while progress,
+    // allowNewTask, mode and streaks were not, so four settings did nothing
+    // until some other one happened to move the key. Checking for one member of
+    // a hand-maintained list cannot catch that; checking that there IS no
+    // hand-maintained list can.
     const src = read("src/content/features/todo.js");
-    const sig = src.slice(src.indexOf("const sig = ["), src.indexOf("].join(\"|\")"));
-    assert.match(sig, /t\.layout/, "changing layout would not trigger a re-render");
+    const sig = src.slice(src.indexOf("const sig = ["), src.indexOf('].join("|")'));
+    assert.match(sig, /JSON\.stringify\(t\)/,
+      "the settings half of the key has to be the whole todo object");
+    for (const named of ["t.layout", "t.groupBy", "t.view", "t.rangeDays", "t.showCompleted"]) {
+      assert.ok(sig.indexOf(named) === -1,
+        named + " is listed individually again, which is how the list drifts");
+    }
+  },
+
+  "a change to any To Do setting moves the signature"() {
+    // The property the test above asserts structurally, demonstrated on the
+    // settings that were actually broken.
+    const t = { mode: "default", view: "list", layout: "comfortable", rangeDays: 7,
+                showCompleted: false, accent: "", allowNewTask: true, groupBy: "day",
+                progress: "ring", streaks: { enabled: true }, pomodoro: { enabled: true } };
+    const sig = (o) => ["k", 3, 1, "", JSON.stringify(o)].join("|");
+    const base = sig(t);
+    for (const [key, val] of [["progress", "bar"], ["allowNewTask", false],
+                              ["mode", "clean"], ["layout", "cards"],
+                              ["groupBy", "course"], ["showCompleted", true]]) {
+      const next = Object.assign({}, t, { [key]: val });
+      assert.notEqual(sig(next), base, "changing todo." + key + " must repaint the widget");
+    }
+    const deep = Object.assign({}, t, { streaks: { enabled: false } });
+    assert.notEqual(sig(deep), base, "a nested setting has to count too");
   },
 
   "an unknown layout falls back instead of rendering unstyled"() {

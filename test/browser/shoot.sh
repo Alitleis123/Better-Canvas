@@ -21,12 +21,12 @@ pkill -f "Google Chrome.*--headless.*bcshot" 2>/dev/null
 rm -f "$OUT"
 PROFILE=$(mktemp -d /tmp/bcshot.XXXXXX)
 "$CHROME" --headless --disable-gpu --hide-scrollbars --force-device-scale-factor=1 \
-  --virtual-time-budget=6000 --window-size="$W,$H" \
+  --virtual-time-budget=${BUDGET:-6000} --window-size="$W,$H" \
   --screenshot="$OUT" --user-data-dir="$PROFILE" \
   "http://localhost:8731/test/browser/$URL" >/dev/null 2>&1 &
 PID=$!
 i=0
-while [ $i -lt 150 ]; do
+while [ $i -lt ${POLL:-150} ]; do
   if [ -s "$OUT" ]; then sleep 0.4; break; fi
   sleep 0.2
   i=$((i + 1))
