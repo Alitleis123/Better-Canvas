@@ -14,12 +14,18 @@
      supported: three tracks, a container query that stacks them, and a select
      capped in absolute units so it cannot starve the label. */
   #probe { container-type: inline-size; container-name: bc-body; width: 300px; }
-  .row { display: grid; grid-template-columns: 28px minmax(0,1fr) auto; gap: 10px; align-items: center; }
+  .row { display: grid; grid-template-columns: 28px minmax(144px,1fr) auto; gap: 10px; align-items: center; }
   .row > b { min-width: 0; }
   select { max-width: 190px; }
   @container bc-body (max-width: 380px) {
     .row:not(.slim) { grid-template-columns: 28px minmax(0,1fr); row-gap: 8px; }
     .row:not(.slim) > select { grid-column: 2 / -1; justify-self: start; }
+  }
+  /* And the second threshold, where even a single switch has to stack: a 144px
+     label plus the mark, the gaps and a 40px switch does not fit under ~280. */
+  @container bc-body (max-width: 280px) {
+    .row.slim { grid-template-columns: 28px minmax(0,1fr); row-gap: 8px; }
+    .row.slim > .sw { grid-column: 2 / -1; justify-self: start; }
   }
   .sw:has(input:checked) { outline: 2px solid green; }
   /* A miniature of the dashboard card grid. The track the dashboard ships uses
@@ -38,6 +44,12 @@
   #gridprobe > h6 { grid-column: 1 / -1; margin: 0; }
   #gridprobe > .c { height: 20px; background: #ddd; }
   /* And the masonry heading, which has to lift out of the columns. */
+  /* One card height for the whole grid, not one per row. align-items only
+     equalises within a row, so this is what stops a short last row drawing
+     shorter cards than the rows above it. */
+  #autorows { width: 520px; display: grid; grid-template-columns: repeat(2, 1fr);
+              grid-auto-rows: 1fr; gap: 8px; }
+  #autorows > div { background: #ddd; }
   #colprobe { width: 600px; columns: 250px 3; column-gap: 16px; }
   #colprobe > h6 { column-span: all; margin: 0; }
   #colprobe > .c { height: 30px; background: #ddd; margin-bottom: 8px; break-inside: avoid; }
@@ -49,6 +61,7 @@
   <div class="row" id=r3><i>ic</i><b id=lab2>Inert test</b><span id=inertbox inert><button id=inertbtn>x</button></span></div>
 </div>
 <div id=gridprobe><h6>Published Courses</h6><div class=c></div><div class=c></div><div class=c></div><div class=c></div></div>
+<div id=autorows><div>one line</div><div>a cell whose content runs onto a second line of text</div><div>x</div><div>y</div></div>
 <div id=colprobe><h6>Published Courses</h6><div class=c></div><div class=c></div><div class=c></div><div class=c></div></div>
 <pre id=out></pre>
 <script>
@@ -60,10 +73,13 @@ const q = [
   ["text-wrap: pretty",      "text-wrap: pretty"],
   ["backdrop-filter",        "backdrop-filter: blur(10px)"],
   ["inert attribute",        null],
+  ["ResizeObserver",         null],
 ];
 const lines = q.map(([name, decl]) => {
   let ok;
-  if (decl === null) ok = "inert" in HTMLElement.prototype;
+  if (decl === null) ok = name === "ResizeObserver"
+    ? typeof ResizeObserver !== "undefined"
+    : "inert" in HTMLElement.prototype;
   else if (decl.startsWith("selector(")) ok = CSS.supports(decl);
   else { const [p, ...v] = decl.split(":"); ok = CSS.supports(p.trim(), v.join(":").trim()); }
   return (ok ? "  yes  " : "  NO   ") + name;
@@ -109,6 +125,10 @@ lines.push("  card track width     " + gtracks[0] + "  (want ~263px)");
 lines.push("  row trailing gap     " + gTrail + "px  (want 0)");
 lines.push("  narrow reduces to    " + narrowTracks.length + " cols, " + narrowTrail + "px left over  (want 3, 0)");
 lines.push("  masonry head spans   " + headingSpans + "  (want true)");
+// Every cell the same height, including the ones on the row that did not need it.
+const ar = [...document.getElementById("autorows").children]
+  .map((c) => Math.round(c.getBoundingClientRect().height));
+lines.push("  auto-rows heights    " + ar.join("/") + "  (want all equal)");
 document.getElementById("out").textContent = lines.join("\n");
 btn.focus();
 document.getElementById("out").textContent += "\n  inert after focus()  " + (document.activeElement !== btn);
