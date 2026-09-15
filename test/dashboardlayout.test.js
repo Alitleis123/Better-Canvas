@@ -494,4 +494,40 @@ module.exports = {
     assert.match(theming, /\[data-bc-cardgrid\][\s\S]{0,120}background-color: transparent/,
       "the grid container must be transparent so a row's leftover reads as page");
   },
+
+  "Coming Up and Recent Feedback can be switched independently"() {
+    // They are two settings and, on a live Canvas, ONE element: the DOM reports
+    // a single div with class "events_list recent_feedback". So hiding either by
+    // its own class took the other widget away with it -- one switch silently
+    // operating two things.
+    const src = read("src/content/features/dashboard.js");
+    const fn = /function widgetsCss\(w\) \{[\s\S]*?\n  \}/.exec(src);
+    assert.ok(fn, "widgetsCss not found");
+    // Each switch must exempt the block that also belongs to the other one...
+    assert.match(fn[0], /\.events_list:not\(\.recent_feedback\)/,
+      "hiding Coming Up must not hide a block that is also Recent Feedback");
+    assert.match(fn[0], /\.recent_feedback:not\(\.events_list\)/,
+      "hiding Recent Feedback must not hide a block that is also Coming Up");
+    // ...and the shared block goes only when BOTH are off.
+    assert.match(fn[0], /!w\.comingUp && !w\.recentFeedback[\s\S]{0,120}\.events_list\.recent_feedback/,
+      "the combined block should disappear only when both widgets are off");
+  },
+
+  "Canvas's own sidebar blocks get the same face as our planner"() {
+    // Measured on a live dashboard: our .bc-todo is a card with a 1px border, a
+    // 12.5px radius and 14px of padding, and Canvas's feedback block directly
+    // below it is a bare div with none of those -- so the right column read as
+    // one panel followed by some loose text. The replica had invented markup for
+    // those blocks and drew all three as cards, so it never showed the gap.
+    const src = read("src/content/features/dashboard.js");
+    const rule = /:is\(#right-side, \.ic-app-main-content__secondary\) >[\s\S]*?\}/.exec(src);
+    assert.ok(rule, "no surface rule for Canvas's sidebar blocks");
+    for (const prop of ["background", "border", "border-radius", "padding"]) {
+      assert.ok(rule[0].includes(prop + ":"), `sidebar surface rule is missing ${prop}`);
+    }
+    // Named blocks, not a child-universal selector: Canvas wraps the View Grades
+    // button in a bare div, which would otherwise become a box around a button.
+    assert.doesNotMatch(rule[0], />\s*\*/,
+      "the surface rule must name the blocks it applies to");
+  },
 };

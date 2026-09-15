@@ -27,8 +27,19 @@
   function widgetsCss(w) {
     const rules = [];
     if (!w.todo)           rules.push(`.Sidebar__TodoListContainer, .ToDoSidebar { display: none !important; }`);
-    if (!w.comingUp)       rules.push(`.events_list, .coming_up { display: none !important; }`);
-    if (!w.recentFeedback) rules.push(`.recent_feedback { display: none !important; }`);
+    // Coming Up and Recent Feedback are TWO settings and, on at least some
+    // Canvas versions, ONE element: a live dashboard reports a single div whose
+    // class is "events_list recent_feedback". So `.events_list { display: none }`
+    // for the first switch also took the second widget away, and vice versa —
+    // turning one off silently turned off the other.
+    //
+    // The :not() pair keeps each switch independent where Canvas emits two
+    // separate blocks (there the :not() always matches, since neither element
+    // carries the other's class), and leaves the combined block alone while
+    // either widget is still wanted. It goes only when both are off.
+    if (!w.comingUp) rules.push(`.events_list:not(.recent_feedback), .coming_up { display: none !important; }`);
+    if (!w.recentFeedback) rules.push(`.recent_feedback:not(.events_list) { display: none !important; }`);
+    if (!w.comingUp && !w.recentFeedback) rules.push(`.events_list.recent_feedback { display: none !important; }`);
     return rules.join("\n");
   }
 
@@ -1041,6 +1052,25 @@
       }
       #right-side > :last-child, .ic-app-main-content__secondary > :last-child {
         margin-bottom: 0 !important;
+      }
+      /* ...and the same FACE as our own planner sits in. Measured on a live
+         dashboard: our .bc-todo is 240x276 with a 1px border, a 12.5px radius
+         and 14px of padding, while Canvas's feedback block directly beneath it
+         is a bare div — 0 border, 0 radius, 0 padding — so the right column read
+         as one panel followed by some loose text. The replica had invented
+         markup for those blocks and drew all three as cards, so it had nothing
+         to say about it.
+
+         Named blocks rather than a child-universal selector: the nodes we
+         inject already carry their own surface, and the unclassed wrapper
+         Canvas puts around the View Grades button would otherwise become a box
+         drawn around a button. */
+      :is(#right-side, .ic-app-main-content__secondary) >
+        :is(.events_list, .recent_feedback, .coming_up, .Sidebar__TodoListContainer) {
+        background: var(--bc-surface-2, #fff) !important;
+        border: 1px solid var(--bc-border, #e5e7eb) !important;
+        border-radius: var(--bc-radius-lg, 12px) !important;
+        padding: var(--bc-pad-row, 14px) !important;
       }
     `);
 

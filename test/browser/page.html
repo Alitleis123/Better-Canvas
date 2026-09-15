@@ -162,14 +162,21 @@
             <div class="todo-list-header-container">To Do</div>
             <div><a href="#">Reminder: Sexual Violence P...</a><div>Up2Us Foundations</div></div>
           </div>
-          <div class="recent_feedback">
+          <!-- BOTH classes on ONE element, which is what a live Canvas emits:
+               the DOM reports class="events_list\n  recent_feedback". Coming Up
+               and Recent Feedback are two settings sharing one block, so hiding
+               either by its own class took the other with it. The replica used
+               to give them a tidy element each and could not show that. -->
+          <div class="events_list recent_feedback">
             <h2 style="margin:0 0 6px;font-size:16px">Recent Feedback</h2>
             <span>Nothing for now</span>
           </div>
           <!-- An ANCHOR with class Button, which is what most Canvas buttons
                actually are. A tag selector for <button> never matched it, so it
-               kept a light fill in a dark sidebar. -->
-          <a class="Button button-sidebar-wide" href="/grades">View Grades</a>
+               kept a light fill in a dark sidebar. Canvas wraps it in a bare
+               div, which is why the sidebar surface rule names the blocks it
+               applies to rather than using `> *`. -->
+          <div><a class="Button button-sidebar-wide" href="/grades">View Grades</a></div>
         </aside>
       </div>
      </div>
