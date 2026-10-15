@@ -1,4 +1,4 @@
-# Better Canvas 3.1
+# Better Canvas 3.1.1
 
 The most feature-complete browser extension for Instructure Canvas — free forever, settings stored locally, no accounts, no telemetry.
 

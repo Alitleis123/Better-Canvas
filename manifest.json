@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Better Canvas",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "The most comprehensive Canvas LMS customizer. Dark mode everywhere, theme creator + rotation, kanban planner, Pomodoro, GPA + rubric predictor, quiz draft saver, module progress, study insights — free, local, no telemetry.",
   "icons": {
     "16": "icons/icon-16.png",
