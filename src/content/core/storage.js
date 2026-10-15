@@ -13,7 +13,8 @@
   let current = null;
   let local = null;
   let loadPromise = null;
-  let localLoadPromise = null;
+  let localWrites = Promise.resolve();
+  const RECORD_PREFIX = LOCAL_KEY + ":record:";
 
   function area() { return chrome.storage && chrome.storage.local; }
   function emptyLocal() { return { notes: {}, drafts: {}, cache: {} }; }
@@ -29,6 +30,7 @@
   let refreshQueued = false;
 
   function refresh(key) {
+    if (key.startsWith(RECORD_PREFIX)) key = LOCAL_KEY;
     refreshKeys.add(key);
     if (refreshQueued) return;
     refreshQueued = true;
@@ -41,7 +43,7 @@
       const before = { ...revisions };
       const sequence = {};
       for (const k of keys) sequence[k] = ++reads[k];
-      a.get(keys, (res) => {
+      a.get(null, (res) => {
         if (chrome.runtime && chrome.runtime.lastError) return;
         for (const k of keys) {
           // A local edit after this read started is newer, and a pending write
@@ -55,7 +57,7 @@
             savedSettings = JSON.stringify(current);
             for (const cb of listeners) BC.util.guard(() => cb(current), "storage");
           } else {
-            local = BC.cleanLocalData((res && res[LOCAL_KEY]) || emptyLocal());
+            local = readLocal(res);
             for (const cb of localListeners) BC.util.guard(() => cb(local), "local storage");
           }
         }
@@ -81,7 +83,7 @@
     return new Promise((resolve, reject) => {
       const a = area();
       if (!a) return resolve();
-      const keys = Object.keys(values);
+      const keys = [...new Set(Object.keys(values).map((key) => key.startsWith(RECORD_PREFIX) ? LOCAL_KEY : key))];
       for (const key of keys) writing[key]++;
       let finished = false;
       const done = (error) => {
@@ -100,6 +102,57 @@
 
   function write(key, value) { return writeValues({ [key]: value }); }
 
+  // Store changed leaves independently. A read-modify-write of all bcLocal still
+  // loses unrelated edits when two tabs read before either writes. Arrays are
+  // single records. Tombstones suppress deleted values in the legacy bcLocal seed.
+  function flatten(value, path = [], out = new Map()) {
+    if (value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length) {
+      for (const key of Object.keys(value)) flatten(value[key], path.concat(key), out);
+    } else if (path.length) out.set(JSON.stringify(path), value);
+    return out;
+  }
+  function diff(before, after) {
+    const patch = {};
+    for (const path of new Set([...before.keys(), ...after.keys()])) {
+      if (before.has(path) === after.has(path) && JSON.stringify(before.get(path)) === JSON.stringify(after.get(path))) continue;
+      patch[RECORD_PREFIX + path] = after.has(path) ? { value: after.get(path) } : { deleted: true };
+    }
+    return patch;
+  }
+  function readLocal(values = {}) {
+    const data = BC.cleanLocalData(values[LOCAL_KEY] || emptyLocal());
+    const records = [];
+    for (const [key, record] of Object.entries(values)) {
+      if (!key.startsWith(RECORD_PREFIX) || !record || typeof record !== "object") continue;
+      let path;
+      try { path = JSON.parse(key.slice(RECORD_PREFIX.length)); } catch (_) { continue; }
+      if (!Array.isArray(path) || !path.length || path.some((key) => typeof key !== "string" || ["__proto__", "constructor", "prototype"].includes(key))) continue;
+      records.push({ path, record });
+    }
+    records.sort((a, b) => Number(!a.record.deleted) - Number(!b.record.deleted) || a.path.length - b.path.length);
+    for (const { path, record } of records) {
+      let target = data;
+      for (const part of path.slice(0, -1)) {
+        if (!target[part] || typeof target[part] !== "object" || Array.isArray(target[part])) target[part] = {};
+        target = target[part];
+      }
+      if (record.deleted) delete target[path.at(-1)];
+      else if (Object.hasOwn(record, "value")) target[path.at(-1)] = BC.cleanData(record.value);
+    }
+    return BC.cleanLocalData(Object.assign(emptyLocal(), data));
+  }
+  function queueLocal(operation) {
+    const result = localWrites.then(operation);
+    localWrites = result.catch(() => {});
+    return result;
+  }
+  async function commitLocal(patch) {
+    revisions[LOCAL_KEY]++;
+    if (Object.keys(patch).length) await writeValues(patch);
+    local = readLocal(await readValues(null));
+    for (const cb of localListeners) BC.util.guard(() => cb(local), "local storage");
+  }
+
   const storage = (BC.storage = {
     get current() { return current; },
     get local() { return local; },
@@ -107,17 +160,19 @@
     load() {
       if (loadPromise) return loadPromise;
       loadPromise = (async () => {
-        const res = await readValues([KEY, LOCAL_KEY]);
+        const res = await readValues(null);
         const stored = res[KEY], carry = {};
         current = BC.mergeDefaults(stored, carry);
         savedSettings = JSON.stringify(current);
-        local = BC.cleanLocalData(res[LOCAL_KEY] || emptyLocal());
+        local = readLocal(res);
         if (carry.gradeHistory) local.gradeHistory = Object.assign({}, carry.gradeHistory, local.gradeHistory || {});
         if (carry.local) {
           for (const k of Object.keys(carry.local)) if (local[k] === undefined) local[k] = carry.local[k];
         }
         if (stored && (stored.version || 1) < BC.SETTINGS_VERSION) {
           revisions[KEY]++; revisions[LOCAL_KEY]++;
+          // Keep the legacy seed readable. Record overrides remain separate and
+          // win even if another context migrates this seed concurrently.
           await writeValues({ [KEY]: current, [LOCAL_KEY]: local });
         }
         return current;
@@ -133,8 +188,7 @@
     // (this already ate gradeHistory on the v3 upgrade). Delegating removes the
     // race by construction and saves a storage round-trip.
     loadLocal() {
-      if (!localLoadPromise) localLoadPromise = storage.load().then(() => local);
-      return localLoadPromise;
+      return storage.load().then(() => local);
     },
 
     // Adopt an in-memory settings object without waiting for a storage
@@ -152,9 +206,14 @@
     },
 
     saveLocal(data) {
-      local = data;
-      revisions[LOCAL_KEY]++;
-      return write(LOCAL_KEY, data);
+      const before = flatten(local || emptyLocal());
+      const after = flatten(BC.cleanLocalData(data));
+      const patch = diff(before, after);
+      return queueLocal(async () => {
+        await storage.load();
+        await commitLocal(patch);
+        return local;
+      });
     },
 
     async update(mutator) {
@@ -168,15 +227,15 @@
       return draft;
     },
 
-    async updateLocal(mutator) {
-      const s = local || (await storage.loadLocal());
-      const before = JSON.stringify(s);
-      const draft = JSON.parse(before);
-      mutator(draft);
-      const after = JSON.stringify(draft);
-      if (after === before) return s;
-      await storage.saveLocal(draft);
-      return draft;
+    updateLocal(mutator) {
+      return queueLocal(async () => {
+        await storage.load();
+        const fresh = readLocal(await readValues(null));
+        const draft = JSON.parse(JSON.stringify(fresh));
+        mutator(draft);
+        await commitLocal(diff(flatten(fresh), flatten(BC.cleanLocalData(draft))));
+        return local;
+      });
     },
 
     subscribe(cb) { listeners.add(cb); return () => listeners.delete(cb); },
@@ -219,7 +278,7 @@
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== "local") return;
       if (changes[KEY]) refresh(KEY);
-      if (changes[LOCAL_KEY]) refresh(LOCAL_KEY);
+      if (changes[LOCAL_KEY] || Object.keys(changes).some((key) => key.startsWith(RECORD_PREFIX))) refresh(LOCAL_KEY);
     });
   }
 })();

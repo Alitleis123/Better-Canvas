@@ -131,9 +131,10 @@ test("interleaved tab events cannot roll memory back and erase the last committe
   await a.storage.updateLocal((data) => { data.notes.last = "A"; });
   for (const event of mock.events.slice()) a.deliver(event);
   await settle();
-  assert.deepEqual(copy(a.storage.local), mock.persisted.bcLocal);
+  const observer = mock.tab(); await observer.storage.load();
+  assert.deepEqual(copy(a.storage.local), copy(observer.storage.local));
   await a.storage.updateLocal((data) => { data.notes.next = "A"; });
-  assert.equal(mock.persisted.bcLocal.notes.last, "A");
+  assert.equal(a.storage.local.notes.last, "A");
 });
 
 test("a delayed storage read cannot replace a newer local write", async () => {
@@ -143,6 +144,7 @@ test("a delayed storage read cannot replace a newer local write", async () => {
   a.deliver({ bcLocal: { newValue: copy(mock.persisted.bcLocal) } });
   await settle();
   const oldRead = mock.reads.shift();
+  mock.holdReads(false);
   await a.storage.updateLocal((data) => { data.notes.newer = "keep"; });
   oldRead();
   assert.equal(a.storage.local.notes.newer, "keep");
@@ -213,4 +215,41 @@ test("settings migrations commit the schema and carried local data together", as
   assert.ok(mock.events[0].bcLocal);
   assert.equal(mock.persisted.bcSettings.version, a.context.BC.SETTINGS_VERSION);
   assert.equal(mock.persisted.bcLocal.gradeHistory["7"][0].score, 93);
+});
+
+test("simultaneous independent contexts preserve notes, planner stars and separate note records", async () => {
+  const mock = storageMock(), a = mock.tab(), b = mock.tab();
+  mock.persisted.bcLocal.notes.legacy = "Keep legacy data";
+  await Promise.all([a.storage.load(), b.storage.load()]);
+  await Promise.all([
+    a.storage.updateLocal((data) => { data.notes.a = "Note A"; }),
+    b.storage.updateLocal((data) => { data.todo = { stars: { task: true } }; }),
+  ]);
+  // No storage-change events are delivered. Both caches can still be stale.
+  await Promise.all([
+    a.storage.updateLocal((data) => { data.notes.another = "Another note"; }),
+    b.storage.updateLocal((data) => { data.notes.b = "Note B"; }),
+  ]);
+  const reader = mock.tab(); await reader.storage.load();
+  assert.deepEqual(copy(reader.storage.local.notes), { legacy: "Keep legacy data", a: "Note A", another: "Another note", b: "Note B" });
+  assert.equal(reader.storage.local.todo.stars.task, true);
+});
+
+test("serialized local updates and snapshot saves retain unrelated records and persist deletion", async () => {
+  const mock = storageMock(), a = mock.tab(), b = mock.tab();
+  mock.persisted.bcLocal.notes.old = "Delete this";
+  await Promise.all([a.storage.load(), b.storage.load()]);
+  const imported = copy(a.storage.local); imported.notes.imported = "Backup note";
+  await Promise.all([
+    a.storage.saveLocal(imported),
+    b.storage.updateLocal((data) => { data.todo = { stars: { other: true } }; }),
+    b.storage.updateLocal((data) => { delete data.notes.old; }),
+    b.storage.updateLocal((data) => { data.notes.last = "Queued note"; }),
+  ]);
+  const reader = mock.tab(); await reader.storage.load();
+  assert.equal(reader.storage.local.notes.old, undefined);
+  assert.equal(reader.storage.local.notes.imported, "Backup note");
+  assert.equal(reader.storage.local.notes.last, "Queued note");
+  assert.equal(reader.storage.local.todo.stars.other, true);
+  assert.equal(mock.persisted.bcLocal.notes.old, "Delete this", "legacy data remains readable through record overrides");
 });
