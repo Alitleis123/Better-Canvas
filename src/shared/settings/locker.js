@@ -16,7 +16,17 @@
   }));
   const save = (value) => { const item = normalize(value); if (!item) return Promise.reject(new Error("Invalid locker item")); return call("set", { [PREFIX + item.id]: item }); };
   const list = async () => Object.entries(await call("get", null) || {}).filter(([k]) => k.startsWith(PREFIX)).map(([, v]) => normalize(v)).filter(Boolean);
-  BC.Locker = { normalize, save, list, remove: (id) => /^[a-zA-Z0-9-]{1,80}$/.test(id) ? call("remove", PREFIX + id) : Promise.reject(new Error("Invalid item")) };
+  async function importBatch(values) {
+    if (!Array.isArray(values) || values.length > 1000) throw new Error("Invalid locker export");
+    const incoming = values.map(normalize);
+    if (incoming.some((item) => !item)) throw new Error("The file contains invalid items");
+    const writes = {};
+    for (const item of incoming) { item.id = crypto.randomUUID(); writes[PREFIX + item.id] = item; }
+    // Submit the batch together. Do not report/append partially imported entries if storage rejects it.
+    await call("set", writes);
+    return incoming;
+  }
+  BC.Locker = { normalize, save, list, importBatch, remove: (id) => /^[a-zA-Z0-9-]{1,80}$/.test(id) ? call("remove", PREFIX + id) : Promise.reject(new Error("Invalid item")) };
   BC.renderLocker = function () {
     const root = el("div", { class: "bcs-locker" }), listPane = el("div", { class: "bcs-locker-list" }), editor = el("div", { class: "bcs-locker-editor" });
     const status = el("span", { class: "bc-caption", role: "status", text: "Saved on this device" });
@@ -115,9 +125,9 @@
           const file = input.files[0]; if (!file) return; if (file.size > 5 * 1024 * 1024) throw new Error("Choose a file smaller than 5 MB");
           const data = JSON.parse(await file.text());
           if (data.format !== "better-canvas-locker" || !Array.isArray(data.items) || data.items.length > 1000) throw new Error("This is not a locker export");
-          const incoming = data.items.map(normalize); if (incoming.some((i) => !i)) throw new Error("The file contains invalid items");
           await persist();
-          for (const item of incoming) { item.id = crypto.randomUUID(); await save(item); items.push(item); }
+          const incoming = await importBatch(data.items);
+          items.push(...incoming);
           paintList(); status.textContent = incoming.length + " items imported";
         } catch (e) { report(e); }
       }; input.click();

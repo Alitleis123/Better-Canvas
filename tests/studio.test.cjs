@@ -72,3 +72,13 @@ test('locker rejects malformed items and unsafe bookmark URLs and reports storag
   chrome.storage.local.set = (_value, cb) => { chrome.runtime.lastError = { message: 'Quota exceeded' }; cb(); delete chrome.runtime.lastError; };
   await assert.rejects(BC.Locker.save({ id: 'test', type: 'note', title: 'Keep this draft' }), /Quota exceeded/);
 });
+test('locker import validates the whole batch before writing and never overwrites existing IDs', async () => {
+  const { BC, data } = context();
+  await BC.Locker.save({ id: 'original', type: 'note', title: 'Keep me' });
+  await assert.rejects(BC.Locker.importBatch([{ type: 'note', title: 'Valid' }, { type: 'invalid' }]));
+  assert.equal((await BC.Locker.list()).length, 1);
+  const imported = await BC.Locker.importBatch([{ id: 'original', type: 'note', title: 'Imported copy' }]);
+  assert.notEqual(imported[0].id, 'original');
+  assert.equal(data['bcLocker:item:original'].title, 'Keep me');
+  assert.equal((await BC.Locker.list()).length, 2);
+});

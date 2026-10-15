@@ -12,7 +12,7 @@ Visible changes
 - Local notes, bookmarks, folders, pinned items, flashcard editing and study sessions; locker import/export.
 
 Verification
-- 27 automated regression tests passed.
+- 28 automated regression tests passed.
 - 45 interactive browser checks passed in the synthetic 32-course dashboard.
 - 7 additional online-gallery checks passed with mocked API responses, including cancellation, Apply and Undo.
 - All 19 sections fit at 390px without horizontal content overflow. Laptop layouts checked at 1280x800 and 1440x900.
