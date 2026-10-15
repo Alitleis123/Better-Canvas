@@ -9,7 +9,16 @@
   const BC = (globalThis.BC = globalThis.BC || {});
   BC.features = BC.features || {};
 
-  const seen = new Set();      // dedupe key -> already notified today
+  const seen = new Set();      // dedupe keys already fired in THIS page
+  // The in-memory set alone reset on every page load. Canvas is mostly full page
+  // navigations, and every load re-runs the scans, so "Grade below goal" fired on
+  // every single page and due-soon / streak reminders repeated per navigation (and
+  // per open tab). Fired keys are therefore also recorded in bcLocal for a few days.
+  const SEEN_TTL = 3 * 24 * 60 * 60 * 1000;
+  function firedBefore(key) {
+    const m = BC.storage.local && BC.storage.local.notifSeen;
+    return !!(m && m[key]);
+  }
 
   function isQuietNow(n) {
     if (!n.quietHours || !n.quietHours.enabled) return false;
@@ -25,7 +34,7 @@
 
   function fire(n, opts) {
     // opts: { title, message, url, key, type }
-    if (opts.key && seen.has(opts.key)) return;
+    if (opts.key && (seen.has(opts.key) || firedBefore(opts.key))) return;
     if (opts.key) seen.add(opts.key);
     if (n.inPage) BC.toast.info(opts.message, { title: opts.title, actions: opts.url ? [{ label: "Open", onClick: () => window.open(opts.url, "_blank") }] : [] });
     if (n.enabled) {
@@ -43,14 +52,25 @@
       const h = (d.notifHistory = d.notifHistory || []);
       h.unshift({ iso: new Date().toISOString(), type: opts.type || "info", title: opts.title, url: opts.url || "" });
       d.notifHistory = h.slice(0, 100);
+      if (opts.key) {
+        const m = (d.notifSeen = d.notifSeen || {});
+        const now = Date.now();
+        m[opts.key] = now;
+        for (const k of Object.keys(m)) if (now - m[k] > SEEN_TTL) delete m[k];
+      }
     });
   }
 
-  // The service worker has always handled bc:setBadge (service-worker.js:101);
-  // nothing ever sent it, so the advertised toolbar counter never appeared.
-  // Fire-and-forget: the handler responds synchronously, so never await it.
+  // The service worker has always handled bc:setBadge; nothing ever sent it, so
+  // the advertised toolbar counter never appeared. Fire-and-forget: the handler
+  // responds synchronously, so never await it. Only changes are sent — apply()
+  // calls this on every tick, and each message woke the service worker.
+  let lastBadge = null;
   function sendBadge(count) {
-    try { chrome.runtime.sendMessage({ type: "bc:setBadge", count: count | 0 }); } catch (_) {}
+    const n = count | 0;
+    if (n === lastBadge) return;
+    lastBadge = n;
+    try { chrome.runtime.sendMessage({ type: "bc:setBadge", count: n }, () => void chrome.runtime.lastError); } catch (_) {}
   }
   BC.notifications = { sendBadge };
 
@@ -70,7 +90,9 @@
       for (const it of items) {
         const dueISO = it.plannable_date || (it.plannable && it.plannable.due_at);
         if (!dueISO) continue;
-        if (it.planner_override && it.planner_override.marked_complete) continue;
+        // Done includes submitted work, not only items ticked in the planner —
+        // nobody needs a "due soon" reminder for something already handed in.
+        if (BC.api.plannerItemDone(it)) continue;
         const diff = new Date(dueISO).getTime() - now;
         if (diff <= 0) continue;
         if (diff <= 24 * 60 * 60 * 1000) dueCount++;
@@ -158,7 +180,7 @@
             title: "Grade below goal",
             message: `${c.name}: ${Number(cur).toFixed(1)}% (target ${goal}%)`,
             url: "/courses/" + id + "/grades",
-            key: "goal:" + id + ":" + new Date().toISOString().slice(0, 10),
+            key: "goal:" + id + ":" + BC.dt.ymd(new Date()),
             type: "goalBreach",
           });
         }

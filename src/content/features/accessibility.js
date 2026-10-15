@@ -18,10 +18,24 @@
     .bc-tts-btn.playing { background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); }
   `;
 
+  const TTS_SCOPE = ".show-content, .description, .assignment-description, .announcement, .discussion-topic-body";
+
+  // The button whose text is being read. speechSynthesis is one global queue, so
+  // pressing Speak on a second block used to just cancel the first — leaving that
+  // first button stuck in its "playing" state and never starting the second.
+  let speakingBtn = null;
+  function setPlaying(btn, on) {
+    btn.classList.toggle("playing", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+  function stopSpeaking() {
+    if (speakingBtn) { setPlaying(speakingBtn, false); speakingBtn = null; }
+    if (window.speechSynthesis && window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+  }
+
   function installTts() {
     if (!("speechSynthesis" in window)) return;
-    const scope = document.querySelectorAll(".show-content, .description, .assignment-description, .announcement, .discussion-topic-body");
-    for (const el of scope) {
+    for (const el of document.querySelectorAll(TTS_SCOPE)) {
       if (el._bcTts) continue; el._bcTts = true;
       const btn = document.createElement("button");
       btn.className = "bc-tts-btn";
@@ -31,22 +45,28 @@
       btn.textContent = "🔊 Speak";
       btn.addEventListener("click", () => {
         try {
-          if (window.speechSynthesis.speaking) {
-            window.speechSynthesis.cancel();
-            btn.classList.remove("playing");
-            btn.setAttribute("aria-pressed", "false");
-            return;
-          }
+          const wasThis = speakingBtn === btn;
+          stopSpeaking();
+          if (wasThis) return;
           const utter = new SpeechSynthesisUtterance((el.textContent || "").slice(0, 20000));
           utter.rate = 1.05;
-          utter.onend = () => { btn.classList.remove("playing"); btn.setAttribute("aria-pressed", "false"); };
-          btn.classList.add("playing");
-          btn.setAttribute("aria-pressed", "true");
+          // onerror too: cancel() reports "interrupted"/"canceled" as an error, not an end.
+          const done = () => { if (speakingBtn === btn) { setPlaying(btn, false); speakingBtn = null; } };
+          utter.onend = done;
+          utter.onerror = done;
+          speakingBtn = btn;
+          setPlaying(btn, true);
           window.speechSynthesis.speak(utter);
         } catch (e) { BC.toast.error("TTS failed"); }
       });
       el.parentNode && el.parentNode.insertBefore(btn, el);
     }
+  }
+
+  function uninstallTts() {
+    stopSpeaking();
+    BC.injector.removeNode("bc-tts-btn");
+    for (const el of document.querySelectorAll(TTS_SCOPE)) delete el._bcTts;
   }
 
   // Color-blind daltonization SVG filters (mount once).
@@ -72,7 +92,9 @@
     const a = settings.accessibility || {};
     BC.injector.setStyle("bc-a11y-css", CSS);
     installCbFilters();
+    // Switching TTS off now removes the buttons it added; they used to stay put.
     if (a.tts) installTts();
+    else if (document.querySelector('[data-bc-node="bc-tts-btn"]')) uninstallTts();
   }
 
   BC.registry.register({
@@ -80,11 +102,6 @@
     // The _bcTts expandos outlived teardown, so after a disable/enable cycle
     // installTts() skipped every element it had already marked and the Speak buttons
     // (which teardown had just removed) never came back.
-    unmount() {
-      for (const el of document.querySelectorAll(".show-content, .description, .assignment-description, .announcement, .discussion-topic-body")) {
-        delete el._bcTts;
-      }
-      if (window.speechSynthesis && window.speechSynthesis.speaking) window.speechSynthesis.cancel();
-    },
+    unmount() { uninstallTts(); },
   });
 })();

@@ -1,931 +1,1220 @@
 /*
  * Better Canvas — settings UI.
- * BC.SettingsUI.render(rootEl, adapter) mounts the whole settings surface.
- * The adapter supplies: getState / save / subscribe / getCourses / getGpaData.
- * Used by both the in-page drawer (Shadow-DOM host) and the standalone options page.
+ * BC.SettingsUI.render(rootEl, adapter, opts) mounts the whole settings surface.
+ * The adapter supplies getState / save / subscribe / preview / getCourses /
+ * getGpaData / getLocal / saveLocal. Used by the in-page panel (inside a shadow
+ * root, docked right so Canvas stays visible as the live preview) and by the
+ * standalone options page.
  */
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
-  const el = (t, a, c) => BC.util.el(t, a, c);
-  const h  = (s, a, c) => BC.util.h(s, a, c);
-  const esc = (x) => BC.util.escapeHtml(x);
+  const el = (t, a, c) => BC.ui.el(t, a, c);
+  const S = () => BC.SettingsComponents;
+  const focused = (n) => n.getRootNode().activeElement === n;
+
+  // Lists built at render time (recurring rules, saved themes, the rotation picker)
+  // only rebuilt on a "structural" change, and an ordinary store.set() is not one —
+  // so adding or deleting an entry changed the data but not the screen. `live`
+  // re-runs a builder whenever its slice of state changes.
+  function live(build, sig) {
+    const holder = el("div", { class: "bc-live" }, [build()]);
+    let last = sig();
+    S().bindings.add(holder, () => {
+      const next = sig();
+      if (next === last) return;
+      last = next;
+      holder.replaceChildren(build());
+    });
+    return holder;
+  }
+
+  const ACCENTS = ["#4f46e5", "#2563eb", "#0891b2", "#059669", "#ca8a04", "#ea580c", "#dc2626", "#db2777", "#7c3aed", "#18181b"];
+
+  // ============ TABS =====================================================
+
+  const TABS = [
+    { id: "theming",       group: "Look",    label: "Appearance",       icon: "contrast",     description: "Dark mode, colors, type and spacing for all of Canvas.", render: renderTheming },
+    { id: "themes",        group: "Look",    label: "Themes",           icon: "layers",       description: "One-click looks, your saved themes, and automatic rotation.", render: renderThemes },
+    { id: "cosmetics",     group: "Look",    label: "Background & CSS", icon: "image",        description: "A page background behind Canvas, and your own CSS.", render: renderCosmetics },
+    { id: "dashboard",     group: "Home",    label: "Dashboard",        icon: "grid",         description: "How course cards look and what appears around them.", render: renderDashboard },
+    { id: "todo",          group: "Home",    label: "To Do",            icon: "check-square", description: "Canvas's To Do list, restyled or replaced by the planner.", render: renderTodo },
+    { id: "grades",        group: "Courses", label: "Grades & GPA",     icon: "award",        description: "Grade tools on course pages and the GPA calculator.", render: renderGrades },
+    { id: "calendar",      group: "Courses", label: "Calendar",         icon: "calendar",     description: "Calendar export, the mini calendar and syllabus dates.", render: renderCalendar },
+    { id: "files",         group: "Courses", label: "Files",            icon: "folder",       description: "One searchable list of files across all your courses.", render: renderFiles },
+    { id: "announcements", group: "Courses", label: "Announcements",    icon: "message",      description: "Recent announcements from every course in one place.", render: renderAnnouncements },
+    { id: "navigation",    group: "Courses", label: "Navigation",       icon: "compass",      description: "Reorder and hide Canvas navigation, and add your own links.", render: renderNavigation },
+    { id: "productivity",  group: "Tools",   label: "Productivity",     icon: "zap",          description: "Focus, reading and writing tools on every page.", render: renderProductivity },
+    { id: "notifications", group: "Tools",   label: "Notifications",    icon: "bell",         description: "Reminders for due work, new grades and announcements.", render: renderNotifications },
+    { id: "accessibility", group: "Tools",   label: "Accessibility",    icon: "eye",          description: "Read-aloud, larger targets and a dyslexia-friendly font.", render: renderA11y },
+    { id: "shortcuts",     group: "Tools",   label: "Shortcuts",        icon: "command",      description: "Keyboard shortcuts for everything. Click one to change it.", render: renderShortcuts },
+    { id: "instructor",    group: "Tools",   label: "Instructor",       icon: "users",        description: "Helpers for teachers and TAs. Nothing is written to Canvas.", render: renderInstructor },
+    { id: "insights",      group: "More",    label: "Insights",         icon: "activity",     description: "Your study time, focus sessions and grade trends, kept on this device.", render: renderInsights },
+    { id: "about",         group: "More",    label: "About",            icon: "info",         description: "Version, privacy, diagnostics and reset.", render: renderAbout },
+  ];
+  const GROUPS = ["Look", "Home", "Courses", "Tools", "More"];
+  let lastTab = "theming";   // reopening the panel returns to where you were
 
   BC.SettingsUI = {
-    render(root, adapter) {
+    render(root, adapter, opts) {
+      const o = opts || {};
       root.innerHTML = "";
       const store = BC.SettingsState.create(adapter);
-      const S = BC.SettingsComponents;
-      // Drop any bindings from a previous mount (the drawer can be re-mounted if
-      // its host is ever disconnected). Stale entries would prune themselves via
-      // isConnected anyway, but starting clean keeps the list bounded.
-      S.bindings.reset();
+      S().bindings.reset();
 
-      // -- shell ------------------------------------------------------------
-      const app = h("div.bc-app", null);
+      const app = el("div", { class: "bc-root bc-app" + (o.variant === "page" ? " bc-app--page" : "") });
       root.appendChild(app);
-      app.appendChild(el("style", null, CSS));
+      app.appendChild(el("style", null, BC.ui.css() + CSS));
+      // When the token guard decides a custom "dark" background is too light to
+      // keep these surfaces dark, tokens.css() emits the neutral override for
+      // .bc-app at DOCUMENT level — which can't reach into the panel's shadow root.
+      const safeStyle = el("style", null, "");
+      app.appendChild(safeStyle);
+      const syncSafeSurface = (state) => {
+        const css = BC.tokens ? BC.tokens.fallbackCss(state.theming, BC.isDarkActive(state)) : "";
+        if (safeStyle.textContent !== css) safeStyle.textContent = css;
+      };
+      syncSafeSurface(store.get());
 
-      const undoBtn = S.button({ label: "Undo", onClick: () => store.undo() });
-      const redoBtn = S.button({ label: "Redo", onClick: () => store.redo() });
-
-      const header = h("header.bc-header", null, [
-        h("div.bc-brand", null, [
-          h("span.bc-logo", null, "BC"),
-          h("div", null, [h("div.bc-brand-name", null, "Better Canvas"), h("div.bc-brand-sub", null, "v" + (BC.VERSION || ""))]),
+      // -- header ---------------------------------------------------------
+      const undoBtn = BC.ui.iconButton("undo", { label: "Undo", onClick: () => store.undo() });
+      const redoBtn = BC.ui.iconButton("redo", { label: "Redo", onClick: () => store.redo() });
+      const moreBtn = BC.ui.iconButton("more", { label: "More actions" });
+      moreBtn.setAttribute("aria-haspopup", "menu");
+      moreBtn.addEventListener("click", () => BC.ui.menu(moreBtn, [
+        { label: "Import settings…", icon: "upload", onClick: () => importFlow(store) },
+        { label: "Export settings", icon: "download", onClick: () => exportFlow(store) },
+        adapter.openOptions ? { label: "Open in a browser tab", icon: "external", onClick: () => adapter.openOptions() } : null,
+        { separator: true },
+        { label: "Reset all settings…", icon: "refresh", danger: true, onClick: () => { if (confirm("Reset ALL Better Canvas settings to their defaults?")) store.reset(); } },
+      ].filter(Boolean)));
+      const search = BC.ui.input({ type: "search", placeholder: "Search settings", ariaLabel: "Search all settings", icon: "search", size: "sm" });
+      search.classList.add("bcs-search");
+      const header = el("header", { class: "bcs-header" }, [
+        el("div", { class: "bcs-brand" }, [
+          el("span", { class: "bcs-logo", "aria-hidden": "true", text: "BC" }),
+          el("div", { class: "bcs-brand__text" }, [
+            el("div", { class: "bcs-brand__name", text: "Better Canvas" }),
+            el("div", { class: "bcs-brand__ver", text: "v" + (BC.VERSION || "") }),
+          ]),
         ]),
-        h("div.bc-header-actions", null, [
-          searchInput(store, (q) => applySearch(q)),
-          undoBtn,
-          redoBtn,
+        search,
+        el("div", { class: "bcs-header__actions" }, [
+          undoBtn, redoBtn, moreBtn,
+          o.onClose ? BC.ui.iconButton("x", { label: "Close settings", onClick: o.onClose }) : null,
         ]),
       ]);
       app.appendChild(header);
 
-      const masterInput = el("input", {
-        type: "checkbox", checked: !!store.get().enabled,
-        onchange: (e) => store.set((d) => { d.enabled = e.target.checked; }),
-      });
-      const bar = h("div.bc-topbar", null, [
-        h("label.bc-master", null, [
-          masterInput,
-          h("span", null, "Enable Better Canvas"),
-        ]),
-        h("div.bc-topbar-right", null, [
-          S.button({ label: "Import", onClick: () => importFlow(store) }),
-          S.button({ label: "Export", onClick: () => exportFlow(store) }),
-          S.button({ label: "Reset",  variant: "danger", onClick: () => { if (confirm("Reset all settings to defaults?")) store.reset(); } }),
+      // -- nav ------------------------------------------------------------
+      const masterSwitch = BC.ui.toggle({ checked: !!store.get().enabled, ariaLabel: "Enable Better Canvas",
+        onChange: (v) => store.set((d) => { d.enabled = v; }) });
+      const masterSub = el("div", { class: "bcs-master__sub" });
+      const paintMaster = (st) => {
+        masterSwitch.set(!!st.enabled);
+        masterSub.textContent = st.enabled ? "On for this browser" : "Off — Canvas looks stock";
+      };
+      paintMaster(store.get());
+      const nav = el("nav", { class: "bcs-nav", "aria-label": "Settings sections" }, [
+        el("div", { class: "bcs-master" }, [
+          el("div", { class: "bcs-master__text" }, [el("div", { class: "bcs-master__label", text: "Better Canvas" }), masterSub]),
+          masterSwitch.root,
         ]),
       ]);
-      app.appendChild(bar);
-
-      const shell = h("div.bc-shell", null);
-      const nav   = h("nav.bc-nav", null);
-      const body  = h("main.bc-body", null);
-      shell.appendChild(nav); shell.appendChild(body);
-      app.appendChild(shell);
-
-      const TABS = [
-        { id: "dashboard",     label: "Dashboard",      icon: "◧", render: renderDashboard },
-        { id: "todo",          label: "To Do",          icon: "✓", render: renderTodo },
-        { id: "theming",       label: "Appearance",     icon: "◐", render: renderTheming },
-        { id: "themes",        label: "Themes",         icon: "❋", render: renderThemes },
-        { id: "cosmetics",     label: "Background & CSS", icon: "▦", render: renderCosmetics },
-        { id: "navigation",    label: "Navigation",     icon: "≡", render: renderNavigation },
-        { id: "grades",        label: "Grades & GPA",   icon: "%", render: renderGrades },
-        { id: "notifications", label: "Notifications",  icon: "☖", render: renderNotifications },
-        { id: "files",         label: "Files",          icon: "▤", render: renderFiles },
-        { id: "calendar",      label: "Calendar",       icon: "▩", render: renderCalendar },
-        { id: "announcements", label: "Announcements",  icon: "☎", render: renderAnnouncements },
-        { id: "productivity",  label: "Productivity",   icon: "⏱", render: renderProductivity },
-        { id: "accessibility", label: "Accessibility",  icon: "♿", render: renderA11y },
-        { id: "insights",      label: "Insights",       icon: "∿", render: renderInsights },
-        { id: "shortcuts",     label: "Shortcuts",      icon: "⌘", render: renderShortcuts },
-        { id: "instructor",    label: "Instructor",     icon: "⚑", render: renderInstructor },
-        { id: "about",         label: "About",          icon: "ⓘ", render: renderAbout },
-      ];
-
-      let active = "dashboard";
-      let searchQuery = "";
-
-      // The nav is built ONCE, outside showTab, so neither a tab switch nor a
-      // state change rebuilds it (which is what kept resetting the responsive
-      // horizontal nav's scroll position).
-      const tabBtns = new Map();
-      for (const t of TABS) {
-        const btn = h("button.bc-tab", { type: "button", onclick: () => showTab(t.id) },
-          [h("span.bc-tab-ic", null, t.icon), t.label]);
-        tabBtns.set(t.id, btn);
-        nav.appendChild(btn);
-      }
-
-      function showTab(id) {
-        active = id;
-        for (const [tid, b] of tabBtns) b.classList.toggle("active", tid === active);
-        const tab = TABS.find((t) => t.id === active) || TABS[0];
-        // Controls in the outgoing tab detach here; C.bindings.sync prunes them
-        // lazily on its next pass via isConnected, so there's nothing to unwire.
-        body.replaceChildren(tab.render(store, adapter, { searchQuery }));
-        applySearch(searchQuery);
-      }
-
-      // Filters rows in the CURRENT tab by visible text. Purely presentational, so
-      // it needs no cooperation from any tab renderer.
-      function applySearch(q) {
-        searchQuery = q || "";
-        const query = searchQuery.trim().toLowerCase();
-        for (const row of body.querySelectorAll(".bc-row")) {
-          row.classList.toggle("bc-hidden", !!query && !(row.textContent || "").toLowerCase().includes(query));
-        }
-        for (const sec of body.querySelectorAll(".bc-section")) {
-          const anyVisible = !!sec.querySelector(".bc-row:not(.bc-hidden)");
-          sec.classList.toggle("bc-hidden", !!query && !anyVisible);
+      const navBtns = new Map();
+      for (const g of GROUPS) {
+        nav.appendChild(el("div", { class: "bcs-nav__group", text: g }));
+        for (const t of TABS.filter((x) => x.group === g)) {
+          const b = el("button", { class: "bcs-nav__item", type: "button", "data-tab": t.id, title: t.label }, [
+            BC.ui.icon(t.icon), el("span", { class: "bcs-nav__label", text: t.label }),
+          ]);
+          b.addEventListener("click", () => { search.input.value = ""; showTab(t.id); });
+          navBtns.set(t.id, b);
+          nav.appendChild(b);
         }
       }
+
+      const main = el("main", { class: "bcs-main" });
+      app.appendChild(el("div", { class: "bcs-shell" }, [nav, main]));
+
+      let active = TABS.some((t) => t.id === o.initialTab) ? o.initialTab : lastTab;
+
+      function pageHead(title, description) {
+        return el("div", { class: "bcs-page__head" }, [
+          el("h2", { class: "bcs-page__title", text: title }),
+          description ? el("p", { class: "bcs-page__desc", text: description }) : null,
+        ]);
+      }
+
+      // `still` skips the entrance animation, for rebuilds the user didn't ask for
+      // (undo, reset, a change made in another tab).
+      function showTab(id, still) {
+        const tab = TABS.find((t) => t.id === id) || TABS[0];
+        main.classList.toggle("bcs-main--still", !!still);
+        active = lastTab = tab.id;
+        for (const [tid, b] of navBtns) {
+          if (tid === active) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+        }
+        // Controls in the outgoing tab detach here; bindings prune themselves.
+        main.replaceChildren(pageHead(tab.label, tab.description), ...[].concat(tab.render(store, adapter, {})));
+        main.scrollTop = 0;
+        // Rows with showWhen / enabledWhen settle their state on the first sync.
+        S().bindings.sync(store.get());
+      }
+
+      // Search covers EVERY section, not just the open tab: each tab is rendered
+      // (without its network-backed parts) and only matching rows are kept.
+      function showSearch(q) {
+        const query = q.trim().toLowerCase();
+        for (const b of navBtns.values()) b.removeAttribute("aria-current");
+        const groups = [];
+        for (const tab of TABS) {
+          const frag = el("div", null, [].concat(tab.render(store, adapter, { searching: true })));
+          const hits = [];
+          for (const sec of frag.querySelectorAll(".bcs-section")) {
+            const rows = [...sec.querySelectorAll(".bcs-row")];
+            const match = rows.filter((r) => (r.textContent || "").toLowerCase().includes(query));
+            if (!match.length) continue;
+            for (const r of rows) if (!match.includes(r)) r.remove();
+            hits.push(sec);
+          }
+          if (!hits.length) continue;
+          const go = BC.ui.button("Open " + tab.label, { variant: "ghost", size: "sm", iconRight: "chevron-right",
+            onClick: () => { search.input.value = ""; showTab(tab.id); } });
+          groups.push(el("div", { class: "bcs-results__group" }, [
+            el("div", { class: "bcs-results__head" }, [BC.ui.icon(tab.icon), el("span", { text: tab.label }), el("span", { class: "bc-spacer" }), go]),
+            ...hits,
+          ]));
+        }
+        main.replaceChildren(pageHead("Search", groups.length ? null : "No settings match “" + q.trim() + "”."), ...groups);
+        main.scrollTop = 0;
+        S().bindings.sync(store.get());
+      }
+      const runSearch = BC.util.debounce(() => {
+        const q = search.input.value;
+        if (q.trim()) showSearch(q); else showTab(active);
+      }, 140);
+      search.input.addEventListener("input", runSearch);
+      search.input.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && search.input.value) { e.stopPropagation(); search.input.value = ""; showTab(active); }
+      });
 
       store.subscribe((state, kind) => {
-        // Targeted: each mounted control re-reads the store and writes only what
-        // differs, so the control the user is touching is never destroyed. This is
-        // what lets the toggle animate, the caret survive, and a drag continue.
-        S.bindings.sync(state);
-        if (masterInput.checked !== !!state.enabled) masterInput.checked = !!state.enabled;
+        S().bindings.sync(state);
+        syncSafeSurface(state);
+        paintMaster(state);
         undoBtn.disabled = !store.canUndo();
         redoBtn.disabled = !store.canRedo();
-        // Wholesale replacement (reset / import / undo / redo / external change)
-        // can alter anything including list lengths, so rebuild — but preserve
-        // scroll, which the old unconditional rebuild always dropped to the top.
-        if (kind === "structural") {
-          const scroller = root.scrollHeight > root.clientHeight
-            ? root : (document.scrollingElement || document.documentElement);
-          const top = scroller.scrollTop;
-          showTab(active);
-          scroller.scrollTop = top;
+        // Wholesale replacement (reset / import / undo / redo / external change) can
+        // alter anything including list lengths, so rebuild — preserving scroll.
+        if (kind === "structural" && !search.input.value.trim()) {
+          const top = main.scrollTop;
+          showTab(active, true);
+          main.scrollTop = top;
         }
       });
 
       undoBtn.disabled = !store.canUndo();
       redoBtn.disabled = !store.canRedo();
       showTab(active);
+      S().bindings.sync(store.get());
+      BC.SettingsUI.goto = (id) => { if (!TABS.some((t) => t.id === id)) return; search.input.value = ""; showTab(id); };
       return store;
     },
   };
 
-  // ============ TABS =====================================================
+  // ---- shared bits ----------------------------------------------------------
 
-  function renderDashboard(store, adapter) {
-    const S = BC.SettingsComponents;
-    const s = store.get();
-    const d = s.dashboard;
+  const sec = (title, children, extra) => S().section(Object.assign({ title, children: children.filter(Boolean) }, extra || {}));
+  const row = (o) => S().row(o);
+  const inline = (kids) => el("div", { class: "bcs-inline" }, kids);
 
-    const container = h("div.bc-tab-body", null);
-    container.appendChild(S.section({
-      title: "General",
-      children: [
-        S.row({ label: "Customize dashboard", control: S.switch({ get: () => d.enabled, set: (v) => store.set((x) => { x.dashboard.enabled = v; }) }) }),
-        S.row({ label: "Hide concluded courses", hint: "Fetched from Canvas on demand.",
-          control: S.switch({ get: () => d.autoHideConcluded, set: (v) => store.set((x) => { x.dashboard.autoHideConcluded = v; }) }) }),
-        S.row({ label: "Layout",
-          control: S.select({ get: () => d.layout, set: (v) => store.set((x) => { x.dashboard.layout = v; }),
-            options: [{value:"grid",label:"Grid"},{value:"list",label:"List"},{value:"masonry",label:"Masonry"},{value:"compact",label:"Compact"}] }) }),
-        S.row({ label: "Card size",
-          control: S.select({ get: () => d.cardSize, set: (v) => store.set((x) => { x.dashboard.cardSize = v; }),
-            options: [{value:"s",label:"Small"},{value:"m",label:"Medium"},{value:"l",label:"Large"}] }) }),
-        S.row({ label: "Card corner radius",
-          control: S.slider({ get: () => d.cardRadius, set: (v) => store.set((x) => { x.dashboard.cardRadius = v; }), min:0, max:24, format:(v)=>v+"px" }) }),
-        S.row({ label: "Hover lift animation", control: S.switch({ get: () => d.hoverLift, set: (v) => store.set((x) => { x.dashboard.hoverLift = v; }) }) }),
-        S.row({ label: "Show inline grade on card", hint:"Requires Canvas grade endpoint access.",
-          control: S.switch({ get: () => d.showInlineGrade, set: (v) => store.set((x) => { x.dashboard.showInlineGrade = v; }) }) }),
-        S.row({ label: "Show progress bar",  control: S.switch({ get: () => d.showProgressBar, set: (v) => store.set((x) => { x.dashboard.showProgressBar = v; }) }) }),
-        S.row({ label: "Show due-count badge", hint: "Items due in the next 24 hours.",
-          control: S.switch({ get: () => d.showBadges, set: (v) => store.set((x) => { x.dashboard.showBadges = v; }) }) }),
-        S.row({ label: "Show grade sparkline", hint: "Needs a few days of locally recorded grade history.",
-          control: S.switch({ get: () => d.showSparkline, set: (v) => store.set((x) => { x.dashboard.showSparkline = v; }) }) }),
-        S.row({ label: "Show course search bar", control: S.switch({ get: () => d.courseSearch, set: (v) => store.set((x) => { x.dashboard.courseSearch = v; }) }) }),
-        S.row({ label: "Semester progress bar", hint: "Week X of Y · days left, from your term dates.",
-          control: S.switch({ get: () => d.semesterProgress, set: (v) => store.set((x) => { x.dashboard.semesterProgress = v; }) }) }),
-      ],
-    }));
-
-    container.appendChild(S.section({
-      title: "Widgets",
-      children: [
-        S.row({ label: "To Do widget",        control: S.switch({ get: () => d.widgets.todo,           set: (v) => store.set((x) => { x.dashboard.widgets.todo = v; }) }) }),
-        S.row({ label: "Coming Up",           control: S.switch({ get: () => d.widgets.comingUp,       set: (v) => store.set((x) => { x.dashboard.widgets.comingUp = v; }) }) }),
-        S.row({ label: "Recent Feedback",     control: S.switch({ get: () => d.widgets.recentFeedback, set: (v) => store.set((x) => { x.dashboard.widgets.recentFeedback = v; }) }) }),
-        S.row({ label: "GPA card",            control: S.switch({ get: () => d.widgets.gpa,            set: (v) => store.set((x) => { x.dashboard.widgets.gpa = v; }) }) }),
-        S.row({ label: "Hide entire right sidebar", control: S.switch({ get: () => d.hideSidebar, set: (v) => store.set((x) => { x.dashboard.hideSidebar = v; }) }) }),
-      ],
-    }));
-
-    // Course list section — pulls from Canvas via adapter.
-    const coursesSection = S.section({
-      title: "Courses",
-      description: "Reorder by dragging. Rename, recolor, or hide each card. Changes apply live.",
-      children: [h("div.bc-course-list", { id: "bc-courses-mount" }, "Loading courses…")],
-    });
-    container.appendChild(coursesSection);
-
-    // Async course load
-    adapter.getCourses && adapter.getCourses().then((courses) => {
-      const mount = coursesSection.querySelector("#bc-courses-mount");
-      if (!mount || !mount.isConnected) return;   // tab switched away mid-fetch
-      renderCourseEditor(mount, store, courses);
-    }).catch(() => {
-      const mount = coursesSection.querySelector("#bc-courses-mount");
-      if (mount) mount.textContent = "Open a Canvas tab to edit courses.";
-    });
-
-    return container;
-  }
-
-  function renderCourseEditor(mount, store, courses) {
-    const S = BC.SettingsComponents;
-    mount.innerHTML = "";
-    const search = el("input", { type: "search", class: "bc-text", placeholder: "Search courses…" });
-    const results = h("div", null);
-    function draw() {
-      results.innerHTML = "";
-      const q = search.value.toLowerCase();
-      const filtered = courses.filter((c) => (c.name + " " + c.code).toLowerCase().includes(q));
-      const s = store.get();
-      const order = (s.dashboard.courseOrder || []).slice();
-      // Ensure any new courses appear
-      for (const c of filtered) if (!order.includes(c.id)) order.push(c.id);
-      const ordered = order.filter((id) => filtered.find((c) => c.id === id)).map((id) => filtered.find((c) => c.id === id));
-
-      const list = S.sortable({
-        items: ordered,
-        render: (c) => renderCourseRow(store, c),
-        onChange: (ids) => store.set((x) => {
-          const rest = (x.dashboard.courseOrder || []).filter((id) => !ids.includes(id));
-          x.dashboard.courseOrder = ids.concat(rest);
-        }),
-      });
-      results.appendChild(list);
-
-      const bulk = h("div.bc-bulk", null, [
-        S.button({ label: "Show all", onClick: () => store.set((x) => { for (const c of courses) { x.dashboard.courses[c.id] = { ...(x.dashboard.courses[c.id] || {}), hidden: false }; } }) }),
-        S.button({ label: "Reset colors", onClick: () => store.set((x) => { for (const c of courses) { if (x.dashboard.courses[c.id]) delete x.dashboard.courses[c.id].color; } }) }),
-        S.button({ label: "Reset nicknames", onClick: () => store.set((x) => { for (const c of courses) { if (x.dashboard.courses[c.id]) delete x.dashboard.courses[c.id].nickname; } }) }),
-      ]);
-      results.appendChild(bulk);
-    }
-    search.addEventListener("input", draw);
-    mount.appendChild(search);
-    mount.appendChild(results);
-    draw();
-  }
-
-  function renderCourseRow(store, c) {
-    const s = store.get();
-    const cur = (s.dashboard.courses && s.dashboard.courses[c.id]) || {};
-    const wrap = h("div.bc-course-row", null);
-    const swatch = h("span.bc-course-swatch", { style: { background: cur.color || c.color || "#c7d2fe" } });
-    const name = el("input", { type: "text", class: "bc-text bc-course-name", placeholder: c.name, value: cur.nickname || "" });
-    name.addEventListener("input", () => store.set((x) => { x.dashboard.courses[c.id] = { ...(x.dashboard.courses[c.id] || {}), nickname: name.value }; }));
-    const color = el("input", { type: "color", value: cur.color || c.color || "#0374b5" });
-    color.addEventListener("input", () => { swatch.style.background = color.value; store.set((x) => { x.dashboard.courses[c.id] = { ...(x.dashboard.courses[c.id] || {}), color: color.value }; }); });
-    const hide = el("input", { type: "checkbox", checked: !!cur.hidden });
-    hide.addEventListener("change", () => store.set((x) => { x.dashboard.courses[c.id] = { ...(x.dashboard.courses[c.id] || {}), hidden: hide.checked }; }));
-    const bg = el("input", { type: "text", class: "bc-text bc-course-bg", placeholder: "background image URL (optional)", value: cur.bgImage || "" });
-    bg.addEventListener("input", () => store.set((x) => { x.dashboard.courses[c.id] = { ...(x.dashboard.courses[c.id] || {}), bgImage: bg.value.trim() }; }));
-
-    wrap.appendChild(swatch);
-    wrap.appendChild(name);
-    wrap.appendChild(color);
-    wrap.appendChild(h("label.bc-mini-check", null, [hide, "Hide"]));
-    wrap.appendChild(bg);
-    return wrap;
-  }
-
-  function renderTodo(store) {
-    const S = BC.SettingsComponents;
-    const t = store.get().todo;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Mode", children: [
-      S.row({ label: "To Do list style", hint: "Canvas default, a clean restyle, or the Better Canvas planner.",
-        control: S.select({ get: () => t.mode, set: (v) => store.set((x) => { x.todo.mode = v; }),
-          options: [{value:"default",label:"Canvas default"},{value:"clean",label:"Clean circles"},{value:"custom",label:"Planner widget"}] }) }),
-    ]}));
-
-    c.appendChild(S.section({ title: "Planner widget", description: "Only applies when mode is Planner widget.", children: [
-      S.row({ label: "View",
-        control: S.select({ get: () => t.view, set: (v) => store.set((x) => { x.todo.view = v; }),
-          // "Day" and "Week" were selectable but todo.js only ever rendered
-          // list/kanban/timeblock, so picking them silently fell back to List.
-          options: [{value:"list",label:"List"},{value:"kanban",label:"Kanban"},{value:"timeblock",label:"Time-block"}] }) }),
-      S.row({ label: "Look-ahead window",
-        control: S.select({ get: () => String(t.rangeDays), set: (v) => store.set((x) => { x.todo.rangeDays = parseInt(v, 10); }),
-          options: [{value:"3",label:"3 days"},{value:"7",label:"1 week"},{value:"14",label:"2 weeks"},{value:"30",label:"1 month"}] }) }),
-      S.row({ label: "Group tasks by",
-        control: S.select({ get: () => t.groupBy, set: (v) => store.set((x) => { x.todo.groupBy = v; }),
-          options: [{value:"day",label:"Day"},{value:"course",label:"Course"},{value:"priority",label:"Priority"},{value:"tag",label:"Tag"},{value:"none",label:"None"}] }) }),
-      S.row({ label: "Show weekly progress ring", control: S.switch({ get: () => t.ring, set: (v) => store.set((x) => { x.todo.ring = v; }) }) }),
-      S.row({ label: "Show completed", control: S.switch({ get: () => t.showCompleted, set: (v) => store.set((x) => { x.todo.showCompleted = v; }) }) }),
-      S.row({ label: "Show New Task composer", control: S.switch({ get: () => t.allowNewTask, set: (v) => store.set((x) => { x.todo.allowNewTask = v; }) }) }),
-      S.row({ label: "Ring accent color", control: S.color({ get: () => t.accent, set: (v) => store.set((x) => { x.todo.accent = v; }), allowEmpty: true }) }),
-    ]}));
-
-    c.appendChild(S.section({ title: "Streaks", children: [
-      S.row({ label: "Track a daily streak", control: S.switch({ get: () => t.streaks.enabled, set: (v) => store.set((x) => { x.todo.streaks.enabled = v; }) }) }),
-      S.row({ label: "Grace days", hint: "Missed days you can skip without breaking your streak.",
-        control: S.number({ get: () => t.streaks.graceDays, set: (v) => store.set((x) => { x.todo.streaks.graceDays = Math.max(0, v|0); }), min:0, max:14 }) }),
-      S.row({ label: "Repairs per month", control: S.number({ get: () => t.streaks.repairsAvailable, set: (v) => store.set((x) => { x.todo.streaks.repairsAvailable = Math.max(0, v|0); }), min:0, max:31 }) }),
-    ]}));
-
-    c.appendChild(S.section({ title: "Pomodoro", children: [
-      S.row({ label: "Enable Pomodoro", control: S.switch({ get: () => t.pomodoro.enabled, set: (v) => store.set((x) => { x.todo.pomodoro.enabled = v; }) }) }),
-      S.row({ label: "Work minutes",       control: S.number({ get: () => t.pomodoro.workMin, set: (v) => store.set((x) => { x.todo.pomodoro.workMin = Math.max(1, v|0); }), min:1, max:180 }) }),
-      S.row({ label: "Short break",        control: S.number({ get: () => t.pomodoro.shortBreakMin, set: (v) => store.set((x) => { x.todo.pomodoro.shortBreakMin = Math.max(1, v|0); }), min:1, max:60 }) }),
-      S.row({ label: "Long break",         control: S.number({ get: () => t.pomodoro.longBreakMin,  set: (v) => store.set((x) => { x.todo.pomodoro.longBreakMin  = Math.max(1, v|0); }), min:1, max:120 }) }),
-      S.row({ label: "Long break every N pomodoros", control: S.number({ get: () => t.pomodoro.longEvery, set: (v) => store.set((x) => { x.todo.pomodoro.longEvery = Math.max(1, v|0); }), min:1, max:12 }) }),
-      S.row({ label: "Sound on finish",    control: S.switch({ get: () => t.pomodoro.sound, set: (v) => store.set((x) => { x.todo.pomodoro.sound = v; }) }) }),
-    ]}));
-
-    c.appendChild(renderRecurringEditor(store));
-
-    c.appendChild(S.section({ title: "Tags", children: [
-      S.row({ label: "Task tags", hint: "Attached to individual tasks via the planner.",
-        control: S.tags({ get: () => t.tags, set: (v) => store.set((x) => { x.todo.tags = v; }) }) }),
-    ]}));
-
-    return c;
-  }
-
-  function renderRecurringEditor(store) {
-    const S = BC.SettingsComponents;
-    const rules = store.get().todo.recurring || [];
-    const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const describe = (r) => {
-      let s = r.rule === "weekly"
-        ? "Weekly" + ((r.days || []).length ? " · " + r.days.map((d) => WD[d]).join(" ") : "")
-        : r.rule === "monthly" ? "Monthly · day " + (r.day || 1) : "Daily";
-      if (r.at) s += " · " + r.at;
-      if (r.until) s += " · until " + r.until;
-      return s;
-    };
-
-    const children = rules.map((r) => h("div.bc-rec-row", null, [
-      h("div", null, [h("div.bc-rec-title", null, r.title), h("div.bc-rec-meta", null, describe(r))]),
-      S.button({ label: "Delete", variant: "danger",
-        onClick: () => store.set((x) => { x.todo.recurring = (x.todo.recurring || []).filter((q) => q.id !== r.id); }) }),
-    ]));
-    if (!rules.length) children.push(h("p.bc-hint", null, "No recurring tasks yet. They show up in the Planner widget alongside Canvas items."));
-
-    const title = el("input", { type: "text", class: "bc-text", placeholder: "Task title" });
-    const freq = el("select", { class: "bc-select" }, [
-      el("option", { value: "daily" }, "Daily"),
-      el("option", { value: "weekly" }, "Weekly"),
-      el("option", { value: "monthly" }, "Monthly"),
-    ]);
-    const dayChecks = WD.map((n, i) => {
-      const cb = el("input", { type: "checkbox" });
-      cb.dataset.day = String(i);
-      return h("label.bc-mini-check", null, [cb, n]);
-    });
-    const daysWrap = h("div.bc-rec-days", null, dayChecks);
-    const dom = el("input", { type: "number", class: "bc-number", min: 1, max: 31, value: 1 });
-    const domWrap = h("span.bc-inline", null, [h("span.bc-hint", null, "Day of month"), dom]);
-    const at = el("input", { type: "time", value: "17:00" });
-    const until = el("input", { type: "date", title: "Repeat until (optional)" });
-    const sync = () => {
-      daysWrap.style.display = freq.value === "weekly" ? "" : "none";
-      domWrap.style.display = freq.value === "monthly" ? "" : "none";
-    };
-    freq.addEventListener("change", sync); sync();
-
-    const add = S.button({ label: "Add recurring task", onClick: () => {
-      const t = title.value.trim();
-      if (!t) { BC.toast && BC.toast.warn("Enter a task title first"); return; }
-      const rule = { id: BC.util.uuid(), title: t, rule: freq.value, at: at.value || "", until: until.value || "" };
-      if (freq.value === "weekly")
-        rule.days = dayChecks.map((l) => l.querySelector("input")).filter((cb) => cb.checked).map((cb) => parseInt(cb.dataset.day, 10));
-      if (freq.value === "monthly") rule.day = parseInt(dom.value, 10) || 1;
-      store.set((x) => { x.todo.recurring = (x.todo.recurring || []).concat([rule]); });
-    } });
-
-    children.push(h("div.bc-rec-form", null, [
-      h("div.bc-inline", null, [title, freq, h("span.bc-hint", null, "Due at"), at]),
-      daysWrap,
-      h("div.bc-inline", null, [domWrap, h("span.bc-hint", null, "Until"), until, add]),
-    ]));
-
-    return S.section({
-      title: "Recurring tasks",
-      description: "Repeat tasks daily, weekly, or monthly. Stored on this device; each day checks off independently.",
-      children,
-    });
-  }
+  // ---- Appearance ---------------------------------------------------------
 
   function renderTheming(store) {
-    const S = BC.SettingsComponents;
+    const C = S();
     const t = store.get().theming;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Dark mode", children: [
-      S.row({ label: "Dark mode",
-        control: S.select({ get: () => t.darkMode, set: (v) => store.set((x) => { x.theming.darkMode = v; }),
-          options: [{value:"off",label:"Off"},{value:"on",label:"On"},{value:"auto",label:"Auto (system)"},{value:"scheduled",label:"Scheduled"}] }) }),
-      S.row({ label: "Schedule",
-        control: h("div.bc-inline", null, [
-          el("input", { type: "time", value: t.darkSchedule.start, onchange: (e) => store.set((x) => { x.theming.darkSchedule.start = e.target.value; }) }),
-          h("span", null, " to "),
-          el("input", { type: "time", value: t.darkSchedule.end, onchange: (e) => store.set((x) => { x.theming.darkSchedule.end = e.target.value; }) }),
-        ]) }),
-      S.row({ label: "Dark tone",
-        control: S.select({ get: () => t.darkTone, set: (v) => store.set((x) => { x.theming.darkTone = v; }),
+    const put = (fn) => (v) => store.set((x) => fn(x.theming, v));
+    return [
+      sec("Mode", [
+        row({ label: "Theme", hint: "Auto follows your system. Schedule switches at the times below.",
+          control: C.segmented({ ariaLabel: "Theme", get: () => t.darkMode, set: put((x, v) => { x.darkMode = v; }),
+            options: [{ value: "off", label: "Light", icon: "sun" }, { value: "on", label: "Dark", icon: "moon" },
+                      { value: "auto", label: "Auto", icon: "monitor" }, { value: "scheduled", label: "Schedule", icon: "clock" }] }) }),
+        row({ label: "Dark between", showWhen: (s) => s.theming.darkMode === "scheduled",
+          control: inline([
+            C.time({ ariaLabel: "Dark mode starts", get: () => t.darkSchedule.start, set: put((x, v) => { x.darkSchedule.start = v; }) }),
+            el("span", { class: "bcs-inline__sep", text: "and" }),
+            C.time({ ariaLabel: "Dark mode ends", get: () => t.darkSchedule.end, set: put((x, v) => { x.darkSchedule.end = v; }) }),
+          ]) }),
+      ]),
+      sec("Colors", [
+        row({ label: "Accent", hint: "Buttons, links and highlights. Leave empty to keep your school's color.",
+          control: C.color({ ariaLabel: "Accent color", allowEmpty: true, presets: ACCENTS, get: () => t.accentColor, set: put((x, v) => { x.accentColor = v; }) }) }),
+        row({ label: "Dark palette", control: C.select({ ariaLabel: "Dark palette", get: () => t.darkTone, set: put((x, v) => { x.darkTone = v; }),
           options: Object.entries(BC.DARK_TONES).map(([k, v]) => ({ value: k, label: v.label })) }) }),
-      S.row({ label: "Custom dark background", control: S.color({ get: () => t.darkBg, set: (v) => store.set((x) => { x.theming.darkBg = v; }), allowEmpty: true }) }),
-    ]}));
-
-    c.appendChild(S.section({ title: "Light theme", children: [
-      S.row({ label: "Light palette",
-        control: S.select({ get: () => t.lightPreset, set: (v) => store.set((x) => { x.theming.lightPreset = v; }),
+        row({ label: "Custom dark background", hint: "Replaces the palette's background color.",
+          control: C.color({ ariaLabel: "Custom dark background", allowEmpty: true, get: () => t.darkBg, set: put((x, v) => { x.darkBg = v; }) }) }),
+        fallbackNotice(store),
+        row({ label: "Light palette", control: C.select({ ariaLabel: "Light palette", get: () => t.lightPreset, set: put((x, v) => { x.lightPreset = v; }),
           options: Object.entries(BC.LIGHT_PRESETS).map(([k, v]) => ({ value: k, label: v.label })) }) }),
-    ]}));
+      ]),
+      sec("Typography", [
+        row({ label: "Font", hint: "A CSS font stack. Empty keeps Canvas's font.",
+          control: C.text({ ariaLabel: "Font family", placeholder: "Canvas default", get: () => t.font, set: put((x, v) => { x.font = v; }) }) }),
+        row({ label: "Text size", control: C.segmented({ ariaLabel: "Text size", get: () => t.fontSizeScale, set: put((x, v) => { x.fontSizeScale = v; }),
+          options: [{ value: "xs", label: "XS" }, { value: "s", label: "S" }, { value: "m", label: "M" }, { value: "l", label: "L" }, { value: "xl", label: "XL" }] }) }),
+        row({ label: "Line height", control: C.slider({ ariaLabel: "Line height", min: 1.1, max: 2, step: 0.05, format: (v) => Number(v).toFixed(2),
+          get: () => t.lineHeight, set: put((x, v) => { x.lineHeight = v; }) }) }),
+        row({ label: "Letter spacing", control: C.slider({ ariaLabel: "Letter spacing", min: -1, max: 3, step: 0.1, format: (v) => Number(v).toFixed(1) + "px",
+          get: () => t.letterSpacing, set: put((x, v) => { x.letterSpacing = v; }) }) }),
+      ]),
+      sec("Layout", [
+        row({ label: "Density", hint: "Spacing inside Better Canvas panels and Canvas lists.",
+          control: C.segmented({ ariaLabel: "Density", get: () => t.density, set: put((x, v) => { x.density = v; }),
+            options: [{ value: "compact", label: "Compact" }, { value: "default", label: "Default" }, { value: "spacious", label: "Roomy" }, { value: "cozy", label: "Cozy" }] }) }),
+        row({ label: "Corner radius", control: C.slider({ ariaLabel: "Corner radius", min: 0, max: 24, format: (v) => v + "px",
+          get: () => t.radius, set: put((x, v) => { x.radius = v; }) }) }),
+        row({ label: "Rounded corners", hint: "Off squares every corner, Canvas's and ours.",
+          control: C.switch({ ariaLabel: "Rounded corners", get: () => t.roundedUI, set: put((x, v) => { x.roundedUI = v; }) }) }),
+        row({ label: "Sidebar width", hint: "Width of Canvas's left navigation. 0 keeps the default.",
+          control: C.number({ ariaLabel: "Sidebar width", min: 0, max: 400, suffix: "px", get: () => t.sidebarWidth, set: put((x, v) => { x.sidebarWidth = Math.max(0, v | 0); }) }) }),
+      ]),
+      sec("Visibility", [
+        row({ label: "Focus ring", control: C.segmented({ ariaLabel: "Focus ring", get: () => t.focusRing, set: put((x, v) => { x.focusRing = v; }),
+          options: [{ value: "default", label: "Default" }, { value: "bold", label: "Bold" }, { value: "high-contrast", label: "High contrast" }] }) }),
+        row({ label: "Cursor", control: C.segmented({ ariaLabel: "Cursor", get: () => t.cursor, set: put((x, v) => { x.cursor = v; }),
+          options: [{ value: "default", label: "Default" }, { value: "large", label: "Large" }, { value: "precise", label: "Crosshair" }] }) }),
+        row({ label: "Color-blind filter", control: C.select({ ariaLabel: "Color-blind filter", get: () => t.colorBlind, set: put((x, v) => { x.colorBlind = v; }),
+          options: [{ value: "off", label: "Off" }, { value: "protanopia", label: "Protanopia" }, { value: "deuteranopia", label: "Deuteranopia" }, { value: "tritanopia", label: "Tritanopia" }] }) }),
+        row({ label: "High contrast", control: C.switch({ ariaLabel: "High contrast", get: () => t.highContrast, set: put((x, v) => { x.highContrast = v; }) }) }),
+        row({ label: "Reduce motion", hint: "Turns off animations even if your system allows them.",
+          control: C.switch({ ariaLabel: "Reduce motion", get: () => t.reducedMotion, set: put((x, v) => { x.reducedMotion = v; }) }) }),
+        row({ label: "Animation speed", showWhen: (s) => !s.theming.reducedMotion,
+          control: C.slider({ ariaLabel: "Animation speed", min: 0.25, max: 2, step: 0.05, format: (v) => Number(v).toFixed(2) + "×",
+            get: () => t.animSpeed, set: put((x, v) => { x.animSpeed = v; }) }) }),
+      ]),
+    ];
+  }
 
-    c.appendChild(S.section({ title: "Accent & type", children: [
-      S.row({ label: "Accent color", hint:"Overrides Canvas's brand accent.",
-        control: S.color({ get: () => t.accentColor, set: (v) => store.set((x) => { x.theming.accentColor = v; }), allowEmpty: true }) }),
-      S.row({ label: "Font family", hint:"CSS font-family stack, or leave blank for default.",
-        control: S.text({ get: () => t.font, set: (v) => store.set((x) => { x.theming.font = v; }), placeholder: "e.g. Inter, system-ui, sans-serif" }) }),
-      S.row({ label: "Font size scale",
-        control: S.select({ get: () => t.fontSizeScale, set: (v) => store.set((x) => { x.theming.fontSizeScale = v; }),
-          options: [{value:"xs",label:"XS"},{value:"s",label:"S"},{value:"m",label:"M"},{value:"l",label:"L"},{value:"xl",label:"XL"}] }) }),
-      S.row({ label: "Line height", control: S.slider({ get: () => t.lineHeight, set: (v) => store.set((x) => { x.theming.lineHeight = v; }), min:1.1, max:2.0, step:0.05, format:(v)=>v.toFixed(2) }) }),
-      S.row({ label: "Letter spacing", control: S.slider({ get: () => t.letterSpacing, set: (v) => store.set((x) => { x.theming.letterSpacing = v; }), min:-1, max:3, step:0.1, format:(v)=>v.toFixed(1)+"px" }) }),
-      S.row({ label: "Density",
-        control: S.select({ get: () => t.density, set: (v) => store.set((x) => { x.theming.density = v; }),
-          options: [{value:"compact",label:"Compact"},{value:"default",label:"Default"},{value:"spacious",label:"Spacious"},{value:"cozy",label:"Cozy"}] }) }),
-      S.row({ label: "Global corner radius", control: S.slider({ get: () => t.radius, set: (v) => store.set((x) => { x.theming.radius = v; }), min:0, max:24, format:(v)=>v+"px" }) }),
-      S.row({ label: "Rounded UI",  control: S.switch({ get: () => t.roundedUI, set: (v) => store.set((x) => { x.theming.roundedUI = v; }) }) }),
-      S.row({ label: "Sidebar width (px)", hint:"0 = default", control: S.number({ get: () => t.sidebarWidth, set: (v) => store.set((x) => { x.theming.sidebarWidth = Math.max(0, v|0); }), min:0, max:400 }) }),
-    ]}));
+  // The notice tokens.js promises when the guard swaps these settings surfaces
+  // to a neutral palette.
+  function fallbackNotice(store) {
+    const holder = el("div", { class: "bcs-row bcs-row--note" });
+    const paint = (st) => {
+      const on = !!(BC.tokens && BC.tokens.resolve(st.theming).guard.surfaceFallback);
+      holder.hidden = !on;
+      if (on && !holder.firstChild) {
+        holder.appendChild(S().note({ tone: "warn", text: "This background is light enough that it needs dark text, so this settings panel switches to a neutral palette to stay readable. Canvas pages still use your color." }));
+      }
+    };
+    paint(store.get());
+    S().bindings.add(holder, paint);
+    return holder;
+  }
 
-    c.appendChild(S.section({ title: "Advanced", children: [
-      S.row({ label: "Cursor",
-        control: S.select({ get: () => t.cursor, set: (v) => store.set((x) => { x.theming.cursor = v; }),
-          options: [{value:"default",label:"Default"},{value:"large",label:"Large"},{value:"precise",label:"Precise crosshair"}] }) }),
-      S.row({ label: "Focus ring",
-        control: S.select({ get: () => t.focusRing, set: (v) => store.set((x) => { x.theming.focusRing = v; }),
-          options: [{value:"default",label:"Default"},{value:"bold",label:"Bold"},{value:"high-contrast",label:"High contrast"}] }) }),
-      S.row({ label: "Color-blind mode",
-        control: S.select({ get: () => t.colorBlind, set: (v) => store.set((x) => { x.theming.colorBlind = v; }),
-          options: [{value:"off",label:"Off"},{value:"protanopia",label:"Protanopia"},{value:"deuteranopia",label:"Deuteranopia"},{value:"tritanopia",label:"Tritanopia"}] }) }),
-      S.row({ label: "High contrast",  control: S.switch({ get: () => t.highContrast, set: (v) => store.set((x) => { x.theming.highContrast = v; }) }) }),
-      S.row({ label: "Force reduced motion", control: S.switch({ get: () => t.reducedMotion, set: (v) => store.set((x) => { x.theming.reducedMotion = v; }) }) }),
-      S.row({ label: "Animation speed", control: S.slider({ get: () => t.animSpeed, set: (v) => store.set((x) => { x.theming.animSpeed = v; }), min:0.25, max:2, step:0.05, format:(v)=>v.toFixed(2)+"×" }) }),
-    ]}));
+  // ---- Themes -------------------------------------------------------------
 
-    c.appendChild(S.section({ title: "Institution logo", children: [
-      S.row({ label: "Logo",
-        control: S.select({ get: () => t.logo.mode, set: (v) => store.set((x) => { x.theming.logo.mode = v; }),
-          options: [{value:"default",label:"Default"},{value:"hide",label:"Hide"},{value:"replace",label:"Replace with image"},{value:"text",label:"Replace with text"}] }) }),
-      S.row({ label: "Replacement image URL", control: S.text({ get: () => t.logo.url, set: (v) => store.set((x) => { x.theming.logo.url = v; }) }) }),
-      S.row({ label: "Replacement text",      control: S.text({ get: () => t.logo.text, set: (v) => store.set((x) => { x.theming.logo.text = v; }) }) }),
-    ]}));
-
-    return c;
+  // A shared theme file is someone else's JSON, and applyPreset deep-merges it —
+  // so taking `settings` whole let a theme rewrite ANY setting. Only what a theme
+  // is made of (exactly what themeSnapshot exports) is kept.
+  function themeOnly(src) {
+    const out = {};
+    if (src && src.theming && typeof src.theming === "object" && !Array.isArray(src.theming)) {
+      out.theming = BC.cleanData(src.theming);
+      delete out.theming.rotation;
+    }
+    if (src && src.cosmetics && typeof src.cosmetics === "object" && !Array.isArray(src.cosmetics)) {
+      out.cosmetics = BC.cleanData(src.cosmetics);
+    }
+    return Object.keys(out).length ? out : null;
   }
 
   function themeSnapshot(store, name) {
     const cur = store.get();
     const theming = JSON.parse(JSON.stringify(cur.theming));
     delete theming.rotation; // rotation config isn't part of a theme's look
-    return {
-      id: BC.util.uuid(),
-      name,
-      settings: {
-        theming,
-        cosmetics: JSON.parse(JSON.stringify(cur.cosmetics)),
-      },
-    };
+    return { id: BC.util.uuid(), name, settings: { theming, cosmetics: JSON.parse(JSON.stringify(cur.cosmetics)) } };
   }
 
-  function downloadTheme(bundle) {
-    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+  function download(text, name, type) {
+    const blob = new Blob([text], { type: type || "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = (bundle.name || "theme").toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".bctheme.json";
-    a.click();
+    a.href = url; a.download = name; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   }
 
+  function downloadTheme(bundle) {
+    download(JSON.stringify(bundle, null, 2), (bundle.name || "theme").toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".bctheme.json");
+  }
+
+  // A small rendering of the theme: page, panel, text lines and the accent.
+  function themePreview(theming) {
+    const t = theming || {};
+    const pal = BC.color.themePalettes(t);
+    const dark = t.darkMode === "on";
+    const p = dark ? pal.dark : pal.light;
+    const accent = BC.color.normalizeHex(t.accentColor) || p.accent;
+    const box = el("div", { class: "bcs-theme__preview", "aria-hidden": "true" });
+    box.style.background = p.bg;
+    box.innerHTML = '<div class="bcs-theme__bar"></div><div class="bcs-theme__panel"><i></i><i></i><b></b></div>';
+    box.querySelector(".bcs-theme__bar").style.background = dark ? p.bg2 : "#18181b";
+    const panel = box.querySelector(".bcs-theme__panel");
+    panel.style.background = p.bg2;
+    panel.style.borderColor = p.border;
+    for (const i of panel.querySelectorAll("i")) i.style.background = p.muted;
+    panel.querySelector("b").style.background = accent;
+    if (t.darkMode === "auto") box.classList.add("bcs-theme__preview--auto");
+    return box;
+  }
+
   function themeCard(store, p, custom) {
-    const card = h("div.bc-theme-card", { tabindex: "0", role: "button", "aria-label": "Apply theme " + p.name });
-    const t = (p.settings && p.settings.theming) || {};
-    const swatchBg  = t.darkMode === "on"
-      ? ((BC.DARK_TONES[t.darkTone] || {}).bg || "#1a1d24")
-      : ((BC.LIGHT_PRESETS[t.lightPreset] || {}).bg || "#ffffff");
-    const swatchAcc = t.accentColor || "#0374b5";
-    card.appendChild(h("div.bc-theme-swatch", { style: { background: swatchBg, borderColor: swatchAcc } }, [h("span", { style: { background: swatchAcc } })]));
-    card.appendChild(h("div.bc-theme-name", null, p.name));
-    const applyIt = () => { store.applyPreset(p); BC.toast && BC.toast.success("Applied theme: " + p.name); };
-    card.addEventListener("click", (e) => { if (e.target.closest && e.target.closest(".bc-theme-actions")) return; applyIt(); });
-    card.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); applyIt(); } });
+    const card = el("div", { class: "bcs-theme" });
+    const apply = el("button", { class: "bcs-theme__apply", type: "button", "aria-label": "Apply theme " + p.name }, [
+      themePreview((p.settings && p.settings.theming) || {}),
+      el("span", { class: "bcs-theme__name bc-truncate", text: p.name }),
+    ]);
+    apply.addEventListener("click", () => { store.applyPreset(p); BC.toast && BC.toast.success("Applied " + p.name); });
+    card.appendChild(apply);
     if (custom) {
-      card.appendChild(h("div.bc-theme-actions", null, [
-        el("button", { type: "button", class: "bc-btn", onclick: (e) => { e.stopPropagation(); downloadTheme(p); } }, "Export"),
-        el("button", { type: "button", class: "bc-btn bc-btn-danger", onclick: (e) => {
-          e.stopPropagation();
-          store.set((x) => { x.customThemes = (x.customThemes || []).filter((q) => q.id !== p.id); });
-        } }, "Delete"),
+      const more = BC.ui.iconButton("more", { label: "Theme actions for " + p.name, size: "sm" });
+      more.classList.add("bcs-theme__more");
+      more.addEventListener("click", () => BC.ui.menu(more, [
+        { label: "Export file", icon: "download", onClick: () => downloadTheme(p) },
+        { label: "Delete", icon: "trash", danger: true, onClick: () => store.set((x) => { x.customThemes = (x.customThemes || []).filter((q) => q.id !== p.id); }) },
       ]));
+      card.appendChild(more);
     }
     return card;
   }
 
+  function importTheme(store) {
+    const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json,.json";
+    inp.onchange = () => {
+      const f = inp.files && inp.files[0]; if (!f) return;
+      f.text().then((txt) => {
+        try {
+          const j = JSON.parse(txt);
+          const settings = j && typeof j === "object" ? themeOnly(j.settings) : null;
+          if (!settings) throw new Error("bad");
+          const saved = { id: BC.util.uuid(), name: String(j.name || "Imported theme").slice(0, 80), settings };
+          store.set((x) => { x.customThemes = (x.customThemes || []).concat([saved]); });
+          store.applyPreset(saved);
+          BC.toast && BC.toast.success("Imported " + saved.name);
+        } catch (_) { BC.toast && BC.toast.error("That isn't a Better Canvas theme file"); }
+      });
+    };
+    inp.click();
+  }
+
   function renderThemes(store) {
-    const S = BC.SettingsComponents;
-    const c = h("div.bc-tab-body", null);
-    const custom = store.get().customThemes || [];
+    const C = S();
+    const themesSig = () => JSON.stringify((store.get().customThemes || []).map((p) => [p.id, p.name]));
+    return [
+      sec("Built-in", [
+        el("div", { class: "bcs-themes" }, BC.PRESET_THEMES.map((p) => themeCard(store, p, false))),
+      ], { description: "Applies the theme's colors, radius and density on top of your other settings." }),
+      live(() => {
+        const custom = store.get().customThemes || [];
+        const name = BC.ui.input({ size: "sm", placeholder: "Name this look", ariaLabel: "Theme name" });
+        const save = BC.ui.button("Save current look", { size: "sm", icon: "plus", onClick: () => {
+          const n = name.value.trim() || "My theme";
+          store.set((x) => { x.customThemes = (x.customThemes || []).concat([themeSnapshot(store, n)]); });
+          BC.toast && BC.toast.success("Saved " + n);
+        } });
+        return sec("My themes", [
+          custom.length
+            ? el("div", { class: "bcs-themes" }, custom.map((p) => themeCard(store, p, true)))
+            : el("p", { class: "bcs-empty", text: "Set up a look in Appearance and Background, then save it here." }),
+          el("div", { class: "bcs-inline bcs-inline--grow" }, [name, save]),
+        ], { actions: [
+          BC.ui.button("Import", { size: "sm", variant: "ghost", icon: "upload", onClick: () => importTheme(store) }),
+          BC.ui.button("Export current", { size: "sm", variant: "ghost", icon: "download", onClick: () => downloadTheme(themeSnapshot(store, "My theme")) }),
+        ] });
+      }, themesSig),
+      live(() => {
+        const rot = store.get().theming.rotation;
+        const pool = (store.get().customThemes || []).concat(BC.PRESET_THEMES || []);
+        return sec("Rotation", [
+          row({ label: "Rotate themes", hint: "Switch to the next selected theme automatically.",
+            control: C.switch({ ariaLabel: "Rotate themes", get: () => rot.enabled, set: (v) => store.set((x) => { x.theming.rotation.enabled = v; }) }) }),
+          row({ label: "Every", enabledWhen: (s) => s.theming.rotation.enabled,
+            control: C.segmented({ ariaLabel: "Rotate every", get: () => rot.mode, set: (v) => store.set((x) => { x.theming.rotation.mode = v; }),
+              options: [{ value: "daily", label: "Day" }, { value: "weekly", label: "Week" }] }) }),
+          row({ label: "Themes in rotation", stacked: true, enabledWhen: (s) => s.theming.rotation.enabled,
+            control: el("div", { class: "bcs-checks" }, pool.map((th) => BC.ui.checkbox({
+              label: th.name, checked: (rot.themeIds || []).includes(th.id),
+              onChange: (on) => store.set((x) => {
+                const ids = new Set(x.theming.rotation.themeIds || []);
+                if (on) ids.add(th.id); else ids.delete(th.id);
+                x.theming.rotation.themeIds = Array.from(ids);
+              }),
+            }))) }),
+        ]);
+      }, themesSig),
+    ];
+  }
 
-    const nameInput = el("input", { type: "text", class: "bc-text", placeholder: "Theme name" });
-    c.appendChild(S.section({
-      title: "My themes",
-      description: "Tune colors, fonts, and backgrounds live in the Appearance and Background tabs, then snapshot the look here as a reusable theme.",
-      children: [
-        custom.length
-          ? h("div.bc-theme-grid", null, custom.map((p) => themeCard(store, p, true)))
-          : h("p.bc-hint", null, "No saved themes yet. Set up a look you like, name it, and save it."),
-        h("div.bc-inline", { style: { marginTop: "10px" } }, [
-          nameInput,
-          S.button({ label: "Save current look", onClick: () => {
-            const name = nameInput.value.trim() || "My theme";
-            const bundle = themeSnapshot(store, name);
-            store.set((x) => { x.customThemes = (x.customThemes || []).concat([bundle]); });
-            BC.toast && BC.toast.success("Saved theme: " + name);
-          } }),
-        ]),
-      ],
-    }));
+  // ---- Background & CSS ---------------------------------------------------
 
-    c.appendChild(S.section({
-      title: "Built-in themes",
-      description: "One click loads the theme's colors, accent, density, and radius over your current settings.",
-      children: [h("div.bc-theme-grid", null, BC.PRESET_THEMES.map((p) => themeCard(store, p, false)))],
-    }));
-
-    const rot = store.get().theming.rotation || { enabled: false, mode: "daily", themeIds: [] };
-    const pool = custom.concat(BC.PRESET_THEMES || []);
-    c.appendChild(S.section({
-      title: "Theme rotation",
-      description: "Automatically cycle through selected themes every day or week.",
-      children: [
-        S.row({ label: "Rotate themes", control: S.switch({ get: () => rot.enabled, set: (v) => store.set((x) => { x.theming.rotation.enabled = v; }) }) }),
-        S.row({ label: "Rotate every",
-          control: S.select({ get: () => rot.mode, set: (v) => store.set((x) => { x.theming.rotation.mode = v; }),
-            options: [{ value: "daily", label: "Day" }, { value: "weekly", label: "Week" }] }) }),
-        h("div.bc-rot-list", null, pool.map((t) => {
-          const cb = el("input", { type: "checkbox", checked: (rot.themeIds || []).includes(t.id), onchange: (e) => store.set((x) => {
-            const ids = new Set(x.theming.rotation.themeIds || []);
-            if (e.target.checked) ids.add(t.id); else ids.delete(t.id);
-            x.theming.rotation.themeIds = Array.from(ids);
-          }) });
-          return h("label.bc-mini-check", null, [cb, t.name]);
-        })),
-      ],
-    }));
-
-    c.appendChild(S.section({
-      title: "Import / export theme",
-      description: "Share themes as JSON files — no accounts, no cloud.",
-      children: [
-        h("div.bc-inline", null, [
-          S.button({ label: "Export current theme", onClick: () => downloadTheme(themeSnapshot(store, "My theme")) }),
-          S.button({ label: "Import theme", onClick: () => {
-            const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json";
-            inp.onchange = () => {
-              const f = inp.files && inp.files[0]; if (!f) return;
-              f.text().then((txt) => {
-                try {
-                  const j = JSON.parse(txt);
-                  if (!j || typeof j !== "object" || !j.settings) throw new Error("bad");
-                  const saved = { id: BC.util.uuid(), name: j.name || "Imported theme", settings: j.settings };
-                  store.set((x) => { x.customThemes = (x.customThemes || []).concat([saved]); });
-                  store.applyPreset(saved);
-                  BC.toast && BC.toast.success("Imported theme: " + saved.name);
-                } catch { BC.toast && BC.toast.error("Invalid theme file"); }
-              });
-            };
-            inp.click();
-          } }),
-        ]),
-      ],
-    }));
-    return c;
+  // Canvas's text sits straight on the page background, so a dark background in
+  // light mode (or a light one in dark mode) makes the sidebar and headings hard to
+  // read. Say so where it's set, with the one-click fix.
+  function bgContrastNotice(store) {
+    const holder = el("div", { class: "bcs-row bcs-row--note" });
+    const tone = (bg) => {
+      const hexes = bg.mode === "gradient" ? [bg.gradient.from, bg.gradient.to] : bg.mode === "color" || bg.mode === "pattern" ? [bg.color] : [];
+      const ok = hexes.filter((h) => BC.color.isHex(h));
+      if (!ok.length) return null;
+      const L = ok.reduce((n, h) => n + BC.color.relLuminance(h), 0) / ok.length;
+      return L < 0.18 ? "dark" : L > 0.6 ? "light" : null;
+    };
+    const paint = (s) => {
+      const bg = s.cosmetics.background;
+      const t = tone(bg);
+      const when = bg.when || "always";
+      const clash = bg.mode !== "none" && t && ((t === "dark" && when !== "dark") || (t === "light" && when !== "light"));
+      holder.hidden = !clash;
+      if (!clash) return;
+      const fixTo = t === "dark" ? "dark" : "light";
+      holder.replaceChildren(S().note({ tone: "warn", text: t === "dark"
+        ? "This background is dark, so Canvas's dark text is hard to read on it in light mode."
+        : "This background is light, so Canvas's light text is hard to read on it in dark mode." }),
+        el("div", { style: "margin-top:8px" }, [BC.ui.button(t === "dark" ? "Use it in dark mode only" : "Use it in light mode only", {
+          size: "sm", onClick: () => store.set((x) => { x.cosmetics.background.when = fixTo; }) })]));
+    };
+    paint(store.get());
+    S().bindings.add(holder, paint);
+    return holder;
   }
 
   function renderCosmetics(store) {
-    const S = BC.SettingsComponents;
+    const C = S();
     const b = store.get().cosmetics.background;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Full-page background", children: [
-      S.row({ label: "Background",
-        control: S.select({ get: () => b.mode, set: (v) => store.set((x) => { x.cosmetics.background.mode = v; }),
-          options: [{value:"none",label:"None"},{value:"color",label:"Solid color"},{value:"gradient",label:"Gradient"},{value:"image",label:"Image"},{value:"pattern",label:"Pattern"}] }) }),
-      S.row({ label: "Color", control: S.color({ get: () => b.color, set: (v) => store.set((x) => { x.cosmetics.background.color = v; }) }) }),
-      S.row({ label: "Gradient from", control: S.color({ get: () => b.gradient.from, set: (v) => store.set((x) => { x.cosmetics.background.gradient.from = v; }) }) }),
-      S.row({ label: "Gradient to",   control: S.color({ get: () => b.gradient.to,   set: (v) => store.set((x) => { x.cosmetics.background.gradient.to   = v; }) }) }),
-      S.row({ label: "Gradient angle", control: S.slider({ get: () => b.gradient.angle, set: (v) => store.set((x) => { x.cosmetics.background.gradient.angle = v; }), min:0, max:360, format:(v)=>v+"°" }) }),
-      S.row({ label: "Image URL",     control: S.text({ get: () => b.image, set: (v) => store.set((x) => { x.cosmetics.background.image = v; }), placeholder:"https://…" }) }),
-      S.row({ label: "Pattern",
-        control: S.select({ get: () => b.pattern, set: (v) => store.set((x) => { x.cosmetics.background.pattern = v; }),
-          options: [{value:"none",label:"None"},{value:"dots",label:"Dots"},{value:"grid",label:"Grid"},{value:"diagonal",label:"Diagonal"},{value:"topography",label:"Topography"}] }) }),
-      S.row({ label: "Blur (px)",     control: S.slider({ get: () => b.blur, set: (v) => store.set((x) => { x.cosmetics.background.blur = v; }), min:0, max:40, format:(v)=>v+"px" }) }),
-      S.row({ label: "Opacity",       control: S.slider({ get: () => b.opacity, set: (v) => store.set((x) => { x.cosmetics.background.opacity = v; }), min:0, max:100, format:(v)=>v+"%" }) }),
-    ]}));
-    c.appendChild(S.section({ title: "Custom CSS", description: "Injected on every Canvas page. Escape hatch — use with care.", children: [
-      h("div.bc-css-wrap", null, [
-        BC.SettingsComponents.textarea({ get: () => store.get().cosmetics.customCss, set: (v) => store.set((x) => { x.cosmetics.customCss = v; }), placeholder: "/* your CSS */", rows: 10 }),
+    const put = (fn) => (v) => store.set((x) => fn(x.cosmetics.background, v));
+    const mode = (...m) => (s) => m.includes(s.cosmetics.background.mode);
+    return [
+      sec("Page background", [
+        row({ label: "Background", control: C.segmented({ ariaLabel: "Background", get: () => b.mode,
+          // "pattern" with no pattern chosen is just a colour; start it on dots.
+          set: put((x, v) => { x.mode = v; if (v === "pattern" && (!x.pattern || x.pattern === "none")) x.pattern = "dots"; }),
+          options: [{ value: "none", label: "None" }, { value: "color", label: "Color" }, { value: "gradient", label: "Gradient" }, { value: "image", label: "Image" }, { value: "pattern", label: "Pattern" }] }) }),
+        row({ label: "Color", showWhen: mode("color", "pattern"), control: C.color({ ariaLabel: "Background color", get: () => b.color, set: put((x, v) => { x.color = v; }) }) }),
+        row({ label: "From", showWhen: mode("gradient"), control: C.color({ ariaLabel: "Gradient start", get: () => b.gradient.from, set: put((x, v) => { x.gradient.from = v; }) }) }),
+        row({ label: "To", showWhen: mode("gradient"), control: C.color({ ariaLabel: "Gradient end", get: () => b.gradient.to, set: put((x, v) => { x.gradient.to = v; }) }) }),
+        row({ label: "Angle", showWhen: mode("gradient"), control: C.slider({ ariaLabel: "Gradient angle", min: 0, max: 360, format: (v) => v + "°", get: () => b.gradient.angle, set: put((x, v) => { x.gradient.angle = v; }) }) }),
+        row({ label: "Image URL", showWhen: mode("image"), control: C.text({ ariaLabel: "Background image URL", placeholder: "https://…", get: () => b.image, set: put((x, v) => { x.image = v; }) }) }),
+        row({ label: "Pattern", showWhen: mode("pattern"), control: C.segmented({ ariaLabel: "Pattern", get: () => b.pattern, set: put((x, v) => { x.pattern = v; }),
+          options: [{ value: "dots", label: "Dots" }, { value: "grid", label: "Grid" }, { value: "diagonal", label: "Lines" }, { value: "topography", label: "Waves" }] }) }),
+        row({ label: "Blur", showWhen: (s) => s.cosmetics.background.mode !== "none", control: C.slider({ ariaLabel: "Blur", min: 0, max: 40, format: (v) => v + "px", get: () => b.blur, set: put((x, v) => { x.blur = v; }) }) }),
+        row({ label: "Opacity", showWhen: (s) => s.cosmetics.background.mode !== "none", control: C.slider({ ariaLabel: "Opacity", min: 0, max: 100, format: (v) => v + "%", get: () => b.opacity, set: put((x, v) => { x.opacity = v; }) }) }),
+        row({ label: "Show in", hint: "Limit it to one mode, e.g. a dark background for dark mode only.",
+          showWhen: (s) => s.cosmetics.background.mode !== "none",
+          control: C.segmented({ ariaLabel: "Show background in", get: () => b.when || "always", set: put((x, v) => { x.when = v; }),
+            options: [{ value: "always", label: "Both modes" }, { value: "dark", label: "Dark only" }, { value: "light", label: "Light only" }] }) }),
+        bgContrastNotice(store),
       ]),
-    ]}));
-    return c;
+      sec("Custom CSS", [
+        row({ label: "Your CSS", hint: "Added to every Canvas page after everything else.", stacked: true,
+          control: C.textarea({ ariaLabel: "Custom CSS", mono: true, rows: 10, placeholder: "/* e.g. .ic-DashboardCard { border-radius: 0 } */",
+            get: () => store.get().cosmetics.customCss, set: (v) => store.set((x) => { x.cosmetics.customCss = v; }) }) }),
+      ]),
+    ];
   }
 
-  function renderNavigation(store) {
-    const S = BC.SettingsComponents;
-    const s = store.get();
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Global (left) navigation", description: "Drag to reorder. Toggle to hide.", children: [
-      renderNavList(store, "global"),
-    ]}));
-    c.appendChild(S.section({ title: "Course navigation", description: "Hide / reorder tabs by label across all courses.", children: [
-      h("div.bc-nav-course-note", null, "Enter labels you want hidden or a preferred order below."),
-      S.row({ label: "Hidden labels (comma-separated)",
-        control: S.text({ get: () => (s.navigation.course.hidden || []).join(", "), set: (v) => store.set((x) => { x.navigation.course.hidden = v.split(",").map(s => s.trim().toLowerCase()).filter(Boolean); }) }) }),
-      S.row({ label: "Order (comma-separated)",
-        control: S.text({ get: () => (s.navigation.course.order || []).join(", "), set: (v) => store.set((x) => { x.navigation.course.order = v.split(",").map(s => s.trim().toLowerCase()).filter(Boolean); }) }) }),
-      S.row({ label: "Custom course links (appear on every course sidebar)",
-        control: S.links({ get: () => s.navigation.course.customLinks, set: (v) => store.set((x) => { x.navigation.course.customLinks = v; }) }) }),
-    ]}));
-    c.appendChild(S.section({ title: "Global extras", children: [
-      S.row({ label: "Custom global-nav links", control: S.links({ get: () => s.navigation.global.customLinks, set: (v) => store.set((x) => { x.navigation.global.customLinks = v; }) }) }),
-      S.row({ label: "Breadcrumbs style",
-        control: S.select({ get: () => s.navigation.breadcrumbs, set: (v) => store.set((x) => { x.navigation.breadcrumbs = v; }),
-          options: [{value:"default",label:"Default"},{value:"compact",label:"Compact"},{value:"hidden",label:"Hidden"}] }) }),
-      S.row({ label: "Course quick-switch tab bar", control: S.switch({ get: () => s.navigation.courseTabs, set: (v) => store.set((x) => { x.navigation.courseTabs = v; }) }) }),
-      S.row({ label: "Enable ⌘K quick search",     control: S.switch({ get: () => s.navigation.quickSearch, set: (v) => store.set((x) => { x.navigation.quickSearch = v; }) }) }),
-    ]}));
-    return c;
+  // ---- Dashboard ----------------------------------------------------------
+
+  function renderDashboard(store, adapter, ctx) {
+    const C = S();
+    const d = store.get().dashboard;
+    const put = (fn) => (v) => store.set((x) => fn(x.dashboard, v));
+    const on = (s) => s.dashboard.enabled;
+    const sw = (label, key, hint) => row({ label, hint, enabledWhen: on,
+      control: C.switch({ ariaLabel: label, get: () => d[key], set: put((x, v) => { x[key] = v; }) }) });
+    const widget = (label, key) => row({ label, enabledWhen: on,
+      control: C.switch({ ariaLabel: label, get: () => d.widgets[key], set: put((x, v) => { x.widgets[key] = v; }) }) });
+
+    const coursesMount = el("div", { class: "bcs-courses" }, [BC.ui.skeleton(3)]);
+    if (!ctx.searching && adapter.getCourses) {
+      adapter.getCourses().then((courses) => {
+        if (!coursesMount.isConnected) return;   // tab switched away mid-fetch
+        renderCourseEditor(coursesMount, store, courses);
+      }).catch(() => { coursesMount.replaceChildren(BC.ui.empty("Open Canvas in a tab to edit your courses.", null, { icon: "info" })); });
+    }
+
+    return [
+      sec("General", [
+        row({ label: "Customize the dashboard", hint: "Off leaves Canvas's dashboard exactly as it is.",
+          control: C.switch({ ariaLabel: "Customize the dashboard", get: () => d.enabled, set: put((x, v) => { x.enabled = v; }) }) }),
+        sw("Hide finished courses", "autoHideConcluded", "Courses Canvas marks as concluded."),
+      ]),
+      sec("Cards", [
+        row({ label: "Layout", enabledWhen: on, control: C.segmented({ ariaLabel: "Card layout", get: () => d.layout, set: put((x, v) => { x.layout = v; }),
+          options: [{ value: "grid", label: "Grid", icon: "grid" }, { value: "list", label: "List", icon: "list" }, { value: "masonry", label: "Masonry", icon: "columns" }, { value: "compact", label: "Compact", icon: "minus" }] }) }),
+        row({ label: "Card size", enabledWhen: on, showWhen: (s) => s.dashboard.layout === "grid" || s.dashboard.layout === "masonry",
+          control: C.segmented({ ariaLabel: "Card size", get: () => d.cardSize, set: put((x, v) => { x.cardSize = v; }),
+            options: [{ value: "s", label: "Small" }, { value: "m", label: "Medium" }, { value: "l", label: "Large" }] }) }),
+        row({ label: "Corner radius", enabledWhen: on, control: C.slider({ ariaLabel: "Card corner radius", min: 0, max: 24, format: (v) => v + "px", get: () => d.cardRadius, set: put((x, v) => { x.cardRadius = v; }) }) }),
+        sw("Lift on hover", "hoverLift"),
+      ]),
+      sec("On each card", [
+        sw("Current grade", "showInlineGrade", "A score pill in the corner."),
+        sw("Progress bar", "showProgressBar", "Share of planner items done in the last month."),
+        sw("Due soon badge", "showBadges", "Items due in the next 24 hours."),
+        sw("Grade trend", "showSparkline", "Needs a few days of recorded grades."),
+      ]),
+      sec("Around the cards", [
+        sw("Course search", "courseSearch", "A filter box above the cards."),
+        sw("Semester progress", "semesterProgress", "Week X of Y and days left, from your term dates."),
+      ]),
+      sec("Right sidebar", [
+        widget("To Do", "todo"),
+        widget("Coming Up", "comingUp"),
+        widget("Recent Feedback", "recentFeedback"),
+        widget("GPA estimate", "gpa"),
+        sw("Hide the whole sidebar", "hideSidebar"),
+      ]),
+      sec("Courses", [coursesMount], { description: "Drag to reorder. Rename, recolor or hide any card — changes show on the dashboard right away." }),
+    ];
   }
 
-  function renderNavList(store, scope) {
-    const S = BC.SettingsComponents;
+  function renderCourseEditor(mount, store, courses) {
+    const search = BC.ui.input({ size: "sm", type: "search", placeholder: "Filter courses", ariaLabel: "Filter courses", icon: "search" });
+    const results = el("div");
+    const bulk = BC.ui.iconButton("more", { label: "Bulk actions", size: "sm" });
+    bulk.addEventListener("click", () => BC.ui.menu(bulk, [
+      { label: "Show all courses", icon: "eye", onClick: () => store.set((x) => { for (const c of courses) x.dashboard.courses[c.id] = { ...(x.dashboard.courses[c.id] || {}), hidden: false }; }) },
+      { label: "Reset all colors", icon: "droplet", onClick: () => store.set((x) => { for (const c of courses) if (x.dashboard.courses[c.id]) delete x.dashboard.courses[c.id].color; }) },
+      { label: "Reset all names", icon: "type", onClick: () => store.set((x) => { for (const c of courses) if (x.dashboard.courses[c.id]) delete x.dashboard.courses[c.id].nickname; }) },
+    ]));
+    function draw() {
+      const q = search.input.value.toLowerCase();
+      const filtered = courses.filter((c) => (c.name + " " + c.code).toLowerCase().includes(q));
+      const order = (store.get().dashboard.courseOrder || []).slice();
+      for (const c of filtered) if (!order.includes(c.id)) order.push(c.id);
+      const ordered = order.map((id) => filtered.find((c) => c.id === id)).filter(Boolean);
+      results.replaceChildren(ordered.length ? S().sortable({
+        items: ordered,
+        render: (c) => renderCourseRow(store, c),
+        onChange: (ids) => store.set((x) => {
+          const rest = (x.dashboard.courseOrder || []).filter((id) => !ids.includes(id));
+          x.dashboard.courseOrder = ids.concat(rest);
+        }),
+      }) : BC.ui.empty("No courses match."));
+    }
+    search.input.addEventListener("input", draw);
+    mount.replaceChildren(el("div", { class: "bcs-inline bcs-inline--grow" }, [search, bulk]), results);
+    draw();
+  }
+
+  function renderCourseRow(store, c) {
+    const spec0 = (store.get().dashboard.courses || {})[c.id] || {};
+    const update = (patch) => store.set((x) => { x.dashboard.courses[c.id] = { ...(x.dashboard.courses[c.id] || {}), ...patch }; });
+    const colorOf = (spec) => {
+      const v = String(spec.color || c.color || "#0374b5").toLowerCase();
+      return BC.color.isHex(v) ? v : "#0374b5";
+    };
+    const picker = el("input", { type: "color", class: "bcs-color__native", tabindex: "-1", "aria-hidden": "true" });
+    picker.value = colorOf(spec0);
+    const swatch = el("button", { type: "button", class: "bcs-color__swatch bcs-course__swatch", "aria-label": "Card color for " + c.name });
+    swatch.addEventListener("click", () => picker.click());
+    picker.addEventListener("input", () => { swatch.style.background = picker.value; update({ color: picker.value }); });
+    const name = BC.ui.input({ size: "sm", placeholder: c.name, ariaLabel: "Nickname for " + c.name, value: spec0.nickname || "" });
+    name.addEventListener("input", () => update({ nickname: name.value }));
+    const hide = BC.ui.iconButton("eye", { label: "Show " + c.name + " on the dashboard", size: "sm" });
+    hide.addEventListener("click", () => update({ hidden: !((store.get().dashboard.courses || {})[c.id] || {}).hidden }));
+    const bg = BC.ui.input({ size: "sm", placeholder: "Card image URL (optional)", ariaLabel: "Card image URL for " + c.name, value: spec0.bgImage || "" });
+    bg.addEventListener("input", () => update({ bgImage: bg.value.trim() }));
+    const imgBtn = BC.ui.iconButton("image", { label: "Card image for " + c.name, size: "sm" });
+    const bgRow = el("div", { class: "bcs-course__bg" }, [bg]);
+    bgRow.hidden = !spec0.bgImage;
+    imgBtn.addEventListener("click", () => { bgRow.hidden = !bgRow.hidden; if (!bgRow.hidden) bg.focus(); });
+    const wrap = el("div", { class: "bcs-course" }, [
+      el("div", { class: "bcs-course__main" }, [picker, swatch, name, el("span", { class: "bcs-course__code bc-truncate", text: c.code || "" }), imgBtn, hide]),
+      bgRow,
+    ]);
+    // "Show all" / "Reset colors" / "Reset names" change every course at once;
+    // the binding keeps each row in step.
+    S().bindings.add(wrap, () => {
+      const spec = (store.get().dashboard.courses || {})[c.id] || {};
+      if (!focused(name) && name.value !== (spec.nickname || "")) name.value = spec.nickname || "";
+      if (picker.value !== colorOf(spec)) picker.value = colorOf(spec);
+      swatch.style.background = colorOf(spec);
+      const hidden = !!spec.hidden;
+      hide.replaceChildren(BC.ui.icon(hidden ? "eye-off" : "eye"));
+      hide.setAttribute("aria-pressed", hidden ? "false" : "true");
+      hide.setAttribute("aria-label", (hidden ? "Show " : "Hide ") + c.name + " on the dashboard");
+      hide.title = hidden ? "Hidden — click to show" : "Shown — click to hide";
+      wrap.classList.toggle("bcs-course--hidden", hidden);
+      if (!focused(bg) && bg.value !== (spec.bgImage || "")) bg.value = spec.bgImage || "";
+    });
+    return wrap;
+  }
+
+  // ---- To Do --------------------------------------------------------------
+
+  // Small drawn previews for the To Do style cards.
+  function todoPreview(kind) {
+    const i = (cls) => el("i", { class: cls });
+    const row = (extra, first) => el("span", { class: "pv-row" + (first ? " pv-row--hi" : "") }, [
+      kind === "planner" ? i("pv-chk" + (extra ? " pv-chk--on" : "")) : i("pv-ic"),
+      el("span", { class: "pv-lines" }, [i("pv-l pv-l--a"), i("pv-l pv-l--s")]),
+      kind === "canvas" ? i("pv-x") : null,
+    ]);
+    if (kind === "planner") {
+      return el("span", { class: "pv pv--planner" }, [
+        el("span", { class: "pv-top" }, [i("pv-ring"), el("span", { class: "pv-lines" }, [i("pv-l pv-l--t"), i("pv-l pv-l--s")])]),
+        row(true), row(false), row(false),
+      ]);
+    }
+    return el("span", { class: "pv pv--" + kind }, [i("pv-h"), row(false, true), row(false), row(false)]);
+  }
+
+  function renderTodo(store) {
+    const C = S();
+    const t = store.get().todo;
+    const put = (fn) => (v) => store.set((x) => fn(x.todo, v));
+    const planner = (s) => s.todo.mode === "custom";
+    const progress = () => (t.ring === false ? "off" : t.progressStyle === "bar" ? "bar" : "ring");
+    return [
+      sec("Style", [
+        row({ label: "To Do list", stacked: true,
+          control: C.choice({ ariaLabel: "To Do list style", get: () => t.mode, set: put((x, v) => { x.mode = v; }),
+            options: [
+              { value: "default", label: "Canvas", description: "Canvas's own list, untouched.", preview: () => todoPreview("canvas") },
+              { value: "clean", label: "Clean", description: "Canvas's list, tidied up to match.", preview: () => todoPreview("clean") },
+              { value: "custom", label: "Planner", description: "Views, overdue work, stars, steps and focus.", preview: () => todoPreview("planner") },
+            ] }) }),
+      ]),
+      sec("Planner", [
+        row({ label: "View", enabledWhen: planner, control: C.segmented({ ariaLabel: "Planner view", get: () => t.view, set: put((x, v) => { x.view = v; }),
+          options: [{ value: "list", label: "List", icon: "list" }, { value: "kanban", label: "Board", icon: "columns" }, { value: "timeblock", label: "Day plan", icon: "clock" }] }) }),
+        row({ label: "View switcher on the list", hint: "List / Board / Day buttons in the planner itself. The full-size view always has them.",
+          enabledWhen: planner, control: C.switch({ ariaLabel: "View switcher on the list", get: () => !!t.showViewSwitch, set: put((x, v) => { x.showViewSwitch = v; }) }) }),
+        row({ label: "Show", hint: "How far ahead the planner looks.", enabledWhen: planner,
+          control: C.segmented({ ariaLabel: "How far ahead", get: () => String(t.rangeDays), set: put((x, v) => { x.rangeDays = parseInt(v, 10); }),
+            options: [{ value: "3", label: "3 days" }, { value: "7", label: "1 week" }, { value: "14", label: "2 weeks" }, { value: "30", label: "1 month" }] }) }),
+        row({ label: "Starts on", enabledWhen: planner, control: C.segmented({ ariaLabel: "Window starts on", get: () => t.startOn || "today", set: put((x, v) => { x.startOn = v; }),
+          options: [{ value: "today", label: "Today" }, { value: "sunday", label: "Sunday" }, { value: "monday", label: "Monday" }] }) }),
+        row({ label: "Group by", enabledWhen: planner, control: C.segmented({ ariaLabel: "Group by", get: () => t.groupBy, set: put((x, v) => { x.groupBy = v; }),
+          options: [{ value: "day", label: "Day" }, { value: "course", label: "Course" }, { value: "priority", label: "Priority" }, { value: "tag", label: "Tag" }, { value: "none", label: "None" }] }) }),
+        row({ label: "Progress", enabledWhen: planner, control: C.segmented({ ariaLabel: "Progress", get: progress,
+          set: (v) => store.set((x) => { x.todo.ring = v !== "off"; if (v !== "off") x.todo.progressStyle = v; }),
+          options: [{ value: "ring", label: "Ring" }, { value: "bar", label: "Bar" }, { value: "off", label: "Off" }] }) }),
+      ], { description: "These apply when the To Do list is set to Planner." }),
+      sec("What to show", [
+        row({ label: "Kinds of work", stacked: true, enabledWhen: planner,
+          control: C.chips({ ariaLabel: "Kinds of work", get: () => t.types, set: put((x, v) => { x.types = v; }),
+            options: [{ key: "assignment", label: "Assignments", icon: "file" }, { key: "quiz", label: "Quizzes", icon: "check-square" },
+                      { key: "discussion_topic", label: "Discussions", icon: "message" }, { key: "announcement", label: "Announcements", icon: "bell" },
+                      { key: "wiki_page", label: "Pages", icon: "book" }, { key: "calendar_event", label: "Events", icon: "calendar" },
+                      { key: "planner_note", label: "Your tasks", icon: "edit" }] }) }),
+        row({ label: "On each row", stacked: true, enabledWhen: planner,
+          control: C.chips({ ariaLabel: "Row details", get: () => t.rowDetails, set: put((x, v) => { x.rowDetails = v; }),
+            options: [{ key: "icon", label: "Type icon" }, { key: "course", label: "Course" }, { key: "time", label: "Due time" }, { key: "points", label: "Points" }] }) }),
+        row({ label: "Overdue work", hint: "Unfinished items from the last two weeks, above everything else.", enabledWhen: planner,
+          control: C.switch({ ariaLabel: "Overdue work", get: () => t.showOverdue !== false, set: put((x, v) => { x.showOverdue = v; }) }) }),
+        row({ label: "Completed items", hint: "Keep finished work in the list, crossed out.", enabledWhen: planner,
+          control: C.switch({ ariaLabel: "Completed items", get: () => t.showCompleted, set: put((x, v) => { x.showCompleted = v; }) }) }),
+        row({ label: "Starred first", enabledWhen: planner,
+          control: C.switch({ ariaLabel: "Starred first", get: () => t.starredFirst !== false, set: put((x, v) => { x.starredFirst = v; }) }) }),
+        row({ label: "Long days", hint: "Collapse a day after this many items.", enabledWhen: planner,
+          control: C.segmented({ ariaLabel: "Collapse after", get: () => String(t.collapseAfter | 0), set: put((x, v) => { x.collapseAfter = parseInt(v, 10) || 0; }),
+            options: [{ value: "0", label: "Show all" }, { value: "3", label: "3" }, { value: "5", label: "5" }, { value: "10", label: "10" }] }) }),
+        row({ label: "Compact rows", hint: "One line per title.", enabledWhen: planner,
+          control: C.switch({ ariaLabel: "Compact rows", get: () => t.compact, set: put((x, v) => { x.compact = v; }) }) }),
+      ]),
+      sec("Adding tasks", [
+        row({ label: "Add-task box", enabledWhen: planner,
+          control: C.switch({ ariaLabel: "Add-task box", get: () => t.allowNewTask, set: put((x, v) => { x.allowNewTask = v; }) }) }),
+        row({ label: "New tasks are due", enabledWhen: (s) => planner(s) && s.todo.allowNewTask,
+          control: C.segmented({ ariaLabel: "New tasks are due", get: () => t.newTaskDay || "today", set: put((x, v) => { x.newTaskDay = v; }),
+            options: [{ value: "today", label: "Today" }, { value: "tomorrow", label: "Tomorrow" }] }) }),
+      ], { description: "Tasks you add are saved to your Canvas planner, so they show up on your phone too." }),
+      sec("Look", [
+        row({ label: "Accent", hint: "Empty uses your Appearance accent.", enabledWhen: planner,
+          control: C.color({ ariaLabel: "Planner accent", allowEmpty: true, presets: ACCENTS, get: () => t.accent, set: put((x, v) => { x.accent = v; }) }) }),
+        row({ label: "Celebrate", hint: "A small burst when everything in view is done.", enabledWhen: planner,
+          control: C.switch({ ariaLabel: "Celebrate", get: () => t.celebrate !== false, set: put((x, v) => { x.celebrate = v; }) }) }),
+      ]),
+      sec("Streaks", [
+        row({ label: "Daily streak", hint: "Counts days you complete at least one task.",
+          control: C.switch({ ariaLabel: "Daily streak", get: () => t.streaks.enabled, set: put((x, v) => { x.streaks.enabled = v; }) }) }),
+        row({ label: "Grace days", hint: "Missed days that don't break the streak.", enabledWhen: (s) => s.todo.streaks.enabled,
+          control: C.number({ ariaLabel: "Grace days", min: 0, max: 14, get: () => t.streaks.graceDays, set: put((x, v) => { x.streaks.graceDays = Math.max(0, v | 0); }) }) }),
+        row({ label: "Repairs per month", enabledWhen: (s) => s.todo.streaks.enabled,
+          control: C.number({ ariaLabel: "Repairs per month", min: 0, max: 31, get: () => t.streaks.repairsAvailable, set: put((x, v) => { x.streaks.repairsAvailable = Math.max(0, v | 0); }) }) }),
+      ]),
+      sec("Focus timer", [
+        row({ label: "Focus timer", hint: "A Pomodoro timer in the planner and on every page while it runs.", control: C.switch({ ariaLabel: "Focus timer", get: () => t.pomodoro.enabled, set: put((x, v) => { x.pomodoro.enabled = v; }) }) }),
+        row({ label: "Focus", enabledWhen: (s) => s.todo.pomodoro.enabled, control: C.number({ ariaLabel: "Focus minutes", min: 1, max: 180, suffix: "min", get: () => t.pomodoro.workMin, set: put((x, v) => { x.pomodoro.workMin = Math.max(1, v | 0); }) }) }),
+        row({ label: "Short break", enabledWhen: (s) => s.todo.pomodoro.enabled, control: C.number({ ariaLabel: "Short break minutes", min: 1, max: 60, suffix: "min", get: () => t.pomodoro.shortBreakMin, set: put((x, v) => { x.pomodoro.shortBreakMin = Math.max(1, v | 0); }) }) }),
+        row({ label: "Long break", enabledWhen: (s) => s.todo.pomodoro.enabled, control: C.number({ ariaLabel: "Long break minutes", min: 1, max: 120, suffix: "min", get: () => t.pomodoro.longBreakMin, set: put((x, v) => { x.pomodoro.longBreakMin = Math.max(1, v | 0); }) }) }),
+        row({ label: "Long break every", enabledWhen: (s) => s.todo.pomodoro.enabled, control: C.number({ ariaLabel: "Long break every", min: 1, max: 12, suffix: "sessions", get: () => t.pomodoro.longEvery, set: put((x, v) => { x.pomodoro.longEvery = Math.max(1, v | 0); }) }) }),
+        row({ label: "Sound when a phase ends", enabledWhen: (s) => s.todo.pomodoro.enabled, control: C.switch({ ariaLabel: "Sound when a phase ends", get: () => t.pomodoro.sound, set: put((x, v) => { x.pomodoro.sound = v; }) }) }),
+      ]),
+      live(() => renderRecurringEditor(store), () => JSON.stringify(store.get().todo.recurring || [])),
+      sec("Tags", [
+        row({ label: "Your tags", hint: "Suggested when you tag a task in the planner.", stacked: true,
+          control: C.tags({ get: () => t.tags, set: put((x, v) => { x.tags = v; }) }) }),
+      ]),
+    ];
+  }
+
+  function renderRecurringEditor(store) {
+    const C = S();
+    const rules = store.get().todo.recurring || [];
+    const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const describe = (r) => {
+      let s = r.rule === "weekly"
+        ? "Weekly" + ((r.days || []).length ? " on " + r.days.map((d) => WD[d]).join(", ") : "")
+        : r.rule === "monthly" ? "Monthly on day " + (r.day || 1) : "Every day";
+      if (r.at) s += " · " + r.at;
+      if (r.until) s += " · until " + r.until;
+      return s;
+    };
+    const list = rules.length
+      ? el("div", { class: "bcs-list" }, rules.map((r) => C.item({
+          title: r.title, meta: describe(r),
+          actions: [BC.ui.iconButton("trash", { label: "Delete " + r.title, size: "sm",
+            onClick: () => store.set((x) => { x.todo.recurring = (x.todo.recurring || []).filter((q) => q.id !== r.id); }) })],
+        })))
+      : el("p", { class: "bcs-empty", text: "No recurring tasks yet. They appear in the planner next to your Canvas work." });
+
+    const title = BC.ui.input({ size: "sm", placeholder: "Task title", ariaLabel: "Recurring task title" });
+    let freq = "daily";
+    const days = new Set();
+    const freqSeg = BC.ui.segmented({ size: "sm", ariaLabel: "Repeats", value: freq,
+      options: [{ value: "daily", label: "Daily" }, { value: "weekly", label: "Weekly" }, { value: "monthly", label: "Monthly" }],
+      onChange: (v) => { freq = v; syncForm(); } });
+    const dayBtns = el("div", { class: "bcs-days" }, WD.map((n, i) => {
+      const b = el("button", { type: "button", class: "bcs-day", "aria-pressed": "false", text: n.slice(0, 2), "aria-label": n });
+      b.addEventListener("click", () => { if (days.has(i)) days.delete(i); else days.add(i); b.setAttribute("aria-pressed", days.has(i) ? "true" : "false"); });
+      return b;
+    }));
+    const dom = BC.ui.input({ size: "sm", type: "number", ariaLabel: "Day of month", value: 1 });
+    dom.min = 1; dom.max = 31; dom.classList.add("bcs-dom");
+    const domWrap = el("label", { class: "bcs-inline" }, [el("span", { class: "bc-caption", text: "Day" }), dom]);
+    const at = BC.ui.input({ size: "sm", type: "time", ariaLabel: "Due at", value: "17:00" });
+    const until = BC.ui.input({ size: "sm", type: "date", ariaLabel: "Repeat until (optional)" });
+    function syncForm() {
+      dayBtns.hidden = freq !== "weekly";
+      domWrap.hidden = freq !== "monthly";
+    }
+    syncForm();
+    const add = BC.ui.button("Add", { size: "sm", variant: "primary", icon: "plus", onClick: () => {
+      const t = title.value.trim();
+      if (!t) { title.focus(); BC.toast && BC.toast.warn("Give the task a title first"); return; }
+      const rule = { id: BC.util.uuid(), title: t, rule: freq, at: at.value || "", until: until.value || "" };
+      if (freq === "weekly") rule.days = Array.from(days).sort();
+      if (freq === "monthly") rule.day = parseInt(dom.value, 10) || 1;
+      store.set((x) => { x.todo.recurring = (x.todo.recurring || []).concat([rule]); });
+    } });
+    const form = el("div", { class: "bcs-form" }, [
+      el("div", { class: "bcs-form__row" }, [title]),
+      el("div", { class: "bcs-form__row" }, [freqSeg.root, dayBtns, domWrap]),
+      el("div", { class: "bcs-form__row" }, [
+        el("label", { class: "bcs-inline" }, [el("span", { class: "bc-caption", text: "Due" }), at]),
+        el("label", { class: "bcs-inline" }, [el("span", { class: "bc-caption", text: "Until" }), until]),
+        el("span", { class: "bc-spacer" }), add,
+      ]),
+    ]);
+    return sec("Recurring tasks", [list, form], { description: "Repeat a task daily, weekly or monthly. Each day checks off on its own." });
+  }
+
+  // ---- Grades -------------------------------------------------------------
+
+  function renderGrades(store, adapter, ctx) {
+    const C = S();
+    const g = store.get().grades;
+    const put = (fn) => (v) => store.set((x) => fn(x.grades, v));
+    const sw = (label, key, hint, extra) => row(Object.assign({ label, hint,
+      control: C.switch({ ariaLabel: label, get: () => g[key], set: put((x, v) => { x[key] = v; }) }) }, extra || {}));
+    const gpaMount = el("div", { class: "bcs-gpa" }, [BC.ui.skeleton(4)]);
+    if (!ctx.searching && adapter.getGpaData) {
+      adapter.getGpaData().then((courses) => {
+        if (!gpaMount.isConnected) return;
+        renderGpaEditor(gpaMount, store, courses);
+      }).catch(() => { gpaMount.replaceChildren(BC.ui.empty("Open Canvas in a tab to load your courses.", null, { icon: "info" })); });
+    }
+    return [
+      sec("Grades page", [
+        sw("Grade tools", "panelEnabled", "Goal tracker, final-exam calculator and weights above your grades."),
+        sw("Weights chart", "showWeightDonut", null, { enabledWhen: (s) => s.grades.panelEnabled }),
+        sw("Trend chart", "showTrendChart", null, { enabledWhen: (s) => s.grades.panelEnabled }),
+        sw("Missing work warning", "showMissingWarning", null, { enabledWhen: (s) => s.grades.panelEnabled }),
+        sw("Auto-refresh", "autoRefresh", "Reloads grade data while the page is open."),
+        row({ label: "Refresh every", showWhen: (s) => s.grades.autoRefresh,
+          control: C.number({ ariaLabel: "Refresh every", min: 1, max: 60, suffix: "min", get: () => g.autoRefreshMin, set: put((x, v) => { x.autoRefreshMin = Math.max(1, v | 0); }) }) }),
+      ]),
+      sec("Assignments", [
+        sw("Rubric predictor", "rubricPredictor", "Slide each rubric row to see the score and its effect on your grade."),
+      ]),
+      sec("GPA", [
+        row({ label: "Scale", control: C.select({ ariaLabel: "GPA scale", get: () => g.gpaScale, set: put((x, v) => { x.gpaScale = v; }),
+          options: Object.entries(BC.GPA_SCALES).map(([k, v]) => ({ value: k, label: v.label })) }) }),
+        row({ label: "Courses", hint: "Credits default to 3. Set 0 to leave a course out.", stacked: true, control: gpaMount }),
+      ]),
+    ];
+  }
+
+  function renderGpaEditor(mount, store, courses) {
+    const credOf = (s, id) => (s.grades.creditsByCourse[id] != null ? s.grades.creditsByCourse[id] : 3);
+    const thead = el("tr", null, [el("th", { text: "Course" }), el("th", { class: "bcs-num", text: "Score" }), el("th", { class: "bcs-num", text: "Grade" }), el("th", { class: "bcs-num", text: "Credits" })]);
+    const tbody = el("tbody");
+    const rows = courses.map((cr) => {
+      const letterTd = el("td", { class: "bcs-num" });
+      const credInput = BC.ui.input({ size: "sm", type: "number", ariaLabel: "Credits for " + cr.name, value: credOf(store.get(), cr.id) });
+      credInput.min = 0; credInput.step = 0.5; credInput.classList.add("bcs-gpa__cred");
+      credInput.addEventListener("input", () => store.set((x) => { x.grades.creditsByCourse[cr.id] = parseFloat(credInput.value) || 0; }));
+      tbody.appendChild(el("tr", { class: cr.concluded ? "bcs-gpa__concluded" : null }, [
+        el("td", { class: "bc-truncate", text: cr.name }),
+        el("td", { class: "bcs-num", text: cr.score == null ? "—" : cr.score.toFixed(1) + "%" }),
+        letterTd,
+        el("td", { class: "bcs-num" }, [credInput]),
+      ]));
+      return { cr, letterTd, credInput };
+    });
+    const total = el("div", { class: "bcs-gpa__total" });
+    mount.replaceChildren(el("table", { class: "bcs-table" }, [el("thead", null, [thead]), tbody]), total);
+    // Recomputed on every change: the scale and the credits both feed it.
+    const recalc = () => {
+      const s = store.get();
+      const bands = (BC.GPA_SCALES[s.grades.gpaScale] || BC.GPA_SCALES["standard-4"]).bands;
+      let hours = 0, points = 0;
+      for (const r of rows) {
+        const cred = Number(credOf(s, r.cr.id)) || 0;
+        if (!focused(r.credInput) && parseFloat(r.credInput.value) !== cred) r.credInput.value = cred;
+        let text = "—";
+        if (r.cr.score != null) {
+          const band = bands.find((b) => r.cr.score >= b.min) || bands[bands.length - 1];
+          text = band.letter + " · " + band.points.toFixed(1);
+          if (cred > 0) { points += band.points * cred; hours += cred; }
+        }
+        if (r.letterTd.textContent !== text) r.letterTd.textContent = text;
+      }
+      total.replaceChildren(
+        el("span", { class: "bc-caption", text: hours + " credit hours" }),
+        el("span", { class: "bcs-gpa__value bc-num", text: hours > 0 ? (points / hours).toFixed(2) : "—" }),
+      );
+    };
+    recalc();
+    S().bindings.add(mount, recalc);
+  }
+
+  // ---- Calendar / Files / Announcements -----------------------------------
+
+  function renderCalendar(store) {
+    const C = S();
+    const cal = store.get().calendar;
+    const put = (fn) => (v) => store.set((x) => fn(x.calendar, v));
+    return [
+      sec("Calendar", [
+        row({ label: "Mini calendar", hint: "This month at a glance, in the dashboard sidebar.",
+          control: C.switch({ ariaLabel: "Mini calendar", get: () => cal.miniOnDashboard, set: put((x, v) => { x.miniOnDashboard = v; }) }) }),
+        row({ label: "Syllabus dates", hint: "Finds dates in a syllabus and offers to add them to your To Do.",
+          control: C.switch({ ariaLabel: "Syllabus dates", get: () => cal.syllabusExtract, set: put((x, v) => { x.syllabusExtract = v; }) }) }),
+        row({ label: "Export to your calendar app", hint: "Your Canvas work for the next 90 days as an .ics file.",
+          control: BC.ui.button("Export .ics", { size: "sm", icon: "download", onClick: () => {
+            if (!BC.calendar || !BC.calendar.exportIcs) { BC.toast && BC.toast.warn("Open settings from a Canvas page to export"); return; }
+            BC.calendar.exportIcs();
+          } }) }),
+      ]),
+    ];
+  }
+
+  function renderFiles(store) {
+    const C = S();
+    return [sec("Files", [
+      row({ label: "Files library", hint: "A searchable list of every course's files on the dashboard.",
+        control: C.switch({ ariaLabel: "Files library", get: () => store.get().files.enabled, set: (v) => store.set((x) => { x.files.enabled = v; }) }) }),
+    ])];
+  }
+
+  function renderAnnouncements(store) {
+    const C = S();
+    return [sec("Announcements", [
+      row({ label: "All announcements", hint: "The latest posts from every course, on the dashboard.",
+        control: C.switch({ ariaLabel: "All announcements", get: () => store.get().announcements.aggregator, set: (v) => store.set((x) => { x.announcements.aggregator = v; }) }) }),
+    ])];
+  }
+
+  // ---- Navigation ---------------------------------------------------------
+
+  function renderNavigation(store, adapter) {
+    const C = S();
     const s = store.get();
-    const hiddenSet = new Set(s.navigation[scope].hidden || []);
-    const known = BC.GLOBAL_NAV_ITEMS;
-    const orderedKeys = (s.navigation[scope].order && s.navigation[scope].order.length) ? s.navigation[scope].order.slice() : known.map((k) => k.key);
-    for (const it of known) if (!orderedKeys.includes(it.key)) orderedKeys.push(it.key);
-    const items = orderedKeys.map((k) => known.find((n) => n.key === k) || { key: k, label: k });
-    return S.sortable({
-      items,
+    const n = s.navigation;
+    const put = (fn) => (v) => store.set((x) => fn(x.navigation, v));
+    const logo = s.theming.logo;
+    const putLogo = (fn) => (v) => store.set((x) => fn(x.theming.logo, v));
+    // The lists come from the menus this school really has: read live when the panel
+    // is open on a Canvas page, otherwise from what Better Canvas last saw.
+    const holder = (scope) => {
+      const box = el("div", { class: "bcs-navlist" }, [BC.ui.skeleton(4)]);
+      const fill = (local) => box.replaceChildren(scope === "global" ? renderNavList(store, local) : renderCourseNavList(store, local));
+      const liveGlobal = BC.readGlobalNav ? BC.readGlobalNav() : [];
+      const liveCourse = BC.readCourseNav ? BC.readCourseNav() : [];
+      const quick = BC.storage && BC.storage.local;
+      if (scope === "global" && liveGlobal.length) fill({ navItems: liveGlobal });
+      else if (quick) fill(Object.assign({}, quick, liveCourse.length ? { courseNavItems: mergeLabels(quick.courseNavItems, liveCourse) } : null));
+      else if (adapter && adapter.getLocal) adapter.getLocal().then((l) => fill(l || {})).catch(() => fill({}));
+      else fill({});
+      return box;
+    };
+    return [
+      sec("Main menu", [
+        row({ label: "School logo", hint: "The logo at the top of the menu.",
+          control: C.segmented({ ariaLabel: "School logo", get: () => logo.mode, set: putLogo((x, v) => { x.mode = v; }),
+            options: [{ value: "default", label: "Show" }, { value: "hide", label: "Hide" }, { value: "replace", label: "Image" }, { value: "text", label: "Text" }] }) }),
+        row({ label: "Image URL", showWhen: (st) => st.theming.logo.mode === "replace",
+          control: C.text({ ariaLabel: "Logo image URL", placeholder: "https://…", get: () => logo.url, set: putLogo((x, v) => { x.url = v; }) }) }),
+        row({ label: "Text", showWhen: (st) => st.theming.logo.mode === "text",
+          control: C.text({ ariaLabel: "Logo text", placeholder: "Up to 24 characters", get: () => logo.text, set: putLogo((x, v) => { x.text = v; }) }) }),
+        holder("global"),
+        row({ label: "Your links", hint: "Extra links at the bottom of Canvas's main menu.", stacked: true,
+          control: C.links({ get: () => n.global.customLinks, set: put((x, v) => { x.global.customLinks = v; }) }) }),
+      ], { description: "Your school's menu, as it appears on the left. Drag to reorder; switch an item off to hide it." }),
+      sec("Course menu", [
+        holder("course"),
+        row({ label: "Your links", hint: "Extra links in every course's menu.", stacked: true,
+          control: C.links({ get: () => n.course.customLinks, set: put((x, v) => { x.course.customLinks = v; }) }) }),
+      ], { description: "Tabs from the courses you've opened. Hiding or moving one applies in every course that has it." }),
+      sec("Page chrome", [
+        row({ label: "Breadcrumbs", control: C.segmented({ ariaLabel: "Breadcrumbs", get: () => n.breadcrumbs, set: put((x, v) => { x.breadcrumbs = v; }),
+          options: [{ value: "default", label: "Default" }, { value: "compact", label: "Compact" }, { value: "hidden", label: "Hidden" }] }) }),
+        row({ label: "Course switcher", hint: "A row of course tabs at the top of every page.",
+          control: C.switch({ ariaLabel: "Course switcher", get: () => n.courseTabs, set: put((x, v) => { x.courseTabs = v; }) }) }),
+        row({ label: "Command palette", hint: "Jump anywhere with " + BC.util.modLabel() + "+K.",
+          control: C.switch({ ariaLabel: "Command palette", get: () => n.quickSearch, set: put((x, v) => { x.quickSearch = v; }) }) }),
+      ]),
+    ];
+  }
+
+  function mergeLabels(a, b) {
+    const out = (a || []).slice();
+    for (const t of b || []) if (!out.some((x) => x.toLowerCase() === t.toLowerCase())) out.push(t);
+    return out;
+  }
+
+  // Shared by both menus: saved order first, then anything new in the menu's own order.
+  function orderedItems(items, order) {
+    const byId = new Map(items.map((it) => [it.id, it]));
+    const out = [];
+    for (const id of order || []) if (byId.has(id)) { out.push(byId.get(id)); byId.delete(id); }
+    for (const it of items) if (byId.has(it.id)) out.push(it);
+    return out;
+  }
+
+  function navSortable(store, scope, items) {
+    const hiddenSet = new Set(store.get().navigation[scope].hidden || []);
+    return S().sortable({
+      items: orderedItems(items, store.get().navigation[scope].order),
       render: (it) => {
-        const row = h("div.bc-navitem", null);
-        row.appendChild(h("span.bc-navitem-label", null, it.label));
-        const cb = el("input", { type: "checkbox", checked: !hiddenSet.has(it.key) });
-        cb.addEventListener("change", () => store.set((x) => {
-          const h1 = new Set(x.navigation[scope].hidden || []);
-          if (cb.checked) h1.delete(it.key); else h1.add(it.key);
-          x.navigation[scope].hidden = Array.from(h1);
-        }));
-        row.appendChild(h("label.bc-mini-check", null, [cb, "Show"]));
-        return row;
+        const t = BC.ui.toggle({ checked: !hiddenSet.has(it.id), ariaLabel: "Show " + it.label,
+          onChange: (on) => store.set((x) => {
+            const h1 = new Set(x.navigation[scope].hidden || []);
+            if (on) h1.delete(it.id); else h1.add(it.id);
+            x.navigation[scope].hidden = Array.from(h1);
+          }) });
+        return el("div", { class: "bcs-sortable__row" }, [
+          el("span", { class: "bc-truncate", text: it.label }),
+          it.note ? el("span", { class: "bcs-navlist__note", text: it.note }) : null,
+          el("span", { class: "bc-spacer" }),
+          t.root,
+        ]);
       },
       onChange: (ids) => store.set((x) => { x.navigation[scope].order = ids; }),
     });
   }
 
-  function renderGrades(store, adapter) {
-    const S = BC.SettingsComponents;
-    const g = store.get().grades;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Grade tools", children: [
-      S.row({ label: "Show Grade Tools panel", hint: "Adds the goal tracker, final-grade solver and what-if scores to the grades page.",
-        control: S.switch({ get: () => g.panelEnabled, set: (v) => store.set((x) => { x.grades.panelEnabled = v; }) }) }),
-      S.row({ label: "Auto-refresh grades page", control: S.switch({ get: () => g.autoRefresh, set: (v) => store.set((x) => { x.grades.autoRefresh = v; }) }) }),
-      S.row({ label: "Auto-refresh interval (minutes)", enabledWhen: (st) => st.grades.autoRefresh,
-        control: S.number({ get: () => g.autoRefreshMin, set: (v) => store.set((x) => { x.grades.autoRefreshMin = Math.max(1, v|0); }), min:1, max:60 }) }),
-      S.row({ label: "Rubric-aware prediction", control: S.switch({ get: () => g.rubricPredictor, set: (v) => store.set((x) => { x.grades.rubricPredictor = v; }) }) }),
-      S.row({ label: "Show grade trend chart", control: S.switch({ get: () => g.showTrendChart, set: (v) => store.set((x) => { x.grades.showTrendChart = v; }) }) }),
-      S.row({ label: "Show weight donut",      control: S.switch({ get: () => g.showWeightDonut, set: (v) => store.set((x) => { x.grades.showWeightDonut = v; }) }) }),
-      S.row({ label: "Warn on missing assignments", control: S.switch({ get: () => g.showMissingWarning, set: (v) => store.set((x) => { x.grades.showMissingWarning = v; }) }) }),
-    ]}));
-
-    c.appendChild(S.section({ title: "GPA calculator", children: [
-      S.row({ label: "GPA scale",
-        control: S.select({ get: () => g.gpaScale, set: (v) => store.set((x) => { x.grades.gpaScale = v; }),
-          options: Object.entries(BC.GPA_SCALES).map(([k, v]) => ({ value: k, label: v.label })) }) }),
-      h("div", { id: "bc-gpa-mount" }, "Loading courses…"),
-    ]}));
-
-    // Async GPA mount
-    adapter.getGpaData && adapter.getGpaData().then((courses) => {
-      const mount = c.querySelector("#bc-gpa-mount");
-      if (!mount || !mount.isConnected) return;   // tab switched away mid-fetch
-      renderGpaEditor(mount, store, courses);
-    }).catch(() => {
-      const mount = c.querySelector("#bc-gpa-mount");
-      if (mount) mount.textContent = "Open a Canvas tab to load your courses.";
-    });
-    return c;
+  function renderNavList(store, local) {
+    const seen = (local && local.navItems) || [];
+    // Before Better Canvas has seen the menu (a fresh install opened straight to the
+    // options page), fall back to Canvas's standard items.
+    const base = seen.length ? seen : BC.GLOBAL_NAV_ITEMS.filter((x) => !/commons|accounts/.test(x.key));
+    const items = base.map((x) => ({ id: x.key, label: x.label, note: x.app ? "App" : "" }));
+    const box = el("div", null, [navSortable(store, "global", items)]);
+    if (!seen.length) box.prepend(S().note({ text: "Open Canvas once and this list will match your school's menu." }));
+    return box;
   }
 
-  function renderGpaEditor(mount, store, courses) {
-    const S = BC.SettingsComponents;
-    mount.innerHTML = "";
-    const s = store.get();
-    const bands = (BC.GPA_SCALES[s.grades.gpaScale] || BC.GPA_SCALES["standard-4"]).bands;
-    let total = 0, points = 0;
-    const table = h("table.bc-gpa", null);
-    const head = h("tr", null, [h("th", null, "Course"), h("th", null, "Score"), h("th", null, "Letter"), h("th", null, "Points"), h("th", null, "Credits")]);
-    table.appendChild(head);
-    for (const cr of courses) {
-      const cred = s.grades.creditsByCourse[cr.id] != null ? s.grades.creditsByCourse[cr.id] : 3;
-      let letter = "—", pts = 0;
-      if (cr.score != null) { const band = bands.find(b => cr.score >= b.min); letter = band.letter; pts = band.points; }
-      const row = h("tr" + (cr.concluded ? ".bc-concluded" : ""), null, [
-        h("td", null, cr.name),
-        h("td", null, cr.score == null ? "—" : (cr.score.toFixed(2) + "%")),
-        h("td", null, letter),
-        h("td", null, pts.toFixed(2)),
-        h("td", null, el("input", { type: "number", min: 0, step: 0.5, value: cred, class: "bc-number bc-gpa-cred",
-          oninput: (e) => store.set((x) => { x.grades.creditsByCourse[cr.id] = parseFloat(e.target.value) || 0; }) })),
-      ]);
-      table.appendChild(row);
-      if (cr.score != null && cred > 0) { points += pts * cred; total += cred; }
+  function renderCourseNavList(store, local) {
+    const labels = mergeLabels(local && local.courseNavItems, []);
+    // Tabs hidden earlier (typed in by name) stay listed even if no course shown yet has them.
+    for (const h of store.get().navigation.course.hidden || []) {
+      if (!labels.some((x) => x.toLowerCase() === h)) labels.push(h.replace(/\b\w/g, (c) => c.toUpperCase()));
     }
-    mount.appendChild(table);
-    const gpa = total > 0 ? (points / total).toFixed(3) : "—";
-    mount.appendChild(h("div.bc-gpa-total", null, "GPA: " + gpa + "  ·  " + total + " credit hours"));
-    mount.appendChild(h("p.bc-hint", null, "Set credit to 0 to exclude a course from the GPA."));
+    if (!labels.length) return S().note({ text: "Open any course and its menu will be listed here." });
+    // Course tabs are matched by name, lower-cased, in every course.
+    return navSortable(store, "course", labels.map((l) => ({ id: l.toLowerCase(), label: l })));
   }
 
-  function renderNotifications(store) {
-    const S = BC.SettingsComponents;
-    const n = store.get().notifications;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Reminders", children: [
-      S.row({ label: "Browser notifications", hint:"Requires permission; asked on first enable.",
-        control: S.switch({ get: () => n.enabled, set: (v) => store.set((x) => { x.notifications.enabled = v; }) }) }),
-      S.row({ label: "In-page toast reminders", control: S.switch({ get: () => n.inPage, set: (v) => store.set((x) => { x.notifications.inPage = v; }) }) }),
-      S.row({ label: "Lead times (comma-separated minutes)",
-        control: S.text({ get: () => (n.leadMinutes || []).join(", "), set: (v) => store.set((x) => { x.notifications.leadMinutes = v.split(",").map(s => parseInt(s.trim(), 10)).filter(n => n > 0); }) }) }),
-    ]}));
-    c.appendChild(S.section({ title: "Types", children: [
-      S.row({ label: "Due soon",         control: S.switch({ get: () => n.types.dueSoon,         set: (v) => store.set((x) => { x.notifications.types.dueSoon = v; }) }) }),
-      S.row({ label: "New grade posted", control: S.switch({ get: () => n.types.newGrade,        set: (v) => store.set((x) => { x.notifications.types.newGrade = v; }) }) }),
-      S.row({ label: "New announcement", control: S.switch({ get: () => n.types.newAnnouncement, set: (v) => store.set((x) => { x.notifications.types.newAnnouncement = v; }) }) }),
-      S.row({ label: "Grade goal breach",control: S.switch({ get: () => n.types.goalBreach,      set: (v) => store.set((x) => { x.notifications.types.goalBreach = v; }) }) }),
-      S.row({ label: "Streak at risk",   control: S.switch({ get: () => n.types.streakAtRisk,    set: (v) => store.set((x) => { x.notifications.types.streakAtRisk = v; }) }) }),
-    ]}));
-    c.appendChild(S.section({ title: "Quiet hours", children: [
-      S.row({ label: "Enable quiet hours", control: S.switch({ get: () => n.quietHours.enabled, set: (v) => store.set((x) => { x.notifications.quietHours.enabled = v; }) }) }),
-      S.row({ label: "Start / end",
-        control: h("div.bc-inline", null, [
-          el("input", { type: "time", value: n.quietHours.start, onchange: (e) => store.set((x) => { x.notifications.quietHours.start = e.target.value; }) }),
-          h("span", null, "–"),
-          el("input", { type: "time", value: n.quietHours.end, onchange: (e) => store.set((x) => { x.notifications.quietHours.end = e.target.value; }) }),
-        ]) }),
-      S.row({ label: "Toolbar badge for unread items", control: S.switch({ get: () => n.badgeCount, set: (v) => store.set((x) => { x.notifications.badgeCount = v; }) }) }),
-    ]}));
-    return c;
-  }
-
-  function renderFiles(store) {
-    const S = BC.SettingsComponents;
-    const f = store.get().files;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Files library", description: "Aggregates files across every course into one filterable panel.", children: [
-      S.row({ label: "Enable Files library", control: S.switch({ get: () => f.enabled, set: (v) => store.set((x) => { x.files.enabled = v; }) }) }),
-    ]}));
-    return c;
-  }
-
-  function renderCalendar(store) {
-    const S = BC.SettingsComponents;
-    const cal = store.get().calendar;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Calendar", children: [
-      S.row({ label: "Mini month view on dashboard", control: S.switch({ get: () => cal.miniOnDashboard, set: (v) => store.set((x) => { x.calendar.miniOnDashboard = v; }) }) }),
-      S.row({ label: "Syllabus date extraction", hint: "Finds dates in course syllabi and offers to add them to your planner.",
-        control: S.switch({ get: () => cal.syllabusExtract, set: (v) => store.set((x) => { x.calendar.syllabusExtract = v; }) }) }),
-      S.row({ label: ".ics export",
-        control: h("div.bc-inline", null, [
-          S.button({ label: "Export upcoming (.ics)", onClick: () => {
-            if (!BC.calendar || !BC.calendar.exportIcs) { BC.toast.warn("Open a Canvas tab to export"); return; }
-            BC.calendar.exportIcs();
-          } }),
-        ]) }),
-    ]}));
-    return c;
-  }
-
-  function renderAnnouncements(store) {
-    const S = BC.SettingsComponents;
-    const a = store.get().announcements;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Announcements", children: [
-      S.row({ label: "Aggregator panel", hint:"Unified list across all courses.",
-        control: S.switch({ get: () => a.aggregator, set: (v) => store.set((x) => { x.announcements.aggregator = v; }) }) }),
-    ]}));
-    return c;
-  }
+  // ---- Productivity -------------------------------------------------------
 
   function renderProductivity(store) {
-    const S = BC.SettingsComponents;
-    const p = store.get().productivity;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Productivity", children: [
-      S.row({ label: "Focus mode on assignment pages", control: S.switch({ get: () => p.focusMode, set: (v) => store.set((x) => { x.productivity.focusMode = v; }) }) }),
-      S.row({ label: "Reading ruler",       control: S.switch({ get: () => p.readingRuler, set: (v) => store.set((x) => { x.productivity.readingRuler = v; }) }) }),
-      S.row({ label: "Sticky notes on any page", control: S.switch({ get: () => p.stickyNotes, set: (v) => store.set((x) => { x.productivity.stickyNotes = v; }) }) }),
-      S.row({ label: "Auto-save text-editor drafts", control: S.switch({ get: () => p.autoSaveDrafts, set: (v) => store.set((x) => { x.productivity.autoSaveDrafts = v; }) }) }),
-      S.row({ label: "Quiz draft saver", hint: "Snapshots quiz answers locally while you take a quiz, so a crash or reload can't wipe them.",
-        control: S.switch({ get: () => p.quizDraftSaver, set: (v) => store.set((x) => { x.productivity.quizDraftSaver = v; }) }) }),
-      S.row({ label: "Word/char count",     control: S.switch({ get: () => p.wordCount, set: (v) => store.set((x) => { x.productivity.wordCount = v; }) }) }),
-      S.row({ label: "Print-friendly view", control: S.switch({ get: () => p.printFriendly, set: (v) => store.set((x) => { x.productivity.printFriendly = v; }) }) }),
-      S.row({ label: "Copy-URL button on pages", control: S.switch({ get: () => p.copyUrlButton, set: (v) => store.set((x) => { x.productivity.copyUrlButton = v; }) }) }),
-      S.row({ label: "Reading progress bar", control: S.switch({ get: () => p.readingProgress, set: (v) => store.set((x) => { x.productivity.readingProgress = v; }) }) }),
-    ]}));
-
-    const m = store.get().modules;
-    c.appendChild(S.section({ title: "Modules", children: [
-      S.row({ label: "Module progress bars", hint: "Completion bars per module plus a course-wide summary on the Modules page.",
-        control: S.switch({ get: () => m.progressBars, set: (v) => store.set((x) => { x.modules.progressBars = v; }) }) }),
-    ]}));
-
-    const disc = store.get().discussions;
-    c.appendChild(S.section({ title: "Discussions", children: [
-      S.row({ label: "Collapse-replies button", control: S.switch({ get: () => disc.collapse, set: (v) => store.set((x) => { x.discussions.collapse = v; }) }) }),
-      S.row({ label: "Jump to next unread", control: S.switch({ get: () => disc.jumpToUnread, set: (v) => store.set((x) => { x.discussions.jumpToUnread = v; }) }) }),
-      S.row({ label: "Reply & word stats", control: S.switch({ get: () => disc.wordCount, set: (v) => store.set((x) => { x.discussions.wordCount = v; }) }) }),
-      S.row({ label: "Highlight instructor posts", control: S.switch({ get: () => disc.instructorHighlight, set: (v) => store.set((x) => { x.discussions.instructorHighlight = v; }) }) }),
-    ]}));
-    return c;
+    const C = S();
+    const s = store.get();
+    const p = s.productivity;
+    const sw = (label, key, hint) => row({ label, hint,
+      control: C.switch({ ariaLabel: label, get: () => p[key], set: (v) => store.set((x) => { x.productivity[key] = v; }) }) });
+    const swOf = (group, label, key, hint) => row({ label, hint,
+      control: C.switch({ ariaLabel: label, get: () => s[group][key], set: (v) => store.set((x) => { x[group][key] = v; }) }) });
+    return [
+      sec("Reading", [
+        sw("Focus mode", "focusMode", "Hides Canvas's menus and sidebars so only the page content is left."),
+        sw("Reading ruler", "readingRuler", "A highlight band that follows your pointer."),
+        sw("Reading progress", "readingProgress", "A thin bar along the top as you scroll."),
+      ]),
+      sec("Writing", [
+        sw("Save drafts", "autoSaveDrafts", "Text you type in Canvas boxes is kept if the page closes."),
+        sw("Word count", "wordCount", "Words and characters under every text box."),
+        sw("Quiz backup", "quizDraftSaver", "Keeps a local copy of quiz answers in case the tab crashes."),
+        sw("Sticky notes", "stickyNotes", "Notes you can pin to any Canvas page."),
+      ]),
+      sec("Quick actions", [
+        sw("Quick actions button", "quickActions", "A small round button in the bottom-right corner of every page."),
+        row({ label: "Copy link", enabledWhen: (st) => st.productivity.quickActions !== false,
+          control: C.switch({ ariaLabel: "Copy link", get: () => p.copyUrlButton, set: (v) => store.set((x) => { x.productivity.copyUrlButton = v; }) }) }),
+        row({ label: "Print page", enabledWhen: (st) => st.productivity.quickActions !== false,
+          control: C.switch({ ariaLabel: "Print page", get: () => p.printFriendly, set: (v) => store.set((x) => { x.productivity.printFriendly = v; }) }) }),
+      ], { description: "Focus mode, a new sticky note and the command palette are always in the menu." }),
+      sec("Modules", [
+        swOf("modules", "Progress bars", "progressBars", "Completion for each module and the whole course."),
+      ]),
+      sec("Discussions", [
+        swOf("discussions", "Next unread", "jumpToUnread", "A button that scrolls to the next reply you haven't read."),
+        swOf("discussions", "Reply and word counts", "wordCount", "Shown above topics that have replies."),
+        swOf("discussions", "Collapse replies", "collapse", "Classic discussion pages only — Canvas's new design has its own Collapse Threads."),
+        swOf("discussions", "Highlight instructors", "instructorHighlight", "Classic discussion pages only — the new design tags teachers itself."),
+      ]),
+    ];
   }
 
+  // ---- Notifications ------------------------------------------------------
+
+  function renderNotifications(store) {
+    const C = S();
+    const n = store.get().notifications;
+    const put = (fn) => (v) => store.set((x) => fn(x.notifications, v));
+    const anyOn = (s) => s.notifications.inPage || s.notifications.enabled;
+    const type = (label, key) => row({ label, enabledWhen: anyOn,
+      control: C.switch({ ariaLabel: label, get: () => n.types[key], set: put((x, v) => { x.types[key] = v; }) }) });
+    return [
+      sec("Delivery", [
+        row({ label: "On the page", hint: "A small card in the corner of Canvas.",
+          control: C.switch({ ariaLabel: "Notifications on the page", get: () => n.inPage, set: put((x, v) => { x.inPage = v; }) }) }),
+        row({ label: "Desktop notifications", hint: "Your browser asks for permission the first time.",
+          control: C.switch({ ariaLabel: "Desktop notifications", get: () => n.enabled, set: put((x, v) => { x.enabled = v; }) }) }),
+        row({ label: "Toolbar badge", hint: "How many items are due in the next 24 hours.",
+          control: C.switch({ ariaLabel: "Toolbar badge", get: () => n.badgeCount, set: put((x, v) => { x.badgeCount = v; }) }) }),
+      ]),
+      sec("What to notify", [
+        type("Work due soon", "dueSoon"),
+        row({ label: "Remind me before", hint: "Minutes before the due time, comma-separated.", enabledWhen: (s) => anyOn(s) && s.notifications.types.dueSoon,
+          control: C.text({ ariaLabel: "Reminder lead times", placeholder: "60, 240, 1440", get: () => (n.leadMinutes || []).join(", "),
+            set: put((x, v) => { x.leadMinutes = v.split(",").map((q) => parseInt(q.trim(), 10)).filter((m) => m > 0); }) }) }),
+        type("New grades", "newGrade"),
+        type("New announcements", "newAnnouncement"),
+        type("Grade drops below your goal", "goalBreach"),
+        type("Streak about to break", "streakAtRisk"),
+      ]),
+      sec("Quiet hours", [
+        row({ label: "Quiet hours", hint: "No notifications during these hours.",
+          control: C.switch({ ariaLabel: "Quiet hours", get: () => n.quietHours.enabled, set: put((x, v) => { x.quietHours.enabled = v; }) }) }),
+        row({ label: "From", showWhen: (s) => s.notifications.quietHours.enabled, control: inline([
+          C.time({ ariaLabel: "Quiet hours start", get: () => n.quietHours.start, set: put((x, v) => { x.quietHours.start = v; }) }),
+          el("span", { class: "bcs-inline__sep", text: "to" }),
+          C.time({ ariaLabel: "Quiet hours end", get: () => n.quietHours.end, set: put((x, v) => { x.quietHours.end = v; }) }),
+        ]) }),
+      ]),
+    ];
+  }
+
+  // ---- Accessibility / Shortcuts / Instructor -----------------------------
+
   function renderA11y(store) {
-    const S = BC.SettingsComponents;
+    const C = S();
     const a = store.get().accessibility;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Accessibility", children: [
-      S.row({ label: "Text-to-speech buttons", control: S.switch({ get: () => a.tts, set: (v) => store.set((x) => { x.accessibility.tts = v; }) }) }),
-      S.row({ label: "Larger click targets", control: S.switch({ get: () => a.largeTargets, set: (v) => store.set((x) => { x.accessibility.largeTargets = v; }) }) }),
-      S.row({ label: "Dyslexia-friendly font", control: S.switch({ get: () => a.dyslexiaFont, set: (v) => store.set((x) => { x.accessibility.dyslexiaFont = v; }) }) }),
-    ]}));
-    return c;
+    const sw = (label, key, hint) => row({ label, hint,
+      control: C.switch({ ariaLabel: label, get: () => a[key], set: (v) => store.set((x) => { x.accessibility[key] = v; }) }) });
+    return [
+      sec("Accessibility", [
+        sw("Read aloud", "tts", "A Speak button on assignments, announcements and discussions."),
+        sw("Larger click targets", "largeTargets", "Buttons and checkboxes at least 40px."),
+        sw("Dyslexia-friendly font", "dyslexiaFont"),
+        el("div", { class: "bcs-row bcs-row--note" }, [S().note({ text: "Color-blind filters, high contrast, focus rings and reduced motion are under Appearance → Visibility." })]),
+      ]),
+    ];
   }
 
   function renderShortcuts(store) {
-    const S = BC.SettingsComponents;
+    const C = S();
     const sh = store.get().shortcuts;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({ title: "Shortcuts", description: "Click a binding to record a new one. Use Escape to cancel.", children: [
-      S.row({ label: "Enable shortcuts", control: S.switch({ get: () => sh.enabled, set: (v) => store.set((x) => { x.shortcuts.enabled = v; }) }) }),
-    ]}));
     const labels = {
-      commandPalette: "Command palette",
-      settings: "Open settings",
-      toggleDark: "Toggle dark mode",
-      quickTask: "Quick task",
-      quickNote: "Quick note",
-      gotoDashboard: "Go to dashboard",
-      gotoGrades: "Go to grades",
-      gotoInbox: "Go to inbox",
-      gotoCalendar: "Go to calendar",
-      focusMode: "Toggle focus mode",
+      commandPalette: "Command palette", settings: "Open settings", toggleDark: "Toggle dark mode",
+      quickTask: "Quick task", quickNote: "Quick note", focusMode: "Toggle focus mode",
+      gotoDashboard: "Go to dashboard", gotoGrades: "Go to grades", gotoInbox: "Go to inbox", gotoCalendar: "Go to calendar",
     };
-    c.appendChild(S.section({ title: "Bindings", children:
-      Object.keys(labels).map((id) => S.row({ label: labels[id],
-        control: S.keybind({ get: () => sh.bindings[id], set: (v) => store.set((x) => { x.shortcuts.bindings[id] = v; }) }) })),
-    }));
-    return c;
+    return [
+      sec("Shortcuts", [
+        row({ label: "Keyboard shortcuts", hint: "Off ignores every shortcut below.",
+          control: C.switch({ ariaLabel: "Keyboard shortcuts", get: () => sh.enabled, set: (v) => store.set((x) => { x.shortcuts.enabled = v; }) }) }),
+      ]),
+      sec("Bindings", Object.keys(labels).map((id) => row({ label: labels[id], enabledWhen: (s) => s.shortcuts.enabled,
+        control: C.keybind({ ariaLabel: labels[id], get: () => sh.bindings[id], set: (v) => store.set((x) => { x.shortcuts.bindings[id] = v; }) }) })),
+        { description: "Click a shortcut, then press the new keys. Press Escape to cancel. A single letter can start a two-key sequence, like G then D." }),
+    ];
   }
 
-  function renderInsights(store, adapter) {
-    const S = BC.SettingsComponents;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({
-      title: "Tracking",
-      description: "All analytics are computed and stored on this device only — nothing is ever uploaded.",
-      children: [
-        S.row({ label: "Track time on Canvas", hint: "Counts minutes per course while a Canvas tab is visible.",
-          control: S.switch({ get: () => store.get().insights.enabled, set: (v) => store.set((x) => { x.insights.enabled = v; }) }) }),
-      ],
-    }));
-    const mount = h("div.bc-tab-body", null, "Loading analytics…");
-    c.appendChild(mount);
+  function renderInstructor(store) {
+    const C = S();
+    const i = store.get().instructor;
+    const sw = (label, key, hint) => row({ label, hint,
+      control: C.switch({ ariaLabel: label, get: () => i[key], set: (v) => store.set((x) => { x.instructor[key] = v; }) }) });
+    return [
+      sec("Instructor tools", [
+        sw("Roster export", "rosterExport", "An export button on the People page."),
+        sw("Attendance", "attendanceQuick", "Present/absent buttons on the People page, with CSV export. Kept on this device."),
+        sw("Needs-grading counts", "bulkGradeHelpers", "Ungraded submission counts on the Assignments page."),
+      ]),
+    ];
+  }
 
-    const namesP = adapter && adapter.getCourses ? adapter.getCourses().catch(() => []) : Promise.resolve([]);
-    namesP.then((courses) => {
-      const names = {};
-      for (const cr of courses || []) names[cr.id] = cr.name;
-      try {
-        chrome.storage.local.get([BC.LOCAL_KEY], (res) => {
+  // ---- Insights -------------------------------------------------------------
+
+  function renderInsights(store, adapter, ctx) {
+    const C = S();
+    const mount = el("div", { class: "bcs-insights" }, [BC.ui.skeleton(4)]);
+    if (!ctx.searching) {
+      const namesP = adapter && adapter.getCourses ? adapter.getCourses().catch(() => []) : Promise.resolve([]);
+      namesP.then((courses) => {
+        const names = {};
+        for (const cr of courses || []) names[cr.id] = cr.name;
+        const getLocal = adapter && adapter.getLocal ? adapter.getLocal() : Promise.resolve({});
+        return Promise.resolve(getLocal).then((local) => {
           if (!mount.isConnected) return;   // tab switched away mid-fetch
-          renderInsightsData(mount, (res && res[BC.LOCAL_KEY]) || {}, names);
+          renderInsightsData(mount, local || {}, names);
         });
-      } catch (_) {
-        renderInsightsData(mount, {}, names);
-      }
-    });
-    return c;
+      }).catch(() => { if (mount.isConnected) renderInsightsData(mount, {}, {}); });
+    }
+    return [
+      sec("Tracking", [
+        row({ label: "Track time on Canvas", hint: "Counts minutes per course while a Canvas tab is visible. Stays on this device.",
+          control: C.switch({ ariaLabel: "Track time on Canvas", get: () => store.get().insights.enabled, set: (v) => store.set((x) => { x.insights.enabled = v; }) }) }),
+      ]),
+      mount,
+    ];
   }
 
   function renderInsightsData(mount, local, names) {
-    const S = BC.SettingsComponents;
-    mount.innerHTML = "";
     const courseName = (id) => names[id] || (id === "other" ? "Other pages" : "Course " + id);
     const fmtMin = (m) => m >= 60 ? Math.floor(m / 60) + "h " + (m % 60) + "m" : m + "m";
 
-    // -- time on Canvas (last 14 days) -------------------------------------
     const st = local.studyTime || {};
     const days = [];
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      days.push(BC.dt.ymd(d));
-    }
+    for (let i = 13; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push(BC.dt.ymd(d)); }
     const perDay = days.map((d) => Object.values(st[d] || {}).reduce((a, b) => a + b, 0));
     const total = perDay.reduce((a, b) => a + b, 0);
     const max = Math.max(1, ...perDay);
@@ -933,161 +1222,93 @@
     for (const d of days) for (const [k, v] of Object.entries(st[d] || {})) byCourse[k] = (byCourse[k] || 0) + v;
     const top = Object.entries(byCourse).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
-    mount.appendChild(S.section({
-      title: "Time on Canvas — last 14 days",
-      children: total ? [
-        h("div.bc-ins-total", null, fmtMin(total) + " total · " + fmtMin(Math.round(total / 14)) + "/day average"),
-        h("div.bc-ins-days", null, days.map((d, i) => h("div.bc-ins-day", { title: d + " · " + fmtMin(perDay[i]) }, [
-          h("div.bc-ins-day-fill", { style: { height: Math.round((perDay[i] / max) * 100) + "%" } }),
-        ]))),
-        h("div", null, top.map(([k, v]) => h("div.bc-ins-row", null, [
-          h("span", null, courseName(k)),
-          h("span.bc-ins-val", null, fmtMin(v)),
-        ]))),
-      ] : [h("p.bc-hint", null, "No study time recorded yet. Keep a Canvas tab open while you work and check back.")],
-    }));
-
-    // -- pomodoro ----------------------------------------------------------
     const sessions = (local.pomodoro && local.pomodoro.sessions) || [];
     const weekAgo = Date.now() - 7 * 864e5;
     const recent = sessions.filter((s) => (s.end || 0) >= weekAgo);
     const focusMin = recent.reduce((a, s) => a + (s.min || 0), 0);
-    mount.appendChild(S.section({
-      title: "Pomodoro — last 7 days",
-      children: recent.length ? [
-        h("div.bc-ins-total", null, recent.length + " session" + (recent.length === 1 ? "" : "s") + " · " + fmtMin(focusMin) + " focused"),
-        h("div", null, recent.slice(-8).reverse().map((s) => h("div.bc-ins-row", null, [
-          h("span", null, (s.task || "Untitled focus") + " · " + new Date(s.end).toLocaleDateString()),
-          h("span.bc-ins-val", null, fmtMin(s.min || 0)),
-        ]))),
-      ] : [h("p.bc-hint", null, "No pomodoro sessions yet. Start one from the planner widget's task details.")],
-    }));
 
-    // -- grade trends --------------------------------------------------------
     const gh = local.gradeHistory || {};
-    const trendRows = Object.entries(gh)
-      .filter(([, arr]) => Array.isArray(arr) && arr.length >= 2)
-      .slice(0, 8)
-      .map(([cid, arr]) => {
-        const scores = arr.map((p) => p.score).filter((v) => v != null);
-        if (scores.length < 2) return null;
-        const min = Math.min(...scores), maxS = Math.max(...scores), span = Math.max(0.001, maxS - min);
-        const pts = scores.map((v, i) =>
-          Math.round((i / (scores.length - 1)) * 140) + "," + Math.round(30 - ((v - min) / span) * 26 + 2)
-        ).join(" ");
-        const delta = scores[scores.length - 1] - scores[0];
-        const color = delta >= 0 ? "#059669" : "#dc2626";
-        const spark = h("span.bc-ins-spark");
-        spark.innerHTML = '<svg width="140" height="32" viewBox="0 0 140 32"><polyline fill="none" stroke="' +
-          color + '" stroke-width="2" points="' + pts + '"/></svg>';
-        return h("div.bc-ins-row", null, [
-          h("span", null, courseName(cid)),
-          spark,
-          h("span.bc-ins-val", { style: { color } }, (delta >= 0 ? "+" : "") + delta.toFixed(1) + "%"),
-        ]);
-      })
-      .filter(Boolean);
-    mount.appendChild(S.section({
-      title: "Grade trends",
-      children: trendRows.length ? trendRows
-        : [h("p.bc-hint", null, "Visit your course grade pages a few times to build up trend history.")],
-    }));
+    const trends = Object.entries(gh).filter(([, arr]) => Array.isArray(arr) && arr.length >= 2).slice(0, 8);
+
+    const statRow = el("div", { class: "bcs-stats" }, [
+      BC.ui.stat({ label: "Last 14 days", value: fmtMin(total), sub: fmtMin(Math.round(total / 14)) + " a day" }),
+      BC.ui.stat({ label: "Focus sessions", value: String(recent.length), sub: fmtMin(focusMin) + " this week" }),
+      BC.ui.stat({ label: "Courses tracked", value: String(Object.keys(byCourse).filter((k) => k !== "other").length), sub: "with study time" }),
+    ]);
+
+    const chart = el("div", { class: "bcs-bars", role: "img", "aria-label": "Minutes on Canvas per day for the last 14 days" },
+      days.map((d, i) => el("div", { class: "bcs-bars__col", title: d + " · " + fmtMin(perDay[i]) }, [
+        el("div", { class: "bcs-bars__fill", style: "height:" + Math.round((perDay[i] / max) * 100) + "%" }),
+      ])));
+
+    mount.replaceChildren(
+      statRow,
+      sec("Time on Canvas", total ? [
+        chart,
+        el("div", { class: "bcs-list" }, top.map(([k, v]) => C_item(courseName(k), fmtMin(v)))),
+      ] : [el("p", { class: "bcs-empty", text: "Nothing recorded yet. Keep a Canvas tab open while you work." })]),
+      sec("Focus sessions", recent.length
+        ? [el("div", { class: "bcs-list" }, recent.slice(-8).reverse().map((s) => C_item(s.task || "Focus session", fmtMin(s.min || 0), new Date(s.end).toLocaleDateString())))]
+        : [el("p", { class: "bcs-empty", text: "No Pomodoro sessions yet. Start one from the planner." })]),
+      sec("Grade trends", trends.length
+        ? [el("div", { class: "bcs-list" }, trends.map(([cid, arr]) => {
+            const scores = arr.map((p) => p.score).filter((v) => v != null);
+            const delta = scores[scores.length - 1] - scores[0];
+            const spark = BC.ui.sparkline(scores, { width: 96, height: 24, label: courseName(cid) + " grade trend" });
+            const val = el("span", { class: "bcs-trend bc-num " + (delta >= 0 ? "bc-t-success" : "bc-t-danger"), text: (delta >= 0 ? "+" : "") + delta.toFixed(1) + "%" });
+            return S().item({ title: courseName(cid), actions: [spark, val].filter(Boolean) });
+          }))]
+        : [el("p", { class: "bcs-empty", text: "Grade history builds up as Better Canvas sees your scores over a few days." })]),
+    );
+
+    function C_item(title, value, meta) {
+      return S().item({ title, meta, actions: [el("span", { class: "bcs-item__value bc-num", text: value })] });
+    }
   }
 
-  function renderInstructor(store) {
-    const S = BC.SettingsComponents;
-    const i = store.get().instructor;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({
-      title: "Instructor tools",
-      description: "Helpers for teacher/TA roles. Everything stays local — nothing ever writes grades back to Canvas.",
-      children: [
-        S.row({ label: "Roster CSV export", hint: "Adds an export button on course People pages.",
-          control: S.switch({ get: () => i.rosterExport, set: (v) => store.set((x) => { x.instructor.rosterExport = v; }) }) }),
-        S.row({ label: "Attendance quick-mark", hint: "P/A buttons on the People list, with CSV export. Stored on this device only.",
-          control: S.switch({ get: () => i.attendanceQuick, set: (v) => store.set((x) => { x.instructor.attendanceQuick = v; }) }) }),
-        S.row({ label: "Needs-grading badges", hint: "Shows ungraded submission counts on the assignments index.",
-          control: S.switch({ get: () => i.bulkGradeHelpers, set: (v) => store.set((x) => { x.instructor.bulkGradeHelpers = v; }) }) }),
-      ],
-    }));
-    return c;
-  }
+  // ---- About ----------------------------------------------------------------
 
   function renderAbout(store) {
-    const S = BC.SettingsComponents;
-    const c = h("div.bc-tab-body", null);
-    c.appendChild(S.section({
-      title: "Better Canvas " + (BC.VERSION || ""),
-      description: "Privacy-first Canvas customizer. Every setting stays on this device — no telemetry, no accounts, no servers.",
-      children: [
-        h("p", null, "Better Canvas customizes the Instructure Canvas LMS with real dark mode, a redesigned dashboard, a planner-style To Do widget, grade tools, notifications, files browser, keyboard shortcuts, and a lot more — all configured from this panel."),
-        h("p", null, "Grade and planner features use your existing Canvas login session; nothing is ever sent off-domain."),
-        h("div.bc-inline", null, [
-          S.button({ label: "Reset all settings", variant: "danger", onClick: () => { if (confirm("Reset ALL settings?")) store.reset(); } }),
-        ]),
-      ],
-    }));
-    c.appendChild(renderDiagnostics(store));
-    return c;
+    return [
+      sec("Better Canvas " + (BC.VERSION || ""), [
+        el("p", { class: "bcs-prose", text: "Better Canvas customizes Canvas with dark mode, a redesigned dashboard, a planner, grade tools, notifications, keyboard shortcuts and more — all set up from this panel." }),
+        el("p", { class: "bcs-prose", text: "Everything stays on this device. Better Canvas uses your existing Canvas login, never sends anything to another server, and has no accounts or tracking." }),
+      ]),
+      renderDiagnostics(),
+      sec("Reset", [
+        row({ label: "Reset all settings", hint: "Puts every setting back to its default. Planner data is kept.",
+          control: BC.ui.button("Reset…", { size: "sm", variant: "danger", icon: "refresh", onClick: () => { if (confirm("Reset ALL Better Canvas settings to their defaults?")) store.reset(); } }) }),
+      ]),
+    ];
   }
 
-  // BC.diag was console-only, so a user hitting a problem had no way to report
-  // anything useful. Nothing here is uploaded — it's a local ring buffer.
-  function renderDiagnostics(store) {
-    const S = BC.SettingsComponents;
+  // A local ring buffer of internal errors, so a problem can be reported.
+  function renderDiagnostics() {
     const entries = (BC.diag && BC.diag.entries) ? BC.diag.entries.slice().reverse().slice(0, 15) : null;
-    const children = [];
-
+    const kids = [];
     if (!entries) {
-      // The options page is a different JS realm, so it has its own empty BC.diag.
-      children.push(h("p.bc-hint", null, "Open the settings drawer on a Canvas page to see diagnostics."));
+      kids.push(el("p", { class: "bcs-empty", text: "Open settings from a Canvas page to see diagnostics." }));
     } else if (!entries.length) {
-      children.push(h("p.bc-hint", null, "No errors recorded. 🎉"));
+      kids.push(el("p", { class: "bcs-empty", text: "No errors recorded." }));
     } else {
-      for (const e of entries) {
-        children.push(h("div.bc-ins-row", null, [
-          h("span", null, e.source),
-          h("span.bc-ins-val", null, new Date(e.ts).toLocaleTimeString() + " · " + e.error),
-        ]));
-      }
-      children.push(h("div.bc-inline", null, [
-        S.button({
-          label: "Copy diagnostics",
-          onClick: () => {
-            const text = JSON.stringify(BC.diag.entries, null, 2);
-            if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => BC.toast && BC.toast.success("Diagnostics copied"));
-          },
-        }),
-        S.button({ label: "Clear", variant: "ghost", onClick: () => { BC.diag.clear(); BC.toast && BC.toast.info("Diagnostics cleared"); } }),
-      ]));
+      kids.push(el("div", { class: "bcs-list" }, entries.map((e) => S().item({ title: e.source, meta: new Date(e.ts).toLocaleTimeString() + " · " + e.error }))));
     }
-
-    return S.section({
-      title: "Diagnostics",
-      description: "Recent internal errors, kept locally so you can report a problem. Nothing here is uploaded.",
-      children,
-    });
+    const actions = entries && entries.length ? [
+      BC.ui.button("Copy", { size: "sm", variant: "ghost", icon: "copy", onClick: () => {
+        const text = JSON.stringify(BC.diag.entries, null, 2);
+        if (navigator.clipboard) navigator.clipboard.writeText(text)
+          .then(() => BC.toast && BC.toast.success("Diagnostics copied"))
+          .catch(() => BC.toast && BC.toast.error("Couldn't copy to the clipboard"));
+      } }),
+      BC.ui.button("Clear", { size: "sm", variant: "ghost", onClick: () => { BC.diag.clear(); BC.toast && BC.toast.info("Diagnostics cleared"); } }),
+    ] : null;
+    return sec("Diagnostics", kids, { description: "Recent internal errors, kept here so you can report a problem. Nothing is uploaded.", actions });
   }
 
-  // ---- import/export/search ---------------------------------------------
+  // ---- import / export ------------------------------------------------------
 
-  function searchInput(store, onChange) {
-    const inp = el("input", { type: "search", class: "bc-search", placeholder: "Search this tab…", "aria-label": "Search settings in this tab" });
-    inp.addEventListener("input", () => onChange && onChange(inp.value));
-    return inp;
-  }
-
-  // Planner metadata (stars, snoozes, subtasks, kanban status) used to live inside
-  // settings and therefore inside exported JSON. It now lives in bcLocal, so export
-  // has to carry both halves or every backup silently loses it.
-  function download(text, name) {
-    const blob = new Blob([text], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = name; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-  }
-
+  // Planner metadata lives in bcLocal, so export carries both halves or every
+  // backup silently loses it.
   function exportFlow(store) {
     const adapter = store.adapter || {};
     Promise.resolve(adapter.getLocal ? adapter.getLocal() : null)
@@ -1106,209 +1327,421 @@
   }
 
   function importFlow(store) {
-    const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json";
+    const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json,.json";
     inp.onchange = () => {
       const f = inp.files && inp.files[0]; if (!f) return;
       f.text().then((txt) => {
         let parsed = null;
         try { parsed = JSON.parse(txt); } catch (_) { parsed = null; }
-        if (!parsed || typeof parsed !== "object") { BC.toast && BC.toast.error("Invalid settings file"); return; }
+        if (!parsed || typeof parsed !== "object") { BC.toast && BC.toast.error("That isn't a settings file"); return; }
 
-        // Accept both shapes: the new {settings, local} envelope and a bare pre-3.1
+        // Accept both shapes: the {settings, local} envelope and a bare pre-3.1
         // settings object.
         const isEnvelope = parsed.kind === "better-canvas-backup" || (parsed.settings && typeof parsed.settings === "object");
         const settingsPart = isEnvelope ? parsed.settings : parsed;
-        const localPart = isEnvelope ? parsed.local : null;
+        const rawLocal = isEnvelope ? parsed.local : null;
+        const localPart = rawLocal && typeof rawLocal === "object" && !Array.isArray(rawLocal) ? BC.cleanData(rawLocal) : null;
 
-        if (!store.importJSON(JSON.stringify(settingsPart))) {
-          BC.toast && BC.toast.error("Invalid settings file");
-          return;
-        }
+        const carry = store.importJSON(JSON.stringify(settingsPart));
+        if (!carry) { BC.toast && BC.toast.error("That isn't a settings file"); return; }
         const adapter = store.adapter || {};
-        if (localPart && adapter.saveLocal) {
-          Promise.resolve(adapter.saveLocal(localPart))
-            .then(() => BC.toast && BC.toast.success("Settings and planner data imported"))
-            .catch(() => BC.toast && BC.toast.warn("Settings imported, but planner data could not be restored"));
-        } else {
-          BC.toast && BC.toast.success("Settings imported");
-        }
+        // Data an old backup kept inside settings, lifted out by the migrations.
+        const lifted = Object.assign({}, carry.local || {});
+        const hasLifted = Object.keys(lifted).length > 0 || !!carry.gradeHistory;
+        if (!adapter.saveLocal || (!localPart && !hasLifted)) { BC.toast && BC.toast.success("Settings imported"); return; }
+        Promise.resolve(localPart || (adapter.getLocal ? adapter.getLocal() : null))
+          .then((base) => {
+            const out = Object.assign({}, base || {});
+            // Same precedence as storage.load(): what's already in bcLocal wins.
+            for (const k of Object.keys(lifted)) if (out[k] === undefined) out[k] = lifted[k];
+            if (carry.gradeHistory) out.gradeHistory = Object.assign({}, carry.gradeHistory, out.gradeHistory || {});
+            return adapter.saveLocal(out);
+          })
+          .then(() => BC.toast && BC.toast.success("Settings and planner data imported"))
+          .catch(() => BC.toast && BC.toast.warn("Settings imported, but planner data could not be restored"));
       });
     };
     inp.click();
   }
 
   // ============ CSS ======================================================
+  // Layout only — every control's look comes from the kit (BC.ui.css()).
   const CSS = `
-  /* Alias layer onto the real design tokens. This is what makes the settings UI
-     adopt your theme: previously it declared its own hardcoded --bg/--panel/--accent
-     and so never saw the accent, the palette, the custom font, or the radius slider.
-     ":host { all: initial }" does NOT block custom-property inheritance (the spec
-     exempts them from 'all'), so the drawer's shadow root already inherits every
-     --bc-* from :root and needs no plumbing at all. The fallbacks cover documents
-     that haven't emitted tokens yet.
-     Keeping the short alias names means the ~140 rules below didn't have to change
-     in the same edit; they get swept to canonical names separately. */
-  .bc-app {
-    --bg:     var(--bc-surface-1, #f6f7fb);
-    --panel:  var(--bc-surface-2, #ffffff);
-    --fg:     var(--bc-text, #1f2937);
-    --muted:  var(--bc-muted, #6b7280);
-    --border: var(--bc-border, #e5e7eb);
-    --accent: var(--bc-accent, #4f46e5);
-    --danger: var(--bc-danger, #dc2626);
-    --radius: var(--bc-radius-lg, 10px);
-    font-family: var(--bc-font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
-    font-size: var(--bc-text-md, 14px);
-    line-height: var(--bc-leading-body, 1.5);
-    letter-spacing: var(--bc-tracking, 0px);
-    color: var(--fg); background: var(--bg);
-    min-height: 100%; padding: 12px 12px 40px;
-    box-sizing: border-box;
-  }
-  .bc-app * { box-sizing: border-box; }
-  /* This file previously had ZERO focus-visible rules, and inside a shadow root
-     with 'all: initial' the UA ring often doesn't render at all. */
-  .bc-app :focus-visible {
-    outline: 2px solid var(--bc-focus-ring, var(--accent));
-    outline-offset: 2px;
-    box-shadow: 0 0 0 4px var(--bc-focus-halo, var(--panel));
-  }
-  .bc-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 4px 12px; }
-  .bc-brand { display: flex; align-items: center; gap: 10px; }
-  .bc-logo {
-    width: 34px; height: 34px; border-radius: 8px; background: var(--accent);
-    color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 800;
-  }
-  .bc-brand-name { font-weight: 700; }
-  .bc-brand-sub  { font-size: 11px; color: var(--muted); }
-  .bc-header-actions { display: flex; gap: 8px; align-items: center; }
-  .bc-search { padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: inherit; min-width: 200px; }
+.bc-app {
+  container: bcs-app / inline-size;
+  display: flex; flex-direction: column; height: 100%; min-height: 0;
+  background: var(--bc-surface-1, #fafafa); color: var(--bc-text, #18181b);
+}
+.bc-live { display: contents; }
 
-  .bc-topbar { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 14px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
-  .bc-master { display: flex; align-items: center; gap: 8px; font-weight: 600; }
-  .bc-master input { width: 18px; height: 18px; }
-  .bc-topbar-right { display: flex; gap: 6px; }
+/* header */
+.bcs-header {
+  flex: none; display: flex; align-items: center; gap: var(--bc-space-3, 12px);
+  height: 56px; padding: 0 var(--bc-space-3, 12px) 0 var(--bc-space-4, 16px);
+  border-bottom: 1px solid var(--bc-border, #e4e4e7); background: var(--bc-surface-2, #fff);
+}
+.bcs-brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: none; }
+.bcs-logo {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+  border-radius: var(--bc-radius-md, 8px); background: var(--bc-accent, #4f46e5); color: var(--bc-accent-contrast, #fff);
+  font-size: 11px; font-weight: var(--bc-weight-bold, 700); letter-spacing: .02em;
+}
+.bcs-brand__name { font-size: var(--bc-text-md, 14px); font-weight: var(--bc-weight-semibold, 600); line-height: 1.2; }
+.bcs-brand__ver { font-size: var(--bc-text-2xs, 11px); color: var(--bc-muted, #6b6b74); line-height: 1.2; }
+.bcs-search { flex: 1 1 auto; max-width: 280px; margin-left: auto; }
+.bcs-header__actions { display: flex; align-items: center; gap: 2px; flex: none; }
 
-  .bc-shell { display: grid; grid-template-columns: 210px 1fr; gap: 14px; }
-  @media (max-width: 720px) { .bc-shell { grid-template-columns: 1fr; } .bc-nav { display: flex; overflow-x: auto; padding: 8px; } .bc-tab { flex: none; } }
+/* shell */
+.bcs-shell { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 196px minmax(0, 1fr); }
+.bcs-nav, .bcs-main { scrollbar-width: thin; scrollbar-color: var(--bc-border-strong, #c4c4ca) transparent; }
+.bcs-nav {
+  overflow-y: auto; padding: var(--bc-space-3, 12px) var(--bc-space-2, 8px) var(--bc-space-6, 24px);
+  border-right: 1px solid var(--bc-border, #e4e4e7); background: var(--bc-surface-2, #fff);
+}
+.bcs-master {
+  display: flex; align-items: center; gap: var(--bc-space-2, 8px); margin: 0 4px var(--bc-space-2, 8px);
+  padding: 10px var(--bc-space-3, 12px); border: 1px solid var(--bc-border, #e4e4e7);
+  border-radius: var(--bc-radius-lg, 12px); background: var(--bc-surface-1, #fafafa);
+}
+.bcs-master__text { flex: 1; min-width: 0; }
+.bcs-master__label { font-size: var(--bc-text-sm, 13px); font-weight: var(--bc-weight-semibold, 600); }
+.bcs-master__sub { font-size: var(--bc-text-2xs, 11px); color: var(--bc-muted, #6b6b74); }
+.bcs-nav__group {
+  padding: var(--bc-space-4, 16px) var(--bc-space-3, 12px) 6px;
+  font-size: var(--bc-text-2xs, 11px); font-weight: var(--bc-weight-semibold, 600); text-transform: uppercase;
+  letter-spacing: var(--bc-tracking-caps, .04em); color: var(--bc-text-subtle, #a1a1aa);
+}
+.bcs-nav__item {
+  display: flex; align-items: center; gap: 10px; width: 100%; height: 32px; padding: 0 10px; margin: 1px 0;
+  border: 0; border-radius: var(--bc-radius-md, 8px); background: transparent; color: var(--bc-muted, #6b6b74);
+  font: var(--bc-weight-medium, 500) var(--bc-text-sm, 13px)/1 var(--bc-font-sans, system-ui, sans-serif);
+  text-align: left; cursor: pointer;
+}
+.bcs-nav__item:hover { background: var(--bc-surface-hover, #f4f4f5); color: var(--bc-text, #18181b); }
+.bcs-nav__item[aria-current="page"] { background: var(--bc-accent-weak, rgba(79,70,229,.12)); color: var(--bc-accent-text, #4338ca); }
+.bcs-nav__item .bc-icon { width: 16px; height: 16px; }
+.bcs-nav__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.4; }
 
-  .bc-nav { display: flex; flex-direction: column; gap: 2px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; height: fit-content; position: sticky; top: 8px; }
-  .bc-tab {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 10px; border: 0; background: transparent; color: inherit;
-    text-align: left; cursor: pointer; border-radius: 8px; font: inherit;
-  }
-  /* One mode-aware wash replaces each light rule plus its html.bc-dark twin. */
-  .bc-tab:hover { background: var(--bc-surface-4, rgba(0,0,0,.05)); }
-  .bc-tab.active { background: var(--accent); color: var(--bc-accent-contrast, #fff); }
-  .bc-tab.active:hover { background: var(--accent); }
-  .bc-tab-ic { display: inline-block; width: 18px; text-align: center; opacity: .9; }
+.bcs-main { overflow-y: auto; padding: var(--bc-space-6, 24px) var(--bc-space-6, 24px) var(--bc-space-9, 48px); }
+.bcs-page__head { margin-bottom: var(--bc-space-5, 20px); }
+.bcs-page__title { font-size: var(--bc-text-xl, 20px); font-weight: var(--bc-weight-semibold, 600); line-height: var(--bc-leading-tight, 1.25); }
+.bcs-page__desc { margin-top: 4px; font-size: var(--bc-text-sm, 13px); color: var(--bc-muted, #6b6b74); }
 
-  .bc-body { min-width: 0; }
-  .bc-tab-body { display: flex; flex-direction: column; gap: 14px; }
-  .bc-section { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
-  .bc-section-title { margin: 0 0 4px; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-  .bc-section-desc { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
-  .bc-section-body { display: flex; flex-direction: column; gap: 10px; }
+/* sections + rows */
+.bcs-section {
+  container: bcs-section / inline-size;
+  margin: 0 0 var(--bc-space-4, 16px); border: 1px solid var(--bc-border, #e4e4e7);
+  border-radius: var(--bc-radius-lg, 12px); background: var(--bc-surface-2, #fff);
+}
+.bcs-section__head { display: flex; align-items: flex-start; gap: var(--bc-space-3, 12px); padding: var(--bc-space-4, 16px) var(--bc-space-4, 16px) 0; }
+.bcs-section__titles { flex: 1; min-width: 0; }
+.bcs-section__title { font-size: var(--bc-text-md, 14px); font-weight: var(--bc-weight-semibold, 600); line-height: var(--bc-leading-tight, 1.25); }
+.bcs-section__desc { margin-top: 4px; font-size: var(--bc-text-xs, 12px); color: var(--bc-muted, #6b6b74); line-height: 1.45; }
+.bcs-section__actions { display: flex; gap: 4px; flex: none; margin-top: -4px; }
+.bcs-section__body { padding: var(--bc-space-1, 4px) var(--bc-space-4, 16px) var(--bc-space-2, 8px); }
+.bcs-section__body > :not(.bcs-row):not(.bc-live) { margin: var(--bc-space-3, 12px) 0; }
 
-  .bc-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 6px 0; border-top: 1px solid var(--border); }
-  .bc-section-body > .bc-row:first-child { border-top: 0; padding-top: 0; }
-  .bc-hidden { display: none !important; }
-  .bc-row-off { opacity: .5; }
-  .bc-row-off .bc-row-control { pointer-events: none; }
-  .bc-row-title { font-weight: 500; }
-  .bc-row-hint  { color: var(--muted); font-size: 12px; margin-top: 2px; }
-  .bc-row-warn  { color: var(--danger); font-size: 12px; margin-top: 2px; }
-  .bc-row-control { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.bcs-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--bc-space-4, 16px);
+  padding: var(--bc-space-3, 12px) 0;
+}
+/* A divider above every row that has a VISIBLE row somewhere before it — so the
+   first visible row never gets one, even when the rows above it are hidden. */
+.bcs-row:not([hidden]) ~ .bcs-row { border-top: 1px solid var(--bc-border-subtle, #f0f0f2); }
+.bcs-row--stacked { grid-template-columns: minmax(0, 1fr); gap: var(--bc-space-2, 8px); }
+.bcs-row--stacked > .bcs-row__control { justify-content: stretch; }
+.bcs-row--stacked > .bcs-row__control > * { flex: 1 1 auto; width: 100%; }
+.bcs-row--note { display: block; padding: var(--bc-space-2, 8px) 0; }
+.bcs-row__label { font-size: var(--bc-text-sm, 13px); font-weight: var(--bc-weight-medium, 500); line-height: 1.35; }
+.bcs-row__hint { margin-top: 2px; font-size: var(--bc-text-xs, 12px); color: var(--bc-muted, #6b6b74); line-height: 1.4; }
+.bcs-row__warn { margin-top: 2px; font-size: var(--bc-text-xs, 12px); color: var(--bc-danger, #b91c1c); }
+.bcs-row__control { display: flex; align-items: center; justify-content: flex-end; gap: var(--bc-space-2, 8px); min-width: 0; max-width: 100%; }
+.bcs-row--off .bcs-row__label, .bcs-row--off .bcs-row__hint { opacity: .5; }
+.bcs-row--off .bcs-row__control { opacity: .45; pointer-events: none; }
 
-  .bc-switch { position: relative; width: 40px; height: 22px; display: inline-block; flex: none; border-radius: 999px; background: #cbd5e1; transition: background .15s ease; cursor: pointer; }
-  .bc-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
-  /* pointer-events:none is load-bearing: the thumb is a later positioned sibling,
-     so without it the knob paints above the input and swallows the click. */
-  .bc-switch-thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transition: transform .15s ease; box-shadow: 0 1px 2px rgba(0,0,0,.15); pointer-events: none; }
-  .bc-switch input:checked + .bc-switch-thumb { transform: translateX(18px); }
-  .bc-switch.bc-on, .bc-switch:has(input:checked) { background: var(--accent); }
-  .bc-switch input:focus-visible + .bc-switch-thumb { box-shadow: 0 1px 2px rgba(0,0,0,.15), 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
+.bcs-note {
+  display: flex; gap: var(--bc-space-2, 8px); align-items: flex-start; padding: 10px var(--bc-space-3, 12px);
+  border-radius: var(--bc-radius-md, 8px); background: var(--bc-info-bg, #eff6ff); color: var(--bc-text, #18181b);
+  font-size: var(--bc-text-xs, 12px); line-height: 1.45;
+}
+.bcs-note .bc-icon { width: 16px; height: 16px; margin-top: 1px; color: var(--bc-info, #0369a1); }
+.bcs-note--warn { background: var(--bc-warn-bg, #fffbeb); }
+.bcs-note--warn .bc-icon { color: var(--bc-warn, #a16207); }
+.bcs-empty { font-size: var(--bc-text-sm, 13px); color: var(--bc-muted, #6b6b74); padding: var(--bc-space-2, 8px) 0; }
+.bcs-prose { font-size: var(--bc-text-sm, 13px); line-height: 1.55; color: var(--bc-text, #18181b); margin: var(--bc-space-3, 12px) 0 0 !important; }
 
-  .bc-select, .bc-text, .bc-textarea, .bc-number, .bc-color-text, .bc-tags-inp {
-    padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: inherit; font: inherit;
-  }
-  .bc-textarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .bc-number { width: 90px; }
-  .bc-color { display: inline-flex; align-items: center; gap: 6px; }
-  .bc-color input[type=color] { width: 32px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: transparent; }
-  .bc-color-text { width: 100px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .bc-slider { display: inline-flex; align-items: center; gap: 8px; }
-  .bc-slider-val { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
-  .bc-invalid input { border-color: var(--danger); }
-  .bc-text-warn { color: var(--danger); font-size: 12px; }
+/* small layout helpers */
+.bcs-inline { display: inline-flex; align-items: center; gap: var(--bc-space-2, 8px); min-width: 0; }
+.bcs-inline--grow { display: flex; width: 100%; }
+.bcs-inline--grow > :first-child { flex: 1 1 auto; min-width: 0; }
+.bcs-inline__sep { font-size: var(--bc-text-xs, 12px); color: var(--bc-muted, #6b6b74); }
 
-  .bc-btn { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: inherit; cursor: pointer; font: inherit; }
-  .bc-btn:hover { background: var(--bc-surface-4, rgba(0,0,0,.04)); }
-  .bc-btn-danger { color: var(--danger); border-color: var(--bc-danger-border, rgba(185,28,28,.4)); }
-  .bc-btn-ghost  { background: transparent; }
+/* individual controls */
+.bcs-select { width: auto; min-width: 160px; max-width: 220px; }
+.bcs-text { width: 220px; max-width: 100%; }
+.bcs-text--wide { width: 100%; }
+.bcs-text .bcs-text__warn { font-size: var(--bc-text-xs, 12px); color: var(--bc-danger, #b91c1c); }
+.bcs-text .bcs-text__warn:empty { display: none; }
+.bcs-invalid .bc-input { border-color: var(--bc-danger, #b91c1c); }
+.bcs-number { display: inline-flex; align-items: center; gap: 6px; }
+.bcs-number__input { width: 76px; text-align: right; font-variant-numeric: tabular-nums; }
+.bcs-number__suffix { font-size: var(--bc-text-xs, 12px); color: var(--bc-muted, #6b6b74); }
+.bcs-time { width: 116px; }
+.bcs-row--stacked .bcs-text { width: 100%; }
 
-  .bc-sortable { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
-  .bc-sortable-item {
-    display: grid; grid-template-columns: 20px 1fr;
-    align-items: center; gap: 10px; padding: 6px 8px;
-    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
-  }
-  .bc-drag { cursor: grab; color: var(--muted); user-select: none; text-align: center; }
-  .bc-sortable-item.bc-dragging { opacity: .5; }
+.bcs-slider { display: inline-flex; align-items: center; gap: var(--bc-space-3, 12px); width: 220px; max-width: 100%; }
+.bcs-range {
+  -webkit-appearance: none; appearance: none; flex: 1; min-width: 0; height: 4px; margin: 0; border-radius: 999px; cursor: pointer;
+  background: linear-gradient(to right, var(--bc-accent, #4f46e5) var(--fill, 0%), var(--bc-surface-3, #e4e4e7) var(--fill, 0%));
+}
+.bcs-range::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  border: 1px solid var(--bc-border-strong, #d4d4d8); box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+.bcs-range::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 1px solid var(--bc-border-strong, #d4d4d8); box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.bcs-range:focus-visible { outline: 2px solid var(--bc-focus-ring, #4f46e5); outline-offset: 4px; }
+.bcs-slider__value { flex: none; min-width: 44px; text-align: right; font-size: var(--bc-text-xs, 12px); color: var(--bc-muted, #6b6b74); }
 
-  .bc-course-row { display: grid; grid-template-columns: 20px 1fr 40px auto 1fr; gap: 8px; align-items: center; }
-  .bc-course-swatch { width: 18px; height: 18px; border-radius: 50%; }
-  .bc-course-name { min-width: 0; }
-  .bc-course-bg { min-width: 0; }
-  .bc-mini-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
-  .bc-bulk { display: flex; gap: 6px; margin-top: 10px; }
+.bcs-color { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
+.bcs-color__presets + .bc-iconbtn, .bcs-color > .bc-iconbtn { order: 3; }
+.bcs-color__native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.bcs-color__swatch {
+  flex: none; width: 28px; height: 28px; padding: 0; border: 1px solid var(--bc-border-strong, #d4d4d8);
+  border-radius: var(--bc-radius-sm, 6px); cursor: pointer; box-shadow: inset 0 0 0 2px var(--bc-surface-2, #fff);
+}
+.bcs-color__swatch--none {
+  background: linear-gradient(135deg, transparent calc(50% - 1px), var(--bc-danger, #b91c1c) calc(50% - 1px), var(--bc-danger, #b91c1c) calc(50% + 1px), transparent calc(50% + 1px)),
+              var(--bc-surface-2, #fff) !important;
+}
+.bcs-color__hex { width: 92px; font-family: var(--bc-font-mono, monospace); }
+.bcs-color__presets { display: flex; gap: 6px; flex-wrap: wrap; order: 4; margin-left: 6px; }
+.bcs-color__preset { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+.bcs-color__preset:hover { transform: scale(1.12); }
+.bcs-color__preset:focus-visible { outline: 2px solid var(--bc-focus-ring, #4f46e5); outline-offset: 2px; }
 
-  .bc-inline { display: inline-flex; gap: 6px; align-items: center; }
+.bcs-key {
+  display: inline-flex; align-items: center; gap: 4px; min-height: var(--bc-control-h-sm, 28px); padding: 2px 8px;
+  border: 1px solid var(--bc-border, #e4e4e7); border-radius: var(--bc-radius-md, 8px);
+  background: var(--bc-surface-2, #fff); color: var(--bc-muted, #6b6b74); font-size: var(--bc-text-xs, 12px); cursor: pointer;
+}
+.bcs-key:hover { border-color: var(--bc-border-strong, #d4d4d8); }
+.bcs-key--recording { border-color: var(--bc-accent-stroke, #4f46e5); color: var(--bc-accent-text, #4338ca); box-shadow: 0 0 0 3px var(--bc-accent-weak, rgba(79,70,229,.15)); }
+.bcs-key__then { font-size: var(--bc-text-2xs, 11px); color: var(--bc-text-subtle, #a1a1aa); }
 
-  .bc-theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-  .bc-theme-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px; cursor: pointer; text-align: left; color: inherit; }
-  .bc-theme-card:hover { border-color: var(--accent); }
-  .bc-theme-swatch { height: 60px; border-radius: 8px; border: 2px solid; position: relative; overflow: hidden; }
-  .bc-theme-swatch span { position: absolute; right: 8px; bottom: 8px; width: 20px; height: 20px; border-radius: 50%; }
-  .bc-theme-name { margin-top: 8px; font-weight: 600; font-size: 13px; }
-  .bc-theme-actions { display: flex; gap: 4px; margin-top: 8px; }
-  .bc-theme-actions .bc-btn { padding: 3px 8px; font-size: 12px; }
-  .bc-rot-list { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 6px 0; }
+.bcs-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.bcs-tags__chips { display: contents; }
+.bcs-tags__input { flex: 1 1 140px; min-width: 120px; width: auto; }
+.bcs-links { display: flex; flex-direction: column; gap: var(--bc-space-2, 8px); }
+.bcs-links__row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto auto; gap: var(--bc-space-2, 8px); align-items: center; }
+.bcs-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--bc-space-2, 8px) var(--bc-space-4, 16px); }
 
-  .bc-navitem { display: flex; justify-content: space-between; align-items: center; width: 100%; }
-  .bc-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .bc-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .bc-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; background: var(--bc-surface-4, rgba(0,0,0,.05)); border-radius: var(--bc-radius-pill, 999px); font-size: 12px; }
-  .bc-chip-x { background: none; border: 0; cursor: pointer; color: var(--bc-text-subtle, var(--muted)); }
-  .bc-tags-inp { min-width: 120px; flex: 1; }
+/* sortable */
+.bcs-sortable { display: flex; flex-direction: column; gap: 6px; margin: var(--bc-space-3, 12px) 0; }
+.bcs-sortable__item {
+  display: flex; align-items: center; gap: var(--bc-space-2, 8px); padding: 6px var(--bc-space-2, 8px) 6px 4px;
+  border: 1px solid var(--bc-border, #e4e4e7); border-radius: var(--bc-radius-md, 8px); background: var(--bc-surface-2, #fff);
+}
+.bcs-sortable__item > :last-child { flex: 1 1 auto; min-width: 0; }
+.bcs-sortable__grip { display: inline-flex; flex: none; color: var(--bc-text-subtle, #a1a1aa); cursor: grab; }
+.bcs-sortable__grip .bc-icon { width: 16px; height: 16px; }
+.bcs-sortable__row { display: flex; align-items: center; justify-content: space-between; gap: var(--bc-space-3, 12px); font-size: var(--bc-text-sm, 13px); }
+.bcs-navlist__note { flex: none; padding: 0 6px; border-radius: var(--bc-radius-pill, 999px); background: var(--bc-surface-3, #f4f4f5);
+  font-size: var(--bc-text-2xs, 11px); color: var(--bc-muted, #6b6b74); }
+.bcs-dragging { opacity: .5; }
 
-  .bc-links { display: flex; flex-direction: column; gap: 6px; }
-  .bc-link-row { display: grid; grid-template-columns: 1fr 2fr auto auto; gap: 6px; align-items: center; }
+/* course editor */
+.bcs-courses > .bcs-inline--grow { margin-bottom: 4px; }
+.bcs-course { display: flex; flex-direction: column; gap: 6px; }
+.bcs-course__main { display: flex; align-items: center; gap: var(--bc-space-2, 8px); min-width: 0; }
+.bcs-course__main > .bc-input { flex: 1 1 auto; min-width: 0; }
+.bcs-course__swatch { width: 22px; height: 22px; border-radius: 50%; }
+.bcs-course__code { flex: 0 1 96px; font-size: var(--bc-text-2xs, 11px); color: var(--bc-muted, #6b6b74); }
+.bcs-course--hidden .bcs-course__main > .bc-input, .bcs-course--hidden .bcs-course__code, .bcs-course--hidden .bcs-course__swatch { opacity: .45; }
 
-  .bc-key { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; font-size: 13px; }
+/* lists */
+.bcs-list { display: flex; flex-direction: column; }
+.bcs-item { display: flex; align-items: center; gap: var(--bc-space-3, 12px); padding: 10px 0; border-top: 1px solid var(--bc-border-subtle, #f0f0f2); min-width: 0; }
+.bcs-item:first-child { border-top: 0; }
+.bcs-item__text { flex: 1 1 auto; min-width: 0; }
+.bcs-item__title { font-size: var(--bc-text-sm, 13px); font-weight: var(--bc-weight-medium, 500); }
+.bcs-item__meta { margin-top: 2px; font-size: var(--bc-text-xs, 12px); color: var(--bc-muted, #6b6b74); }
+.bcs-item__actions { display: flex; align-items: center; gap: var(--bc-space-2, 8px); flex: none; }
+.bcs-item__value { font-size: var(--bc-text-sm, 13px); color: var(--bc-muted, #6b6b74); }
 
-  .bc-hint { color: var(--muted); font-size: 12px; }
-  .bc-ins-total { font-weight: 700; margin-bottom: 8px; }
-  .bc-ins-days { display: flex; gap: 4px; align-items: flex-end; height: 64px; margin: 8px 0 12px; }
-  .bc-ins-day { flex: 1; height: 100%; display: flex; align-items: flex-end; background: var(--bc-surface-4, rgba(0,0,0,.04)); border-radius: var(--bc-radius-sm, 4px); overflow: hidden; }
-  .bc-ins-day-fill { width: 100%; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; }
-  .bc-ins-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 5px 0; border-top: 1px solid var(--border); font-size: 13px; }
-  .bc-ins-row:first-child { border-top: 0; }
-  .bc-ins-val { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
-  .bc-ins-spark { line-height: 0; }
-  .bc-rec-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
-  .bc-rec-title { font-weight: 600; }
-  .bc-rec-meta { font-size: 12px; color: var(--muted); }
-  .bc-rec-days { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0; }
-  .bc-rec-form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
-  .bc-rec-form input[type=time], .bc-rec-form input[type=date] { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: inherit; font: inherit; }
+/* recurring form */
+.bcs-form { display: flex; flex-direction: column; gap: var(--bc-space-2, 8px); padding: var(--bc-space-3, 12px); border-radius: var(--bc-radius-md, 8px); background: var(--bc-surface-1, #fafafa); border: 1px solid var(--bc-border-subtle, #f0f0f2); }
+.bcs-form__row { display: flex; align-items: center; gap: var(--bc-space-2, 8px); flex-wrap: wrap; }
+.bcs-form__row > .bc-input:only-child { flex: 1; }
+.bcs-days { display: inline-flex; gap: 4px; }
+.bcs-day {
+  width: 30px; height: 28px; padding: 0; border: 1px solid var(--bc-border, #e4e4e7); border-radius: var(--bc-radius-sm, 6px);
+  background: var(--bc-surface-2, #fff); color: var(--bc-muted, #6b6b74); font-size: var(--bc-text-2xs, 11px); font-weight: var(--bc-weight-semibold, 600); cursor: pointer;
+}
+.bcs-day[aria-pressed="true"] { background: var(--bc-accent, #4f46e5); border-color: var(--bc-accent, #4f46e5); color: var(--bc-accent-contrast, #fff); }
+.bcs-dom { width: 64px; }
 
-  .bc-gpa { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  .bc-gpa th, .bc-gpa td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
-  .bc-gpa-cred { width: 70px; }
-  .bc-gpa-total { margin-top: 10px; font-weight: 700; }
-  /* A token, not opacity: fading text that already sits at AA drops it below AA. */
-  .bc-concluded td { color: var(--bc-text-subtle, var(--muted)); }
-  `;
+/* themes */
+.bcs-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: var(--bc-space-3, 12px); }
+.bcs-theme { position: relative; }
+.bcs-theme__apply {
+  display: flex; flex-direction: column; gap: var(--bc-space-2, 8px); width: 100%; padding: 6px 6px 10px;
+  border: 1px solid var(--bc-border, #e4e4e7); border-radius: var(--bc-radius-lg, 12px); background: var(--bc-surface-2, #fff);
+  color: var(--bc-text, #18181b); cursor: pointer; text-align: left;
+  transition: border-color var(--bc-dur-1, 90ms) ease, box-shadow var(--bc-dur-1, 90ms) ease;
+}
+.bcs-theme__apply:hover { border-color: var(--bc-border-strong, #d4d4d8); box-shadow: var(--bc-shadow-1, 0 1px 2px rgba(0,0,0,.08)); }
+.bcs-theme__preview { position: relative; height: 64px; border-radius: var(--bc-radius-md, 8px); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
+.bcs-theme__preview--auto::after { content: ""; position: absolute; inset: 0 0 0 50%; background: rgba(17,17,19,.86); }
+.bcs-theme__bar { position: absolute; left: 0; top: 0; bottom: 0; width: 14px; }
+.bcs-theme__panel { position: absolute; left: 22px; right: 8px; top: 10px; bottom: 10px; border: 1px solid; border-radius: 5px; padding: 7px; display: flex; flex-direction: column; gap: 5px; }
+.bcs-theme__panel i { display: block; height: 4px; border-radius: 2px; width: 70%; opacity: .55; }
+.bcs-theme__panel i + i { width: 45%; }
+.bcs-theme__panel b { display: block; width: 26px; height: 8px; border-radius: 3px; margin-top: auto; }
+.bcs-theme__name { padding: 0 4px; font-size: var(--bc-text-xs, 12px); font-weight: var(--bc-weight-medium, 500); }
+.bcs-theme__more { position: absolute; right: 6px; bottom: 4px; }
+
+/* GPA */
+.bcs-table { width: 100%; border-collapse: collapse; font-size: var(--bc-text-sm, 13px); }
+.bcs-table th { padding: 6px 8px; text-align: left; font-size: var(--bc-text-2xs, 11px); font-weight: var(--bc-weight-semibold, 600);
+  text-transform: uppercase; letter-spacing: var(--bc-tracking-caps, .04em); color: var(--bc-muted, #6b6b74); border-bottom: 1px solid var(--bc-border, #e4e4e7); }
+.bcs-table td { padding: 6px 8px; border-bottom: 1px solid var(--bc-border-subtle, #f0f0f2); max-width: 0; }
+.bcs-table td:first-child { width: 100%; }
+.bcs-table .bcs-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; max-width: none; }
+.bcs-gpa__cred { width: 64px; text-align: right; display: inline-block; }
+.bcs-gpa__concluded td { color: var(--bc-text-subtle, #a1a1aa); }
+.bcs-gpa__total { display: flex; align-items: baseline; justify-content: flex-end; gap: var(--bc-space-3, 12px); padding: var(--bc-space-3, 12px) 8px 0; }
+.bcs-gpa__value { font-size: var(--bc-text-xl, 20px); font-weight: var(--bc-weight-semibold, 600); }
+
+/* insights */
+.bcs-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--bc-space-3, 12px); margin-bottom: var(--bc-space-4, 16px); }
+.bcs-stats > .bc-stat { padding: var(--bc-space-4, 16px); border: 1px solid var(--bc-border, #e4e4e7); border-radius: var(--bc-radius-lg, 12px); background: var(--bc-surface-2, #fff); }
+.bcs-stats .bc-stat-value { font-size: var(--bc-text-xl, 20px); }
+.bcs-bars { display: flex; align-items: flex-end; gap: 4px; height: 72px; margin: var(--bc-space-3, 12px) 0; }
+.bcs-bars__col { flex: 1; height: 100%; display: flex; align-items: flex-end; border-radius: 4px; background: var(--bc-surface-3, #f4f4f5); overflow: hidden; }
+.bcs-bars__fill { width: 100%; min-height: 2px; background: var(--bc-accent, #4f46e5); }
+.bcs-trend { font-size: var(--bc-text-xs, 12px); font-weight: var(--bc-weight-semibold, 600); min-width: 48px; text-align: right; }
+
+/* search results */
+.bcs-results__group { margin-bottom: var(--bc-space-6, 24px); }
+.bcs-results__head { display: flex; align-items: center; gap: var(--bc-space-2, 8px); margin-bottom: var(--bc-space-2, 8px);
+  font-size: var(--bc-text-xs, 12px); font-weight: var(--bc-weight-semibold, 600); color: var(--bc-muted, #6b6b74); }
+.bcs-results__head .bc-icon { width: 14px; height: 14px; }
+
+/* choice cards (To Do style) */
+.bcs-choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(124px, 1fr)); gap: 10px; width: 100%; }
+.bcs-choice__card {
+  position: relative; display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 6px 6px 12px;
+  border: 1px solid var(--bc-border, #e4e4e7); border-radius: var(--bc-radius-lg, 12px); background: var(--bc-surface-2, #fff);
+  color: var(--bc-text, #18181b); font: inherit; text-align: left; cursor: pointer;
+  transition: border-color var(--bc-dur-2, 150ms) ease, box-shadow var(--bc-dur-2, 150ms) ease, transform var(--bc-dur-2, 150ms) var(--bc-ease-out, ease);
+}
+.bcs-choice__card:hover { border-color: var(--bc-border-strong, #d4d4d8); box-shadow: var(--bc-shadow-2, 0 4px 12px rgba(0,0,0,.08)); transform: translateY(-1px); }
+.bcs-choice__card:active { transform: translateY(0) scale(.99); }
+.bcs-choice__card[aria-checked="true"] { border-color: var(--bc-accent-stroke, #4f46e5); box-shadow: 0 0 0 3px var(--bc-accent-weak, rgba(79,70,229,.12)); }
+.bcs-choice__card:focus-visible { outline: 2px solid var(--bc-focus-ring, #4f46e5); outline-offset: 2px; }
+.bcs-choice__preview { display: block; height: 96px; padding: 12px; overflow: hidden; border-radius: calc(var(--bc-radius-lg, 12px) - 4px); background: var(--bc-surface-1, #fafafa); }
+.bcs-choice__text { display: grid; gap: 2px; padding: 0 6px; }
+.bcs-choice__label { font-size: var(--bc-text-sm, 13px); font-weight: var(--bc-weight-semibold, 600); }
+.bcs-choice__desc { font-size: var(--bc-text-xs, 12px); line-height: 1.4; color: var(--bc-muted, #6b6b74); }
+.bcs-choice__tick {
+  position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--bc-accent, #4f46e5); color: var(--bc-accent-contrast, #fff); box-shadow: 0 0 0 2px var(--bc-surface-2, #fff);
+  opacity: 0; transform: scale(.4); transition: opacity var(--bc-dur-2, 150ms) ease, transform var(--bc-dur-3, 220ms) var(--bc-ease-spring, ease);
+}
+.bcs-choice__card[aria-checked="true"] .bcs-choice__tick { opacity: 1; transform: none; }
+.bcs-choice__tick .bc-icon { width: 12px; height: 12px; }
+/* the drawn previews */
+.pv { display: grid; align-content: start; gap: 7px; height: 100%; }
+.pv i { display: block; border-radius: 3px; background: var(--bc-border-strong, #d4d4d8); }
+.pv .pv-h { width: 42%; height: 6px; margin-bottom: 1px; background: var(--bc-text-subtle, #a1a1aa); }
+.pv-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.pv .pv-ic { flex: none; width: 10px; height: 10px; }
+.pv-lines { display: grid; flex: 1; gap: 3px; min-width: 0; }
+.pv .pv-l { height: 4px; }
+.pv .pv-l--a { width: 78%; background: var(--bc-accent, #4f46e5); opacity: .55; }
+.pv .pv-l--s { width: 48%; }
+.pv .pv-l--t { width: 56%; height: 5px; background: var(--bc-text-subtle, #a1a1aa); }
+.pv .pv-x { flex: none; width: 6px; height: 6px; }
+.pv--canvas .pv-row + .pv-row { padding-top: 7px; border-top: 1px solid var(--bc-border, #e4e4e7); }
+.pv--clean { gap: 3px; padding: 6px; border: 1px solid var(--bc-border, #e4e4e7); border-radius: 8px; background: var(--bc-surface-2, #fff); }
+.pv--clean .pv-h { margin: 0 0 3px 3px; }
+.pv--clean .pv-row { padding: 3px; border-radius: 5px; }
+.pv--clean .pv-row--hi { background: var(--bc-surface-hover, #f4f4f5); }
+.pv--clean .pv-ic { width: 14px; height: 14px; border-radius: 4px; background: var(--bc-accent-weak, rgba(79,70,229,.15)); }
+.pv--planner { gap: 6px; }
+.pv-top { display: flex; align-items: center; gap: 7px; margin-bottom: 2px; }
+.pv .pv-ring { flex: none; width: 20px; height: 20px; border-radius: 50%;
+  background: conic-gradient(var(--bc-accent, #4f46e5) 0 62%, var(--bc-surface-3, #e4e4e7) 0);
+  -webkit-mask: radial-gradient(circle, transparent 6px, #000 6.5px); mask: radial-gradient(circle, transparent 6px, #000 6.5px); }
+.pv .pv-chk { flex: none; width: 10px; height: 10px; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 1.5px var(--bc-border-contrast, #a1a1aa); }
+.pv .pv-chk--on { background: var(--bc-accent, #4f46e5); box-shadow: none; }
+
+/* toggle chips */
+.bcs-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.bcs-chipbtn {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; margin: 0; padding: 0 12px;
+  border: 1px solid var(--bc-border, #e4e4e7); border-radius: var(--bc-radius-pill, 999px);
+  background: var(--bc-surface-2, #fff); color: var(--bc-muted, #6b6b74);
+  font: var(--bc-weight-medium, 500) var(--bc-text-xs, 12px)/1 var(--bc-font-sans, system-ui, sans-serif); cursor: pointer;
+  transition: background-color var(--bc-dur-2, 150ms) ease, border-color var(--bc-dur-2, 150ms) ease, color var(--bc-dur-2, 150ms) ease;
+}
+.bcs-chipbtn:hover { border-color: var(--bc-border-strong, #d4d4d8); color: var(--bc-text, #18181b); }
+.bcs-chipbtn .bc-icon { width: 14px; height: 14px; }
+.bcs-chipbtn__check { display: inline-flex; width: 0; overflow: hidden; margin-right: -6px; transition: width var(--bc-dur-2, 150ms) var(--bc-ease-out, ease), margin var(--bc-dur-2, 150ms) var(--bc-ease-out, ease); }
+.bcs-chipbtn[aria-pressed="true"] { border-color: var(--bc-accent-border, rgba(79,70,229,.45)); background: var(--bc-accent-weak, rgba(79,70,229,.12)); color: var(--bc-accent-text, #4338ca); }
+.bcs-chipbtn[aria-pressed="true"] .bcs-chipbtn__check { width: 14px; margin-right: 0; }
+.bcs-chipbtn[aria-pressed="true"] .bcs-chipbtn__check ~ .bc-icon { display: none; }
+.bcs-chipbtn:focus-visible { outline: 2px solid var(--bc-focus-ring, #4f46e5); outline-offset: 2px; }
+
+/* motion: a section enters with a short rise, staggered down the page */
+@keyframes bcs-in { from { opacity: 0; transform: translateY(6px); filter: blur(2px); } }
+.bcs-main > * { animation: bcs-in 320ms cubic-bezier(.22, 1, .36, 1) both; }
+.bcs-main > :nth-child(2) { animation-delay: 25ms; }
+.bcs-main > :nth-child(3) { animation-delay: 50ms; }
+.bcs-main > :nth-child(4) { animation-delay: 75ms; }
+.bcs-main > :nth-child(5) { animation-delay: 100ms; }
+.bcs-main > :nth-child(n+6) { animation-delay: 120ms; }
+.bcs-main.bcs-main--still > * { animation: none; }
+.bcs-nav__item { transition: background-color var(--bc-dur-1, 90ms) ease, color var(--bc-dur-1, 90ms) ease; }
+.bcs-nav__item .bc-icon { transition: transform var(--bc-dur-2, 150ms) var(--bc-ease-out, ease); }
+.bcs-nav__item:hover .bc-icon { transform: scale(1.08); }
+.bcs-theme__apply { transition: border-color var(--bc-dur-2, 150ms) ease, box-shadow var(--bc-dur-2, 150ms) ease, transform var(--bc-dur-2, 150ms) var(--bc-ease-out, ease); }
+.bcs-theme__apply:hover { transform: translateY(-1px); }
+.bcs-row { transition: opacity var(--bc-dur-2, 150ms) ease; }
+.bcs-row__label, .bcs-row__hint, .bcs-row__control { transition: opacity var(--bc-dur-2, 150ms) ease; }
+.bcs-sortable__item { transition: box-shadow var(--bc-dur-2, 150ms) ease, opacity var(--bc-dur-2, 150ms) ease; }
+.bcs-sortable__item:hover { box-shadow: var(--bc-shadow-1, 0 1px 2px rgba(0,0,0,.08)); }
+.bcs-day { transition: background-color var(--bc-dur-1, 90ms) ease, border-color var(--bc-dur-1, 90ms) ease, color var(--bc-dur-1, 90ms) ease; }
+@media (prefers-reduced-motion: reduce) { .bcs-main > * { animation: none; } }
+
+/* the options page: same app, full height, centered */
+.bc-app--page { height: 100vh; }
+.bc-app--page .bcs-shell { width: 100%; max-width: 1180px; margin: 0 auto; border-left: 1px solid var(--bc-border, #e4e4e7); border-right: 1px solid var(--bc-border, #e4e4e7); }
+.bc-app--page .bcs-header { padding-left: max(var(--bc-space-4, 16px), calc((100% - 1180px) / 2 + 16px)); padding-right: max(var(--bc-space-3, 12px), calc((100% - 1180px) / 2 + 12px)); }
+
+/* Rows whose control is wide (4+ choices, color presets) stack under their label
+   when the section is too narrow for both on one line. */
+@container bcs-section (max-width: 600px) {
+  .bcs-row:has(> .bcs-row__control > .bcs-wide) { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .bcs-row:has(> .bcs-row__control > .bcs-wide) > .bcs-row__control { justify-content: flex-start; }
+  .bcs-row__control > .bcs-color.bcs-wide { justify-content: flex-start; }
+}
+
+/* a narrow panel collapses the nav to icons */
+@container bcs-app (max-width: 640px) {
+  .bcs-shell { grid-template-columns: 56px minmax(0, 1fr); }
+  .bcs-nav { padding: var(--bc-space-2, 8px) 6px; }
+  .bcs-nav__group, .bcs-nav__label, .bcs-master__text { display: none; }
+  .bcs-master { justify-content: center; padding: 8px 0; margin: 0 0 var(--bc-space-2, 8px); border: 0; background: transparent; }
+  .bcs-nav__item { justify-content: center; padding: 0; }
+  .bcs-main { padding: var(--bc-space-4, 16px); }
+  .bcs-search { max-width: none; }
+  .bcs-brand__text { display: none; }
+}
+@container bcs-app (max-width: 520px) {
+  .bcs-row { grid-template-columns: minmax(0, 1fr); gap: var(--bc-space-2, 8px); }
+  .bcs-row__control { justify-content: flex-start; }
+  .bcs-stats { grid-template-columns: minmax(0, 1fr); }
+}
+`;
 })();

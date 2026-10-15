@@ -89,7 +89,8 @@
     if (!settings.instructor.rosterExport && !settings.instructor.attendanceQuick) {
       BC.injector.removeNode("bc-roster-btn");
     } else {
-      BC.injector.ensureNode("bc-roster-btn", document.querySelector("#content, #main") || document.body, () => {
+      const host = BC.util.firstOf(["#content", "#main"]) || document.body;
+      BC.injector.ensureNode("bc-roster-btn", host, () => {
         const bar = document.createElement("div");
         bar.className = "bc-instr-bar";
         if (settings.instructor.rosterExport) {
@@ -110,7 +111,6 @@
           hint.textContent = "P/A buttons mark today's attendance (stored locally).";
           bar.appendChild(hint);
         }
-        const host = document.querySelector("#content, #main") || document.body;
         host.prepend(bar);
         return bar;
       });
@@ -128,13 +128,21 @@
         if (!cell) return;
         const wrap = document.createElement("span");
         wrap.className = "bc-att";
+        // aria-pressed carries the state: the on-p/on-a colour alone told a screen
+        // reader nothing about who was marked.
         const pBtn = document.createElement("button");
+        pBtn.type = "button";
         pBtn.textContent = "P"; pBtn.title = "Mark present (today)";
+        pBtn.setAttribute("aria-label", "Present today");
         const aBtn = document.createElement("button");
+        aBtn.type = "button";
         aBtn.textContent = "A"; aBtn.title = "Mark absent (today)";
+        aBtn.setAttribute("aria-label", "Absent today");
         const paint = (v) => {
           pBtn.classList.toggle("on-p", v === "p");
           aBtn.classList.toggle("on-a", v === "a");
+          pBtn.setAttribute("aria-pressed", v === "p" ? "true" : "false");
+          aBtn.setAttribute("aria-pressed", v === "a" ? "true" : "false");
         };
         paint(att[uid]);
         pBtn.addEventListener("click", () => {
@@ -152,7 +160,10 @@
   }
 
   function installUngradedBadge(ctx, settings) {
-    if (ctx.page !== "assignments" || !ctx.courseId) { BC.injector.removeNode("bc-ungraded"); return; }
+    // The assignments INDEX only. ctx.page is also "assignments" for sub-pages such
+    // as /assignments/syllabus, where the pill made no sense.
+    const onIndex = ctx.page === "assignments" && /^\/courses\/\d+\/assignments\/?$/.test(ctx.path);
+    if (!onIndex || !ctx.courseId) { removeBadges(); return; }
     BC.api.courseAssignments(ctx.courseId).then((assignments) => {
       let total = 0;
       for (const a of assignments) {
@@ -172,6 +183,7 @@
         }
       }
       if (!total) { BC.injector.removeNode("bc-ungraded"); return; }
+      if (location.pathname !== ctx.path) return;   // navigated away mid-fetch
       BC.injector.ensureNode("bc-ungraded", document.querySelector("#content") || document.body, () => {
         const pill = document.createElement("div");
         pill.className = "bc-ungraded-pill";

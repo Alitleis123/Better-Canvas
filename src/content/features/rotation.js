@@ -34,7 +34,10 @@
     if (!BC.storage.local) return;
     if (rotating) return;
 
-    const idx = Math.floor(Date.now() / (r.mode === "weekly" ? 7 * DAY : DAY));
+    // Periods count LOCAL days: dividing raw epoch ms rotated at UTC midnight, which
+    // is mid-afternoon or evening across the Americas.
+    const localDay = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / DAY);
+    const idx = r.mode === "weekly" ? Math.floor(localDay / 7) : localDay;
     const period = (r.mode || "daily") + ":" + idx;
     const last = BC.storage.local.lastRotation;
     if (last && last.period === period) return;

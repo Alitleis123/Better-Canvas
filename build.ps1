@@ -6,16 +6,16 @@ $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 
 function Check-Syntax {
-    $node = Get-Command node -ErrorAction SilentlyContinue
+    $node = Get-Command node.exe -ErrorAction SilentlyContinue
     if (-not $node) { Write-Host "node not found; skipping syntax check." -ForegroundColor Yellow; return }
     Write-Host "Syntax-checking JavaScript files..."
     $files = Get-ChildItem -Path (Join-Path $root "src") -Recurse -Filter *.js
     $failed = 0
     foreach ($f in $files) {
-        & node --check $f.FullName 2>$null
+        & $node.Source --check $f.FullName 2>$null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  FAIL $($f.FullName)" -ForegroundColor Red
-            & node --check $f.FullName
+            & $node.Source --check $f.FullName
             $failed++
         }
     }

@@ -174,7 +174,7 @@
 
     cp.appendChild(inputEl); cp.appendChild(listEl);
     backEl.appendChild(cp);
-    document.body.appendChild(backEl);
+    document.documentElement.appendChild(backEl);
 
     selected = 0;
     inputEl.addEventListener("input", () => { selected = 0; render(inputEl.value); });

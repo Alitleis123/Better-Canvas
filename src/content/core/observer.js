@@ -33,6 +33,15 @@
   const observer = (BC.observer = {
     _started: false,
 
+    // For a copy that has been replaced by an update: stop reacting to the page.
+    stop() {
+      if (observer._mo) { observer._mo.disconnect(); observer._mo = null; }
+      if (observer._checkNav) {
+        window.removeEventListener("popstate", observer._checkNav);
+        window.removeEventListener("hashchange", observer._checkNav);
+      }
+    },
+
     start(onChange) {
       if (observer._started) return;
       observer._started = true;
@@ -40,7 +49,24 @@
       // debounce here only added latency and jitter.
       const trigger = onChange;
 
-      const mo = new MutationObserver((mutations) => {
+      // SPA navigation. This used to wrap history.pushState/replaceState, but a
+      // content script runs in an isolated world: patching ITS `history` object
+      // never sees the calls Canvas's own code makes, so bc:navigate never fired and
+      // page bags never cleared. Instead compare the path wherever we already get
+      // control — every route change re-renders, so the observer sees it — plus the
+      // Navigation API where the browser has it.
+      let lastPath = location.pathname;
+      const checkNav = () => {
+        if (location.pathname === lastPath) return false;
+        lastPath = location.pathname;
+        try { window.dispatchEvent(new Event("bc:navigate")); } catch (_) {}
+        setTimeout(onChange, 0);
+        setTimeout(onChange, 250);
+        return true;
+      };
+
+      const mo = (observer._mo = new MutationObserver((mutations) => {
+        if (checkNav()) return;
         for (const m of mutations) {
           if (m.type === "childList") {
             if (ownedBy(m.target)) continue;   // churn inside one of our own subtrees
@@ -54,7 +80,7 @@
             if (m.target && !ownedBy(m.target)) { trigger(); return; }
           }
         }
-      });
+      }));
       mo.observe(document.documentElement, {
         childList: true,
         subtree: true,
@@ -62,32 +88,20 @@
         attributeFilter: ["class", "data-testid"],
       });
 
-      let lastPath = location.pathname;
-      const fireNav = () => {
-        // Only announce real page changes — Canvas replaceState()s query params constantly.
-        if (location.pathname !== lastPath) {
-          lastPath = location.pathname;
-          try { window.dispatchEvent(new Event("bc:navigate")); } catch (_) {}
-        }
-        setTimeout(onChange, 0);
-        setTimeout(onChange, 250);
-      };
-      for (const m of ["pushState", "replaceState"]) {
-        const orig = history[m];
-        history[m] = function () {
-          const r = orig.apply(this, arguments);
-          fireNav();
-          return r;
-        };
+      // Only real path changes count — Canvas replaceState()s query params constantly.
+      window.addEventListener("popstate", checkNav);
+      window.addEventListener("hashchange", checkNav);
+      observer._checkNav = checkNav;
+      if (window.navigation && typeof window.navigation.addEventListener === "function") {
+        try { window.navigation.addEventListener("navigatesuccess", checkNav); } catch (_) {}
       }
-      window.addEventListener("popstate", fireNav);
-      window.addEventListener("hashchange", fireNav);
 
+      // Both feed applyAll: "auto" dark mode follows the OS scheme, and theming's
+      // data-bc-motion follows the OS reduced-motion setting.
       if (window.matchMedia) {
-        try {
-          window.matchMedia("(prefers-color-scheme: dark)")
-                .addEventListener("change", () => onChange());
-        } catch (_) {}
+        for (const q of ["(prefers-color-scheme: dark)", "(prefers-reduced-motion: reduce)"]) {
+          try { window.matchMedia(q).addEventListener("change", () => onChange()); } catch (_) {}
+        }
       }
     },
   });

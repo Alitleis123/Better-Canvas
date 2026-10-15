@@ -61,7 +61,7 @@ Three modes:
 
 ### Files
 - **Cross-course library** — one panel that lists every file across every course, with search + type + course + sort filters.
-- **Star / favorite** files, one-click open.
+- **Star / favorite** files and filter to just your starred ones, one-click open.
 
 ### Announcements
 - **Aggregator** on the dashboard: recent announcements across all your courses, newest first.
@@ -88,7 +88,7 @@ Three modes:
 
 ### Command palette & shortcuts
 - **⌘K / Ctrl-K palette** — jump to any tab, any course, any command.
-- **Rebindable shortcuts** for every action (⌘⇧S settings, ⌘⇧D dark, ⌘⇧T quick task, ⌘⇧N quick note, g d/g/i/c to navigate).
+- **Rebindable shortcuts** for every action (⌘⇧S settings, ⌘⇧D dark, ⌥⇧T quick task, ⌥⇧N quick note, ⌘⇧F focus mode, g d/g/i/c to navigate). On Windows/Linux ⌘ is Ctrl and ⌥ is Alt.
 
 ### Productivity
 - **Focus mode** on any Canvas page.
@@ -128,6 +128,7 @@ Three modes:
 
 1. Build the unpacked extensions:
    ```powershell
+   node.exe --test tests/regressions.test.cjs
    powershell -ExecutionPolicy Bypass -File build.ps1
    ```
    This populates `dist/chrome` and `dist/firefox` after syntax-checking every JS file.

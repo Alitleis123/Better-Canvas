@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Better Canvas",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "The most comprehensive Canvas LMS customizer. Dark mode everywhere, theme creator + rotation, kanban planner, Pomodoro, GPA + rubric predictor, quiz draft saver, module progress, study insights — free, local, no telemetry.",
   "browser_specific_settings": {
     "gecko": {
@@ -37,6 +37,8 @@
         "src/content/core/detect.js",
         "src/content/core/injector.js",
         "src/content/core/lifecycle.js",
+        "src/content/core/icons.js",
+        "src/content/core/darkengine.js",
         "src/content/core/ui.js",
         "src/content/core/cache.js",
         "src/content/core/api.js",
@@ -85,6 +87,7 @@
         "src/content/core/datetime.js",
         "src/content/core/color.js",
         "src/shared/tokens.js",
+        "src/content/core/darkengine.js",
         "src/content/frame.js"
       ]
     }

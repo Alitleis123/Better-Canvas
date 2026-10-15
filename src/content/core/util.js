@@ -106,6 +106,24 @@
 
     cssSafe(s) { return String(s == null ? "" : s).replace(/[<>]/g, ""); },
 
+    // For interpolation inside url("..."). cssSafe leaves quotes, backslashes and
+    // newlines alone, so a URL containing `")` closed the string and the rest of an
+    // imported setting became live CSS.
+    cssUrl(s) {
+      return String(s == null ? "" : s).trim()
+        .replace(/[\r\n\f]/g, "")
+        .replace(/[\\"'()<>]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0"));
+    },
+
+    // Priority-ordered lookup. querySelector("#a, #b") returns whichever match comes
+    // first in DOCUMENT order, so when #b is an ancestor of #a (e.g. "#grades_summary,
+    // #main") the fallback always wins and the preferred target is never used.
+    firstOf(selectors, root) {
+      const scope = root || document;
+      for (const sel of selectors) { const n = scope.querySelector(sel); if (n) return n; }
+      return null;
+    },
+
     isSafeUrl(url) {
       if (!url) return false;
       const s = String(url).trim();

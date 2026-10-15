@@ -21,19 +21,24 @@
     let layer = "";
     if (cfg.mode === "color") layer = `background: ${BC.util.cssSafe(cfg.color)};`;
     else if (cfg.mode === "image" && BC.util.isSafeUrl(cfg.image)) {
-      layer = `background: url("${BC.util.cssSafe(cfg.image)}") center/cover no-repeat;`;
+      layer = `background: url("${BC.util.cssUrl(cfg.image)}") center/cover no-repeat;`;
     } else if (cfg.mode === "gradient") {
       layer = `background: linear-gradient(${cfg.gradient.angle|0}deg, ${BC.util.cssSafe(cfg.gradient.from)} 0%, ${BC.util.cssSafe(cfg.gradient.to)} 100%);`;
     } else if (cfg.mode === "pattern") {
       layer = `background: ${BC.util.cssSafe(cfg.color || "#f6f7fb")}; ${PATTERNS[cfg.pattern || "none"] || ""}`;
     }
+    // The html.bc-dark variants matter: theming paints these same containers with
+    // `html.bc-dark #main { background: … !important }`, which outranks a bare
+    // `#main` on specificity, so in dark mode the layer sat hidden behind them.
     return `#bc-bg-layer {
       position: fixed; inset: 0; z-index: -1; pointer-events: none;
       ${layer}
       filter: blur(${blur}px);
       opacity: ${opacity};
     }
-    body, #wrapper, #main, .ic-app-main-content, .ic-Layout-columns { background-color: transparent !important; }
+    html body, html #wrapper, html #main, html .ic-app-main-content, html .ic-Layout-columns,
+    html.bc-dark:root body, html.bc-dark body #wrapper, html.bc-dark body #main,
+    html.bc-dark body .ic-app-main-content, html.bc-dark body .ic-Layout-columns { background-color: transparent !important; }
     html.bc-dark #bc-bg-layer { mix-blend-mode: multiply; }
     `;
   }
@@ -46,9 +51,18 @@
     });
   }
 
+  // A background can be limited to one mode: a dark one picked for dark mode left
+  // Canvas's dark text sitting on near-black in light mode.
+  function showsNow(bg, settings) {
+    if (!bg || bg.mode === "none") return false;
+    if (bg.when === "dark") return BC.isDarkActive(settings);
+    if (bg.when === "light") return !BC.isDarkActive(settings);
+    return true;
+  }
+
   function apply(settings) {
     const cos = settings.cosmetics || {};
-    if (cos.background && cos.background.mode !== "none") {
+    if (showsNow(cos.background, settings)) {
       ensureLayer();
       BC.injector.setStyle("bc-bg", bgCSS(cos.background));
     } else {

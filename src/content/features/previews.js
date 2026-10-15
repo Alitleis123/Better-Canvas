@@ -25,6 +25,7 @@
 
   let previewEl = null;
   let hoverTimer = null;
+  let showSeq = 0;           // the latest show(); older fetches resolve into nothing
 
   function ensure() {
     if (previewEl && previewEl.isConnected) return previewEl;
@@ -37,17 +38,22 @@
   }
 
   function hide() {
+    showSeq++;
     if (previewEl) previewEl.classList.remove("show");
     clearTimeout(hoverTimer);
   }
 
   async function show(a, courseId, id) {
+    const seq = ++showSeq;
     const el = ensure();
     el.innerHTML = `<h5>Loading…</h5>`;
     positionAt(a, el);
     el.classList.add("show");
     try {
       const asn = await BC.api.assignment(courseId, id);
+      // Hovering A then B quickly left whichever request finished LAST on screen,
+      // so the card could describe the wrong assignment.
+      if (seq !== showSeq) return;
       const due = asn.due_at ? BC.dt.dueLabel(asn.due_at) : "No due date";
       const points = asn.points_possible != null ? " · " + asn.points_possible + " pts" : "";
       const sub = asn.submission || {};
@@ -59,6 +65,7 @@
         <p style="margin-top:6px;">${BC.util.escapeHtml((asn.description || "").replace(/<[^>]+>/g, " ").slice(0, 180) || "")}</p>
       `;
     } catch (e) {
+      if (seq !== showSeq) return;
       // Was swallowed silently, leaving the card reading "Loading…" forever.
       el.innerHTML = `<h5>Couldn't load</h5><p>Open the assignment to see details.</p>`;
       BC.diag.push("previews", e);
@@ -83,7 +90,11 @@
   }
 
   function onOut(ev) {
-    if (!ev.target.closest || !ev.target.closest('a[href*="/assignments/"]')) return;
+    const a = ev.target.closest && ev.target.closest('a[href*="/assignments/"]');
+    if (!a) return;
+    // mouseout also fires when moving onto a child of the same link (an icon, a
+    // <span>), which hid the card and re-fetched it after a flicker.
+    if (ev.relatedTarget && a.contains(ev.relatedTarget)) return;
     hide();
   }
 

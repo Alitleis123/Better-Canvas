@@ -1,7 +1,8 @@
 /*
  * Better Canvas — theming.
- * Emits CSS variables and rules for dark mode, light presets, accent color,
- * font, density, radius, focus ring, color-blind mode, reduced motion.
+ * Emits CSS variables and rules for light presets, accent color, font, density,
+ * radius, focus ring, color-blind mode and reduced motion, and switches the dark
+ * mode engine (core/darkengine.js) on and off.
  * All feature CSS references these vars so re-tinting is one style swap.
  */
 (function () {
@@ -12,59 +13,9 @@
   const FONT_SCALE = { xs: 0.85, s: 0.92, m: 1.0, l: 1.08, xl: 1.18 };
   const DENSITY_PAD = { compact: 0.6, default: 1.0, spacious: 1.4, cozy: 1.7 };
 
+  // Dark mode itself lives in core/darkengine.js: a few hand-written region rules
+  // plus computed-colour tagging, shared with same-origin subframes.
   const staticCSS = `
-    html.bc-dark, html.bc-dark body { background: var(--bc-d-bg) !important; color: var(--bc-d-text) !important; }
-    html.bc-dark #wrapper, html.bc-dark #main, html.bc-dark #content,
-    html.bc-dark .ic-app-main-content, html.bc-dark .ic-Layout-columns,
-    html.bc-dark .ic-app-course-menu, html.bc-dark #left-side, html.bc-dark #right-side {
-      background: var(--bc-d-bg) !important; color: var(--bc-d-text) !important;
-    }
-    html.bc-dark .Sidebar__TodoListContainer, html.bc-dark .ToDoSidebar,
-    html.bc-dark .PlannerApp, html.bc-dark .planner-day, html.bc-dark .planner-empty-state,
-    html.bc-dark .ic-DashboardCard, html.bc-dark .ic-DashboardCard__box, html.bc-dark .ic-DashboardCard__link,
-    html.bc-dark .ic-notification, html.bc-dark .Announcement, html.bc-dark .discussion-topic,
-    html.bc-dark .ic-Table-content-wrapper, html.bc-dark .roster, html.bc-dark table,
-    html.bc-dark .header-bar, html.bc-dark .navbar, html.bc-dark .assignments-list,
-    html.bc-dark .files-page, html.bc-dark #modules, html.bc-dark .context_module,
-    html.bc-dark .ic-app-course-nav, html.bc-dark #course_show_secondary {
-      background: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important;
-      border-color: var(--bc-d-border) !important;
-    }
-    html.bc-dark a { color: var(--bc-d-link) !important; }
-    html.bc-dark input, html.bc-dark select, html.bc-dark textarea, html.bc-dark button {
-      background: var(--bc-d-bg3) !important; color: var(--bc-d-text) !important;
-      border-color: var(--bc-d-border) !important;
-    }
-    html.bc-dark .ui-widget-content, html.bc-dark .ic-Form-control input,
-    html.bc-dark .ui-dialog, html.bc-dark .modal-body, html.bc-dark [role=dialog] {
-      background: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important;
-    }
-    html.bc-dark hr, html.bc-dark .border-bottom, html.bc-dark .border-top {
-      border-color: var(--bc-d-border) !important;
-    }
-    html.bc-dark .ic-DashboardCard__header { background-color: var(--bc-d-bg3) !important; }
-    html.bc-dark .ic-app-course-nav-toggle { background: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important; }
-    html.bc-dark .Sidebar__TodoListContainer h2, html.bc-dark .todo-list-header-container,
-    html.bc-dark .events_list_header, html.bc-dark .recent_feedback,
-    html.bc-dark .ic-DashboardCard__header_hero, html.bc-dark .header-secondary { color: var(--bc-d-text) !important; }
-    html.bc-dark .ic-app-header { background: var(--bc-d-bg2) !important; }
-    html.bc-dark .ic-app-header__menu-list-item a { color: var(--bc-d-text) !important; }
-    html.bc-dark img[src*="branded"] { filter: brightness(1.1); }
-
-    /* Generic fallback for pages we don't explicitly cover */
-    html.bc-dark .box-content, html.bc-dark .content-box, html.bc-dark .ui-widget,
-    html.bc-dark .well, html.bc-dark .alert, html.bc-dark .ic-Card, html.bc-dark .card,
-    html.bc-dark .form-actions, html.bc-dark .page-toolbar, html.bc-dark .ig-row,
-    html.bc-dark .ig-header, html.bc-dark .item-group-condensed {
-      background: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important;
-      border-color: var(--bc-d-border) !important;
-    }
-    html.bc-dark [style*="background-color: rgb(255, 255, 255)"],
-    html.bc-dark [style*="background: rgb(255, 255, 255)"],
-    html.bc-dark [style*="background-color:#fff" i] {
-      background-color: var(--bc-d-bg2) !important; color: var(--bc-d-text) !important;
-    }
-
     /* Accent variable — Canvas reads --ic-brand-primary in many places */
     :root[data-bc-accent] { --ic-brand-primary: var(--bc-accent) !important; }
     :root[data-bc-accent] .btn-primary, :root[data-bc-accent] .Button--primary {
@@ -91,9 +42,8 @@
     :root[data-bc-cursor="large"] { cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><polygon points='0,0 0,28 8,20 12,28 16,26 12,18 22,18' fill='black' stroke='white' stroke-width='2'/></svg>") 0 0, auto !important; }
     :root[data-bc-cursor="precise"], :root[data-bc-cursor="precise"] * { cursor: crosshair !important; }
 
-    /* High contrast */
+    /* High contrast (its contrast() filter is set inline with the colour-blind one) */
     :root[data-bc-hc="1"] * { text-shadow: none !important; }
-    :root[data-bc-hc="1"] { filter: contrast(1.15); }
 
     /* Reduced motion */
     :root[data-bc-motion="0"] *, :root[data-bc-motion="0"] *::before, :root[data-bc-motion="0"] *::after {
@@ -109,13 +59,16 @@
   // reassembling a multi-KB string on every observer tick.
   let staticCssCache = null;
   function staticSheet() {
-    if (staticCssCache == null) staticCssCache = staticCSS + "\n" + BC.tokens.staticCss();
+    if (staticCssCache == null) {
+      staticCssCache = staticCSS + "\n" + BC.tokens.staticCss() + "\n" + BC.darkEngine.baseCss() + "\n" + BC.darkEngine.tagCss();
+    }
     return staticCssCache;
   }
 
   // Memoized against a signature of every input that affects the output.
   let lastSig = null;
   let lastCss = "";
+  let appliedFilter = "";      // the root `filter` we last wrote
 
   function buildCss(settings) {
     const t = settings.theming;
@@ -149,7 +102,10 @@
 
     // Light preset page background (skipped when a custom cosmetic background is active).
     const lp = (BC.LIGHT_PRESETS || {})[t.lightPreset];
-    const cosmeticBg = settings.cosmetics && settings.cosmetics.background && settings.cosmetics.background.mode !== "none";
+    const bgCfg = settings.cosmetics && settings.cosmetics.background;
+    // Only a background that is actually showing in this mode replaces the preset.
+    const cosmeticBg = !!bgCfg && bgCfg.mode !== "none" &&
+      (bgCfg.when === "dark" ? BC.isDarkActive(settings) : bgCfg.when === "light" ? !BC.isDarkActive(settings) : true);
     const lightBgRule = (lp && t.lightPreset !== "default" && !cosmeticBg)
       ? `html:not(.bc-dark) body, html:not(.bc-dark) .ic-Layout-contentMain { background-color: ${lp.bg} !important; }`
       : "";
@@ -158,7 +114,7 @@
     if (t.logo && t.logo.mode === "hide") {
       logoRule = ".ic-app-header__logomark, .ic-app-header__logomark-container { display: none !important; }";
     } else if (t.logo && t.logo.mode === "replace" && BC.util.isSafeUrl(t.logo.url)) {
-      logoRule = `.ic-app-header__logomark, .ic-app-header__logomark-container { background-image: url("${BC.util.cssSafe(t.logo.url)}") !important; background-size: contain !important; background-repeat: no-repeat !important; background-position: center !important; content: "" !important; }
+      logoRule = `.ic-app-header__logomark, .ic-app-header__logomark-container { background-image: url("${BC.util.cssUrl(t.logo.url)}") !important; background-size: contain !important; background-repeat: no-repeat !important; background-position: center !important; content: "" !important; }
       .ic-app-header__logomark img, .ic-app-header__logomark-container img { visibility: hidden !important; }`;
     }
 
@@ -199,8 +155,15 @@
     attr("data-bc-motion", (t.reducedMotion || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)) ? "0" : "1");
     attr("data-bc-rounded", t.roundedUI ? "1" : "0");
 
-    const filter = (t.colorBlind && t.colorBlind !== "off") ? BC.color.colorBlindFilter(t.colorBlind) : "";
-    if (doc.style.filter !== filter) doc.style.filter = filter;
+    // One inline `filter` carries both effects. High contrast used to be a
+    // stylesheet filter on :root, which the colour-blind inline filter silently
+    // replaced — turning both on dropped the contrast boost.
+    // Compared against what we last wrote, not read back: the browser serializes
+    // url(#id) as url("#id"), so a read-back never matched and the page-wide filter
+    // was rewritten — a full repaint — on every tick.
+    const cb = (t.colorBlind && t.colorBlind !== "off") ? BC.color.colorBlindFilter(t.colorBlind) : "";
+    const filter = [t.highContrast ? "contrast(1.15)" : "", cb].filter(Boolean).join(" ");
+    if (filter !== appliedFilter || (filter && !doc.style.filter)) { doc.style.filter = filter; appliedFilter = filter; }
 
     // Clamped: the durations are calc(Nms / speed), so a corrupted import setting
     // this to 0 would produce division by zero across every animation.
@@ -239,7 +202,8 @@
   function apply(settings, ctx) {
     const t = settings.theming;
     const a = settings.accessibility || {};
-    const cos = (settings.cosmetics && settings.cosmetics.background && settings.cosmetics.background.mode) || "";
+    const bgc = (settings.cosmetics && settings.cosmetics.background) || {};
+    const cos = (bgc.mode || "") + "/" + (bgc.when || "") + "/" + (BC.isDarkActive(settings) ? 1 : 0);
 
     BC.injector.setStyle("bc-static", staticSheet());
 
@@ -248,6 +212,11 @@
     BC.injector.setStyle("bc-theming", lastCss);
 
     applyRootState(settings);
+
+    // After the root class and stylesheets are in place, so the first scan reads
+    // the dark tokens it maps onto.
+    if (BC.isDarkActive(settings)) BC.darkEngine.start();
+    else BC.darkEngine.stop();
   }
 
   BC.registry.register({
@@ -255,6 +224,6 @@
     // Teardown removes our stylesheets, so the memo has to be invalidated or a
     // re-enable would skip rebuilding them. (The root-level inline state is cleared
     // centrally in content.js's teardown.)
-    unmount() { lastSig = null; },
+    unmount() { lastSig = null; appliedFilter = ""; BC.darkEngine.stop(); },
   });
 })();

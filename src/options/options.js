@@ -84,6 +84,6 @@
   chrome.storage.local.get(KEY, (r) => {
     current = BC.mergeDefaults(r[KEY]);
     paintTokens(current);
-    BC.SettingsUI.render(document.getElementById("bc-settings-root"), adapter);
+    BC.SettingsUI.render(document.getElementById("bc-settings-root"), adapter, { variant: "page" });
   });
 })();

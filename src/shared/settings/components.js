@@ -1,31 +1,29 @@
 /*
- * Better Canvas — reusable settings UI components.
- * Every control follows the same contract: it's constructed with (opts) that
- * include get()/set() bound to the state store, so no ad-hoc plumbing.
+ * Better Canvas — settings UI components.
+ * Every control is constructed with get()/set() bound to the state store, and
+ * registers a sync() that re-reads the store and writes only what differs.
+ * Visuals come from the shared kit (BC.ui, src/content/core/ui.js); the settings
+ * layout classes (bcs-*) live in settings/index.js.
  */
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
-  const el = (t, a, c) => BC.util.el(t, a, c);
-  const h = (s, a, c) => BC.util.h(s, a, c);
+  const el = (t, a, c) => BC.ui.el(t, a, c);
 
   const C = (BC.SettingsComponents = {});
 
   // ---- live bindings ------------------------------------------------------
-  // Controls own their DOM for their whole lifetime. The UI used to tear the
-  // whole tab down on every state change, which destroyed the very control the
-  // user was touching: the checkbox's CSS transition never ran (a transition
-  // needs the element to survive the style change), the caret was lost after one
-  // character, and a slider drag died on the first movement. Instead each control
-  // registers a sync(state) that re-reads the store and writes only what differs.
-  // For the control just touched that's a no-op, so the native interaction is
-  // never interrupted; for every other control it's the cross-row reactivity
-  // channel a pure "controls own their DOM" approach would lack.
+  // Controls own their DOM for their whole lifetime. Tearing the tab down on every
+  // state change destroyed the very control the user was touching (no CSS
+  // transitions, lost caret, dead slider drags). Instead each control registers a
+  // sync(state) that writes only what differs: a no-op for the control just
+  // touched, and the cross-row reactivity channel for everything else.
   let binds = [];
 
   // Shadow-DOM safe: the drawer lives in a shadow root, where
   // document.activeElement reports the HOST, not the focused input.
   const focused = (n) => n.getRootNode().activeElement === n;
+  C.focused = focused;
 
   C.bindings = {
     reset() { binds = []; },
@@ -42,94 +40,114 @@
   };
   const bind = (node, fn) => C.bindings.add(node, fn);
 
-  // Section wrapper with title + optional description.
-  C.section = function ({ title, description, children }) {
-    const body = h("div.bc-section-body", null, children);
-    return h("section.bc-section", null, [
-      title ? h("h3.bc-section-title", null, title) : null,
-      description ? h("p.bc-section-desc", null, description) : null,
-      body,
-    ]);
+  // ---- layout -------------------------------------------------------------
+
+  // A group of rows on one card. `actions` sit at the right of the heading.
+  C.section = function ({ title, description, children, actions, id }) {
+    const head = (title || description || actions)
+      ? el("header", { class: "bcs-section__head" }, [
+          el("div", { class: "bcs-section__titles" }, [
+            title ? el("h3", { class: "bcs-section__title", text: title }) : null,
+            description ? el("p", { class: "bcs-section__desc", text: description }) : null,
+          ]),
+          actions ? el("div", { class: "bcs-section__actions" }, [].concat(actions)) : null,
+        ])
+      : null;
+    return el("section", { class: "bcs-section", id: id || null }, [head, el("div", { class: "bcs-section__body" }, children)]);
   };
 
-  // Row: label + control. `enabledWhen(state)` is optional and purely additive —
-  // omit it and behaviour is identical to before. With it, the row greys out and
-  // goes inert when its parent toggle is off, which nothing did previously.
-  C.row = function ({ label, hint, control, warn, enabledWhen }) {
-    const ctl = h("div.bc-row-control", null, control);
-    const row = h("div.bc-row", null, [
-      h("div.bc-row-label", null, [
-        h("div.bc-row-title", null, label),
-        hint ? h("div.bc-row-hint", null, hint) : null,
-        warn ? h("div.bc-row-warn", null, warn) : null,
+  // Label + hint on the left, control on the right. `stacked` puts a wide control
+  // (textarea, list) underneath instead.
+  //   showWhen(state)    -> hide the row entirely when it doesn't apply
+  //   enabledWhen(state) -> dim it and make it inert when its parent is off
+  C.row = function ({ label, hint, control, warn, enabledWhen, showWhen, stacked }) {
+    const ctl = el("div", { class: "bcs-row__control" }, [].concat(control || []));
+    const row = el("div", { class: "bcs-row" + (stacked ? " bcs-row--stacked" : "") }, [
+      el("div", { class: "bcs-row__text" }, [
+        el("div", { class: "bcs-row__label", text: label }),
+        hint ? el("div", { class: "bcs-row__hint", text: hint }) : null,
+        warn ? el("div", { class: "bcs-row__warn", text: warn }) : null,
       ]),
       ctl,
     ]);
-    if (enabledWhen) bind(row, (s) => {
-      const on = !!enabledWhen(s);
-      if (row.classList.contains("bc-row-off") === on) row.classList.toggle("bc-row-off", !on);
-      ctl.toggleAttribute("inert", !on);
+    if (enabledWhen || showWhen) bind(row, (s) => {
+      if (showWhen) {
+        const show = !!showWhen(s);
+        if (row.hidden === show) row.hidden = !show;
+      }
+      if (enabledWhen) {
+        const on = !!enabledWhen(s);
+        if (row.classList.contains("bcs-row--off") === on) row.classList.toggle("bcs-row--off", !on);
+        ctl.toggleAttribute("inert", !on);
+      }
     });
     return row;
   };
 
-  // On/off switch.
+  // An inline callout. tone: info | warn
+  C.note = function ({ text, tone, icon }) {
+    return el("div", { class: "bcs-note" + (tone ? " bcs-note--" + tone : "") }, [
+      BC.ui.icon(icon || (tone === "warn" ? "alert" : "info")),
+      el("div", { text }),
+    ]);
+  };
+
+  // ---- controls -----------------------------------------------------------
+
   C.switch = function ({ get, set, ariaLabel }) {
-    const input = el("input", { type: "checkbox", checked: !!get(), "aria-label": ariaLabel || "toggle" });
-    // <label>, not <span>: a click anywhere on the track — including the thumb —
-    // is forwarded to the checkbox. The spec skips label activation when the
-    // event target is already the labeled control, so this can't double-toggle.
-    const track = h("label.bc-switch", null, [input, h("span.bc-switch-thumb", null)]);
-    // Paint synchronously so the track fills in the same frame as the click,
-    // without waiting on the store round-trip.
-    const paint = () => track.classList.toggle("bc-on", input.checked);
-    paint();
-    input.addEventListener("change", () => { paint(); set(input.checked); });
-    bind(track, () => { const v = !!get(); if (input.checked !== v) input.checked = v; paint(); });
-    return track;
+    const t = BC.ui.toggle({ checked: !!get(), ariaLabel: ariaLabel || "", onChange: (v) => set(v) });
+    bind(t.root, () => t.set(!!get()));
+    return t.root;
+  };
+
+  C.segmented = function ({ get, set, options, ariaLabel, size }) {
+    const seg = BC.ui.segmented({ value: get(), options, ariaLabel, size, onChange: (v) => set(v) });
+    // Four or more choices (or icon+label pairs) are too wide to share a line with a
+    // label in the side panel; `bcs-wide` lets the row stack there.
+    if ((options || []).length >= 4 || (options || []).some((o) => o.icon && o.label)) seg.root.classList.add("bcs-wide");
+    bind(seg.root, () => seg.set(get()));
+    return seg.root;
   };
 
   C.select = function ({ get, set, options, ariaLabel }) {
-    const sel = el("select", { class: "bc-select", "aria-label": ariaLabel || "" });
-    for (const o of options) {
-      const opt = el("option", { value: o.value }, o.label);
-      if (o.value === get()) opt.selected = true;
-      sel.appendChild(opt);
-    }
-    sel.addEventListener("change", () => set(sel.value));
+    const sel = BC.ui.select({ value: get(), options, ariaLabel, onChange: (v) => set(v) });
+    sel.classList.add("bcs-select");
     bind(sel, () => { const v = String(get()); if (sel.value !== v) sel.value = v; });
     return sel;
   };
 
-  C.text = function ({ get, set, placeholder, ariaLabel, validate }) {
-    const wrap = h("div.bc-text-wrap", null);
-    const inp = el("input", { type: "text", class: "bc-text", placeholder: placeholder || "", value: get() || "", "aria-label": ariaLabel || "" });
-    const warn = h("div.bc-text-warn", null);
+  C.text = function ({ get, set, placeholder, ariaLabel, validate, type, wide }) {
+    const wrap = el("div", { class: "bcs-text" + (wide ? " bcs-text--wide" : "") });
+    const inp = BC.ui.input({ type: type || "text", placeholder, ariaLabel: ariaLabel || placeholder, value: get() || "" });
+    const warn = el("div", { class: "bcs-text__warn" });
     inp.addEventListener("input", () => {
       const v = inp.value;
       if (validate) {
         const r = validate(v);
-        if (r === true || r == null || r === "") { warn.textContent = ""; wrap.classList.remove("bc-invalid"); set(v); }
-        else { warn.textContent = String(r); wrap.classList.add("bc-invalid"); }
+        if (r === true || r == null || r === "") { warn.textContent = ""; wrap.classList.remove("bcs-invalid"); set(v); }
+        else { warn.textContent = String(r); wrap.classList.add("bcs-invalid"); }
       } else { set(v); }
     });
-    wrap.appendChild(inp); wrap.appendChild(warn);
-    // Never write into a field the user is typing in — that's what cost the caret
-    // after a single character.
+    wrap.append(inp, warn);
+    // Never write into a field the user is typing in — that's what cost the caret.
     bind(inp, () => { const v = get() ?? ""; if (!focused(inp) && inp.value !== String(v)) inp.value = String(v); });
     return wrap;
   };
 
-  C.textarea = function ({ get, set, placeholder, rows }) {
-    const ta = el("textarea", { class: "bc-textarea", placeholder: placeholder || "", rows: rows || 4 });
+  C.textarea = function ({ get, set, placeholder, rows, mono, ariaLabel }) {
+    const ta = el("textarea", {
+      class: "bc-textarea" + (mono ? " bc-textarea--mono" : ""), placeholder: placeholder || "",
+      rows: rows || 4, "aria-label": ariaLabel || placeholder || "", spellcheck: mono ? "false" : null,
+    });
     ta.value = get() || "";
     ta.addEventListener("input", () => set(ta.value));
     bind(ta, () => { const v = get() ?? ""; if (!focused(ta) && ta.value !== String(v)) ta.value = String(v); });
     return ta;
   };
 
-  C.number = function ({ get, set, min, max, step }) {
-    const inp = el("input", { type: "number", class: "bc-number", value: (get() ?? "") });
+  C.number = function ({ get, set, min, max, step, suffix, ariaLabel }) {
+    const inp = BC.ui.input({ type: "number", ariaLabel, value: get() ?? "" });
+    inp.classList.add("bcs-number__input");
     if (min != null) inp.min = min;
     if (max != null) inp.max = max;
     if (step != null) inp.step = step;
@@ -139,113 +157,228 @@
       set(v);
     });
     bind(inp, () => { const v = get(); if (!focused(inp) && inp.value !== String(v ?? "")) inp.value = v ?? ""; });
+    return el("div", { class: "bcs-number" }, [inp, suffix ? el("span", { class: "bcs-number__suffix", text: suffix }) : null]);
+  };
+
+  C.time = function ({ get, set, ariaLabel }) {
+    const inp = BC.ui.input({ type: "time", ariaLabel, value: get() || "" });
+    inp.classList.add("bcs-time");
+    inp.addEventListener("change", () => set(inp.value));
+    bind(inp, () => { const v = get() || ""; if (!focused(inp) && inp.value !== v) inp.value = v; });
     return inp;
   };
 
-  C.slider = function ({ get, set, min, max, step, format }) {
-    const wrap = h("div.bc-slider", null);
-    const rng = el("input", { type: "range", min: min ?? 0, max: max ?? 100, step: step ?? 1, value: get() ?? 0 });
-    const val = h("span.bc-slider-val", null, format ? format(get()) : String(get()));
-    const label = (v) => { const t = format ? format(v) : String(v); if (val.textContent !== t) val.textContent = t; };
+  C.slider = function ({ get, set, min, max, step, format, ariaLabel }) {
+    const rng = el("input", { type: "range", class: "bcs-range", min: min ?? 0, max: max ?? 100, step: step ?? 1, "aria-label": ariaLabel || null });
+    rng.value = get() ?? 0;
+    const val = el("span", { class: "bcs-slider__value bc-num" });
+    const paint = (v) => {
+      const t = format ? format(v) : String(v);
+      if (val.textContent !== t) val.textContent = t;
+      const lo = Number(rng.min), hi = Number(rng.max);
+      rng.style.setProperty("--fill", (hi > lo ? ((Number(v) - lo) / (hi - lo)) * 100 : 0) + "%");
+    };
+    paint(get() ?? 0);
     // The readout updates on every input event (free, local); the store write is
-    // throttled. A single drag used to fire 30-60 writes per second, each one
-    // rebuilding the panel and destroying the range input under the pointer.
+    // throttled. A drag used to fire 30-60 writes a second.
     const commit = BC.util.throttle((v) => set(v), 100);
-    rng.addEventListener("input", () => { const v = parseFloat(rng.value); label(v); commit(v); });
-    rng.addEventListener("change", () => set(parseFloat(rng.value)));  // definitive final value
+    rng.addEventListener("input", () => { const v = parseFloat(rng.value); paint(v); commit(v); });
+    rng.addEventListener("change", () => set(parseFloat(rng.value)));
     bind(rng, () => {
       if (focused(rng)) return;             // never fight an in-progress drag
       const v = get();
       if (rng.value !== String(v)) rng.value = v;
-      label(v);
+      paint(v);
     });
-    wrap.appendChild(rng); wrap.appendChild(val);
-    return wrap;
+    return el("div", { class: "bcs-slider" }, [rng, val]);
   };
 
-  C.color = function ({ get, set, allowEmpty }) {
-    const wrap = h("div.bc-color", null);
-    const cur = get() || "";
-    const picker = el("input", { type: "color", value: cur || "#000000" });
-    const text   = el("input", { type: "text", class: "bc-color-text", value: cur, placeholder: "#rrggbb" });
+  // Swatch + hex field. An empty value shows a "none" swatch rather than the
+  // native picker's default black, which read as "black is selected".
+  C.color = function ({ get, set, allowEmpty, presets, ariaLabel }) {
+    const wrap = el("div", { class: "bcs-color" + (presets && presets.length ? " bcs-wide" : "") });
+    const picker = el("input", { type: "color", class: "bcs-color__native", tabindex: "-1", "aria-hidden": "true" });
+    const swatch = el("button", { type: "button", class: "bcs-color__swatch", "aria-label": (ariaLabel || "Color") + ": open picker" });
+    const text = BC.ui.input({ size: "sm", placeholder: allowEmpty ? "None" : "#rrggbb", ariaLabel: (ariaLabel || "Color") + " hex value" });
+    text.classList.add("bcs-color__hex");
+    const paint = (v) => {
+      const hex = BC.color.normalizeHex(v);
+      swatch.classList.toggle("bcs-color__swatch--none", !hex);
+      swatch.style.background = hex || "";
+      if (hex && picker.value !== hex) picker.value = hex;
+    };
     // Dragging in the native picker fires input continuously — throttle the store
     // write and take the definitive value on change.
     const commit = BC.util.throttle((v) => set(v), 100);
-    picker.addEventListener("input", () => { text.value = picker.value; commit(picker.value); });
+    swatch.addEventListener("click", () => picker.click());
+    picker.addEventListener("input", () => { text.value = picker.value; paint(picker.value); commit(picker.value); });
     picker.addEventListener("change", () => set(picker.value));
-    bind(wrap, () => {
-      const v = get() || "";
-      if (!focused(text) && text.value !== v) text.value = v;
-      if (!focused(picker) && v && picker.value !== v) picker.value = v;
-    });
     text.addEventListener("input", () => {
       const v = text.value.trim();
-      if (v === "" && allowEmpty) { set(""); return; }
-      if (BC.color.isHex(v)) { picker.value = v; set(v); wrap.classList.remove("bc-invalid"); }
-      else wrap.classList.add("bc-invalid");
+      if (v === "" && allowEmpty) { wrap.classList.remove("bcs-invalid"); paint(""); set(""); return; }
+      const hex = BC.color.normalizeHex(v);
+      if (hex) { wrap.classList.remove("bcs-invalid"); paint(hex); set(hex); }
+      else wrap.classList.add("bcs-invalid");
     });
-    if (allowEmpty) {
-      const clr = el("button", { class: "bc-btn bc-btn-ghost", type: "button" }, "Clear");
-      clr.addEventListener("click", () => { text.value = ""; set(""); });
-      wrap.appendChild(picker); wrap.appendChild(text); wrap.appendChild(clr);
-    } else {
-      wrap.appendChild(picker); wrap.appendChild(text);
+    const kids = [picker, swatch, text];
+    if (presets && presets.length) {
+      const row = el("div", { class: "bcs-color__presets" }, presets.map((p) => {
+        const b = el("button", { type: "button", class: "bcs-color__preset", title: p, "aria-label": "Use " + p });
+        b.style.background = p;
+        b.addEventListener("click", () => { text.value = p; paint(p); set(p); });
+        return b;
+      }));
+      kids.push(row);
     }
+    if (allowEmpty) {
+      kids.push(BC.ui.iconButton("x", { label: "Clear color", size: "sm", onClick: () => { text.value = ""; paint(""); set(""); } }));
+    }
+    wrap.append(...kids);
+    const sync = () => {
+      const v = get() || "";
+      if (!focused(text) && text.value !== v) text.value = v;
+      paint(v);
+    };
+    sync();
+    bind(wrap, sync);
     return wrap;
   };
 
-  C.button = function ({ label, onClick, variant, icon }) {
-    const b = el("button", { class: "bc-btn " + (variant ? "bc-btn-" + variant : ""), type: "button" });
-    if (icon) b.appendChild(h("span.bc-btn-ic", null, icon));
-    b.appendChild(document.createTextNode(label));
-    b.addEventListener("click", onClick);
-    return b;
+  // Large radio cards with a small drawn preview, for choices that change how a
+  // whole area looks — where a single word ("Clean") says too little.
+  // options: [{ value, label, description, preview: () => Node }]
+  C.choice = function ({ get, set, options, ariaLabel }) {
+    const root = el("div", { class: "bcs-choice bcs-wide", role: "radiogroup", "aria-label": ariaLabel || "" });
+    const cards = (options || []).map((o) => {
+      const b = el("button", { type: "button", class: "bcs-choice__card", role: "radio", "data-value": String(o.value) }, [
+        el("span", { class: "bcs-choice__preview", "aria-hidden": "true" }, [o.preview ? o.preview() : null]),
+        el("span", { class: "bcs-choice__text" }, [
+          el("span", { class: "bcs-choice__label", text: o.label }),
+          o.description ? el("span", { class: "bcs-choice__desc", text: o.description }) : null,
+        ]),
+        el("span", { class: "bcs-choice__tick", "aria-hidden": "true" }, [BC.ui.icon("check")]),
+      ]);
+      b.addEventListener("click", () => { paint(o.value); set(o.value); });
+      return b;
+    });
+    root.append(...cards);
+    root.addEventListener("keydown", (e) => {
+      if (!["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"].includes(e.key)) return;
+      const i = cards.findIndex((b) => b.getAttribute("aria-checked") === "true");
+      const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : cards.length - 1;
+      const n = cards[(i + step) % cards.length];
+      e.preventDefault(); n.focus(); n.click();
+    });
+    function paint(v) {
+      for (const b of cards) {
+        const on = b.dataset.value === String(v);
+        b.setAttribute("aria-checked", on ? "true" : "false");
+        b.tabIndex = on ? 0 : -1;
+      }
+    }
+    paint(get());
+    bind(root, () => paint(get()));
+    return root;
   };
 
-  // Drag-sortable list. items: [{id, label, ...}]. onChange(orderedIds).
-  C.sortable = function ({ items, render, onChange, itemClass }) {
-    const list = h("ul.bc-sortable", null);
+  // Toggle chips over an object of on/off flags. A missing key counts as on, so a
+  // kind added later shows up by default.
+  // options: [{ key, label, icon }]; get() -> { key: bool }; set(nextObject)
+  C.chips = function ({ get, set, options, ariaLabel }) {
+    const root = el("div", { class: "bcs-chips bcs-wide", role: "group", "aria-label": ariaLabel || "" });
+    const btns = (options || []).map((o) => {
+      const b = el("button", { type: "button", class: "bcs-chipbtn", "aria-pressed": "true", "data-key": o.key }, [
+        el("span", { class: "bcs-chipbtn__check", "aria-hidden": "true" }, [BC.ui.icon("check")]),
+        o.icon ? BC.ui.icon(o.icon) : null,
+        el("span", { text: o.label }),
+      ]);
+      b.addEventListener("click", () => {
+        const cur = Object.assign({}, get() || {});
+        cur[o.key] = cur[o.key] === false;
+        set(cur);
+        paint();
+      });
+      return b;
+    });
+    root.append(...btns);
+    function paint() {
+      const cur = get() || {};
+      for (const b of btns) {
+        const on = cur[b.dataset.key] !== false ? "true" : "false";
+        if (b.getAttribute("aria-pressed") !== on) b.setAttribute("aria-pressed", on);
+      }
+    }
+    paint();
+    bind(root, paint);
+    return root;
+  };
+
+  C.button = function ({ label, onClick, variant, icon, size }) {
+    return BC.ui.button(label, { variant, icon, size, onClick });
+  };
+
+  // Drag-sortable list. items: [{id, ...}]. onChange(orderedIds).
+  C.sortable = function ({ items, render, onChange }) {
+    const list = el("ul", { class: "bcs-sortable" });
     items.forEach((it) => {
-      const li = el("li", { class: "bc-sortable-item " + (itemClass || ""), draggable: "true", "data-id": String(it.id) });
-      li.appendChild(h("span.bc-drag", null, "⋮⋮"));
-      li.appendChild(render(it));
+      const li = el("li", { class: "bcs-sortable__item", draggable: "true", "data-id": String(it.id) }, [
+        el("span", { class: "bcs-sortable__grip", title: "Drag to reorder" }, [BC.ui.icon("grip")]),
+        render(it),
+      ]);
       list.appendChild(li);
     });
-    let dragEl = null;
+    // Events are stopped here: on the dashboard, Canvas's own drag-and-drop library
+    // listens on window and marks every drag it doesn't own as undroppable, so
+    // "drop" never fired and a new order was shown but never saved. The order is
+    // also saved on dragend, which fires even if a drop is refused.
+    let dragEl = null, startOrder = "";
+    const order = () => Array.from(list.children).map((li) => li.getAttribute("data-id"));
     list.addEventListener("dragstart", (e) => {
-      const li = e.target.closest(".bc-sortable-item");
+      const li = e.target.closest && e.target.closest(".bcs-sortable__item");
       if (!li) return;
-      dragEl = li; li.classList.add("bc-dragging");
+      e.stopPropagation();
+      dragEl = li; li.classList.add("bcs-dragging");
+      startOrder = order().join(",");
       e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", li.getAttribute("data-id") || "");
     });
-    list.addEventListener("dragend", () => { if (dragEl) dragEl.classList.remove("bc-dragging"); dragEl = null; });
+    list.addEventListener("dragend", (e) => {
+      e.stopPropagation();
+      if (dragEl) dragEl.classList.remove("bcs-dragging");
+      dragEl = null;
+      if (order().join(",") !== startOrder) onChange(order());
+      startOrder = order().join(",");
+    });
     list.addEventListener("dragover", (e) => {
+      if (!dragEl) return;
       e.preventDefault();
-      const over = e.target.closest(".bc-sortable-item");
-      if (!over || over === dragEl || !dragEl) return;
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = "move";
+      const over = e.target.closest && e.target.closest(".bcs-sortable__item");
+      if (!over || over === dragEl) return;
       const rect = over.getBoundingClientRect();
       const before = (e.clientY - rect.top) < rect.height / 2;
       list.insertBefore(dragEl, before ? over : over.nextSibling);
     });
-    list.addEventListener("drop", () => {
-      const ids = Array.from(list.children).map((li) => li.getAttribute("data-id"));
-      onChange(ids);
+    list.addEventListener("drop", (e) => {
+      if (!dragEl) return;
+      e.preventDefault();
+      e.stopPropagation();
     });
     return list;
   };
 
   // Chip-style tag input.
   C.tags = function ({ get, set, placeholder }) {
-    const wrap = h("div.bc-tags", null);
-    const chips = h("div.bc-chips", null);
-    const inp = el("input", { type: "text", class: "bc-tags-inp", placeholder: placeholder || "add tag…" });
+    const wrap = el("div", { class: "bcs-tags" });
+    const chips = el("div", { class: "bcs-tags__chips" });
+    const inp = BC.ui.input({ size: "sm", placeholder: placeholder || "Add a tag…", ariaLabel: placeholder || "Add a tag" });
+    inp.classList.add("bcs-tags__input");
     function refresh() {
-      wrap.dataset.bcSig = (get() || []).join(" ");
-      chips.innerHTML = "";
-      for (const t of (get() || [])) {
-        const chip = h("span.bc-chip", null, [t, h("button.bc-chip-x", { type: "button", onclick: () => { set((get() || []).filter((x) => x !== t)); refresh(); } }, "×")]);
-        chips.appendChild(chip);
-      }
+      wrap.dataset.bcSig = (get() || []).join("\n");
+      chips.replaceChildren(...(get() || []).map((t) => BC.ui.chip(t, {
+        onRemove: () => { set((get() || []).filter((x) => x !== t)); refresh(); },
+      })));
     }
     inp.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === ",") {
@@ -258,65 +391,80 @@
       }
     });
     refresh();
-    wrap.appendChild(chips); wrap.appendChild(inp);
-    bind(wrap, () => { if (wrap.dataset.bcSig !== (get() || []).join(" ")) refresh(); });
+    wrap.append(chips, inp);
+    bind(wrap, () => { if (wrap.dataset.bcSig !== (get() || []).join("\n")) refresh(); });
     return wrap;
   };
 
   // Custom-link editor.
   C.links = function ({ get, set }) {
-    const wrap = h("div.bc-links", null);
+    const wrap = el("div", { class: "bcs-links" });
     function render() {
       wrap.dataset.bcSig = String((get() || []).length);
-      wrap.innerHTML = "";
-      (get() || []).forEach((lnk, i) => {
-        const row = h("div.bc-link-row", null, [
-          el("input", { type: "text", class: "bc-text", placeholder: "Label", value: lnk.label || "", oninput: (e) => { const arr = (get() || []).slice(); arr[i] = { ...arr[i], label: e.target.value }; set(arr); } }),
-          el("input", { type: "url", class: "bc-text", placeholder: "https://…", value: lnk.url || "", oninput: (e) => { const arr = (get() || []).slice(); arr[i] = { ...arr[i], url: e.target.value }; set(arr); } }),
-          h("label.bc-mini-check", null, [
-            el("input", { type: "checkbox", checked: !!lnk.newTab, onchange: (e) => { const arr = (get() || []).slice(); arr[i] = { ...arr[i], newTab: e.target.checked }; set(arr); } }),
-            "New tab",
-          ]),
-          el("button", { class: "bc-btn bc-btn-ghost", type: "button", onclick: () => { const arr = (get() || []).slice(); arr.splice(i, 1); set(arr); render(); } }, "Remove"),
-        ]);
-        wrap.appendChild(row);
+      const rows = (get() || []).map((lnk, i) => {
+        const label = BC.ui.input({ size: "sm", placeholder: "Label", ariaLabel: "Link label", value: lnk.label || "" });
+        label.addEventListener("input", () => { const arr = (get() || []).slice(); arr[i] = { ...arr[i], label: label.value }; set(arr); });
+        const url = BC.ui.input({ size: "sm", type: "url", placeholder: "https://…", ariaLabel: "Link URL", value: lnk.url || "" });
+        url.addEventListener("input", () => { const arr = (get() || []).slice(); arr[i] = { ...arr[i], url: url.value }; set(arr); });
+        const tab = BC.ui.checkbox({ checked: !!lnk.newTab, label: "New tab", onChange: (v) => { const arr = (get() || []).slice(); arr[i] = { ...arr[i], newTab: v }; set(arr); } });
+        const del = BC.ui.iconButton("trash", { label: "Remove link", size: "sm", onClick: () => { const arr = (get() || []).slice(); arr.splice(i, 1); set(arr); render(); } });
+        return el("div", { class: "bcs-links__row" }, [label, url, tab, del]);
       });
-      const add = el("button", { class: "bc-btn", type: "button", onclick: () => { set([...(get() || []), { label: "New link", url: "", newTab: true }]); render(); } }, "+ Add link");
-      wrap.appendChild(add);
+      const add = BC.ui.button("Add link", { icon: "plus", size: "sm", onClick: () => { set([...(get() || []), { label: "", url: "", newTab: true }]); render(); } });
+      wrap.replaceChildren(...rows, el("div", null, [add]));
     }
     render();
-    // Key on LENGTH only. Keying on content would rebuild the row while the user
-    // is typing a URL into it and destroy the caret.
+    // Key on LENGTH only: keying on content would rebuild the row mid-typing.
     bind(wrap, () => { if (wrap.dataset.bcSig !== String((get() || []).length)) render(); });
     return wrap;
   };
 
   // Keybinding recorder.
-  C.keybind = function ({ get, set }) {
-    const btn = el("button", { class: "bc-key", type: "button" });
+  const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "OS", "AltGraph", "Hyper", "Super"]);
+  C.keybind = function ({ get, set, ariaLabel }) {
+    const btn = el("button", { class: "bcs-key", type: "button", "aria-label": (ariaLabel || "Shortcut") + ": click to record" });
     let recording = false;
     let chordBuf = "";
     let chordTO = null;
-    function refresh() { btn.textContent = recording ? "Press keys…" : (BC.shortcuts.prettify(get() || "") || "unset"); }
+    function refresh() {
+      btn.classList.toggle("bcs-key--recording", recording);
+      if (recording) { btn.textContent = "Press keys…"; return; }
+      const combo = get() || "";
+      if (!combo) { btn.textContent = "Not set"; return; }
+      // "Mod+Shift+K" -> ⌘ ⇧ K as separate keycaps; chords ("g d") keep their space.
+      btn.replaceChildren(...combo.split(" ").flatMap((part, i) => {
+        const caps = BC.shortcuts.prettify(part).split("+").map((k) => el("kbd", { class: "bc-kbd", text: k }));
+        return i ? [el("span", { class: "bcs-key__then", text: "then" }), ...caps] : caps;
+      }));
+    }
     refresh();
     btn.addEventListener("click", () => { recording = true; refresh(); btn.focus(); });
-    btn.addEventListener("blur", () => { recording = false; chordBuf = ""; refresh(); });
+    // Cancel a pending chord too: its timer used to fire after the blur had already
+    // emptied chordBuf, saving "" and silently unbinding the shortcut.
+    btn.addEventListener("blur", () => { recording = false; chordBuf = ""; clearTimeout(chordTO); refresh(); });
     btn.addEventListener("keydown", (e) => {
       if (!recording) return;
-      if (e.key === "Escape") { recording = false; refresh(); btn.blur(); return; }
+      // Escape cancels recording only — it must not also close the settings panel.
+      if (e.key === "Escape") { e.stopPropagation(); recording = false; refresh(); btn.blur(); return; }
       e.preventDefault();
+      // A modifier on its own is the START of a combo, not a combo.
+      if (MODIFIER_KEYS.has(e.key)) return;
       const parts = [];
       if (e.metaKey || e.ctrlKey) parts.push("Mod");
       if (e.shiftKey) parts.push("Shift");
       if (e.altKey) parts.push("Alt");
-      if (e.key.length === 1) parts.push(e.key.toUpperCase());
+      // With Alt held, macOS reports the Option-character (⌥T is "†"); record the
+      // physical letter so the binding reads as Alt+T and matches on every OS.
+      const physical = e.altKey && /^(Key[A-Z]|Digit[0-9])$/.test(e.code || "") ? e.code.slice(-1) : null;
+      if (physical) parts.push(physical);
+      else if (e.key.length === 1) parts.push(e.key.toUpperCase());
       else parts.push(e.key);
       const combo = parts.join("+");
       if (chordBuf) {
         set(chordBuf + " " + (e.key || "").toLowerCase());
         chordBuf = ""; clearTimeout(chordTO); recording = false; refresh(); btn.blur();
       } else if (parts.length === 1 && e.key && e.key.length === 1) {
-        // Start chord if plain letter
+        // A plain letter may be the first key of a chord ("g" then "d").
         chordBuf = (e.key || "").toLowerCase();
         chordTO = setTimeout(() => { set(chordBuf); chordBuf = ""; recording = false; refresh(); btn.blur(); }, 800);
       } else {
@@ -325,5 +473,17 @@
     });
     bind(btn, () => { if (!recording) refresh(); });
     return btn;
+  };
+
+  // A list entry with a title, a meta line and trailing actions.
+  C.item = function ({ title, meta, leading, actions }) {
+    return el("div", { class: "bcs-item" }, [
+      leading || null,
+      el("div", { class: "bcs-item__text" }, [
+        el("div", { class: "bcs-item__title bc-truncate", text: title }),
+        meta ? el("div", { class: "bcs-item__meta bc-truncate", text: meta }) : null,
+      ]),
+      actions ? el("div", { class: "bcs-item__actions" }, [].concat(actions)) : null,
+    ]);
   };
 })();

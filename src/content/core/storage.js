@@ -18,6 +18,70 @@
   function area() { return chrome.storage && chrome.storage.local; }
   function emptyLocal() { return { notes: {}, drafts: {}, cache: {} }; }
 
+  // Change events can describe an older write than the value now in storage.
+  // Re-read the committed value instead of identifying our echoes by their JSON:
+  // another tab can write between two of ours, or write the same JSON later.
+  const revisions = { [KEY]: 0, [LOCAL_KEY]: 0 };
+  const writing = { [KEY]: 0, [LOCAL_KEY]: 0 };
+  const reads = { [KEY]: 0, [LOCAL_KEY]: 0 };
+  let savedSettings = null;
+  const refreshKeys = new Set();
+  let refreshQueued = false;
+
+  function refresh(key) {
+    refreshKeys.add(key);
+    if (refreshQueued) return;
+    refreshQueued = true;
+    queueMicrotask(() => {
+      refreshQueued = false;
+      const keys = [...refreshKeys];
+      refreshKeys.clear();
+      const a = area();
+      if (!a) return;
+      const before = { ...revisions };
+      const sequence = {};
+      for (const k of keys) sequence[k] = ++reads[k];
+      a.get(keys, (res) => {
+        if (chrome.runtime && chrome.runtime.lastError) return;
+        for (const k of keys) {
+          // A local edit after this read started is newer, and a pending write
+          // will request another read when it finishes.
+          if (before[k] !== revisions[k] || sequence[k] !== reads[k] || writing[k]) continue;
+          if (k === KEY) {
+            // The drawer previews unsaved edits immediately. A storage read must
+            // not replace that preview with its previous saved snapshot.
+            if (current && JSON.stringify(current) !== savedSettings) continue;
+            current = BC.mergeDefaults(res && res[KEY]);
+            savedSettings = JSON.stringify(current);
+            for (const cb of listeners) BC.util.guard(() => cb(current), "storage");
+          } else {
+            local = BC.cleanData((res && res[LOCAL_KEY]) || emptyLocal());
+            for (const cb of localListeners) BC.util.guard(() => cb(local), "local storage");
+          }
+        }
+      });
+    });
+  }
+
+  function writeValues(values) {
+    return new Promise((resolve, reject) => {
+      const a = area();
+      if (!a) return resolve();
+      const keys = Object.keys(values);
+      for (const key of keys) writing[key]++;
+      const done = (error) => {
+        for (const key of keys) { writing[key]--; refresh(key); }
+        if (error) reject(new Error(error.message || String(error)));
+        else resolve();
+      };
+      try {
+        a.set(values, () => done(chrome.runtime && chrome.runtime.lastError));
+      } catch (e) { done(e); }
+    });
+  }
+
+  function write(key, value) { return writeValues({ [key]: value }); }
+
   const storage = (BC.storage = {
     get current() { return current; },
     get local() { return local; },
@@ -25,12 +89,16 @@
     load() {
       if (loadPromise) return loadPromise;
       loadPromise = new Promise((resolve) => {
-        if (!area()) { current = BC.cloneDefaults(); local = local || emptyLocal(); return resolve(current); }
+        if (!area()) {
+          current = BC.cloneDefaults(); savedSettings = JSON.stringify(current);
+          local = local || emptyLocal(); return resolve(current);
+        }
         area().get([KEY, LOCAL_KEY], (res) => {
           const stored = res && res[KEY];
           const carry = {};
           current = BC.mergeDefaults(stored, carry);
-          local = (res && res[LOCAL_KEY]) || emptyLocal();
+          savedSettings = JSON.stringify(current);
+          local = BC.cleanData((res && res[LOCAL_KEY]) || emptyLocal());
           if (carry.gradeHistory) {
             local.gradeHistory = Object.assign({}, carry.gradeHistory, local.gradeHistory || {});
           }
@@ -41,7 +109,9 @@
             for (const k of Object.keys(carry.local)) if (local[k] === undefined) local[k] = carry.local[k];
           }
           if (stored && (stored.version || 1) < BC.SETTINGS_VERSION) {
-            area().set({ [KEY]: current, [LOCAL_KEY]: local });
+            revisions[KEY]++; revisions[LOCAL_KEY]++;
+            writeValues({ [KEY]: current, [LOCAL_KEY]: local })
+              .catch((e) => BC.util.warn("storage migration", e));
           }
           resolve(current);
         });
@@ -64,22 +134,21 @@
     // Adopt an in-memory settings object without waiting for a storage
     // round-trip, so the settings drawer can preview a change in the same frame.
     // `current` is a getter, so assigning BC.storage.current throws in strict mode.
-    adopt(settings) { if (settings) current = settings; },
+    adopt(settings) { if (settings) { current = settings; revisions[KEY]++; } },
 
-    save(settings) {
+    // `json` is an optional pre-serialized copy, so update() doesn't stringify the
+    // same object twice.
+    save(settings, json) {
       current = settings;
-      return new Promise((resolve) => {
-        if (!area()) return resolve();
-        area().set({ [KEY]: settings }, () => resolve());
-      });
+      savedSettings = json || JSON.stringify(settings);
+      revisions[KEY]++;
+      return write(KEY, settings);
     },
 
     saveLocal(data) {
       local = data;
-      return new Promise((resolve) => {
-        if (!area()) return resolve();
-        area().set({ [LOCAL_KEY]: data }, () => resolve());
-      });
+      revisions[LOCAL_KEY]++;
+      return write(LOCAL_KEY, data);
     },
 
     async update(mutator) {
@@ -87,8 +156,9 @@
       const before = JSON.stringify(s);
       const draft = JSON.parse(before);
       mutator(draft);
-      if (JSON.stringify(draft) === before) return s;
-      await storage.save(draft);
+      const after = JSON.stringify(draft);
+      if (after === before) return s;
+      await storage.save(draft, after);
       return draft;
     },
 
@@ -97,7 +167,8 @@
       const before = JSON.stringify(s);
       const draft = JSON.parse(before);
       mutator(draft);
-      if (JSON.stringify(draft) === before) return s;
+      const after = JSON.stringify(draft);
+      if (after === before) return s;
       await storage.saveLocal(draft);
       return draft;
     },
@@ -141,14 +212,8 @@
   if (chrome.storage && chrome.storage.onChanged) {
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== "local") return;
-      if (changes[KEY]) {
-        current = BC.mergeDefaults(changes[KEY].newValue);
-        for (const cb of listeners) BC.util.guard(() => cb(current), "storage");
-      }
-      if (changes[LOCAL_KEY]) {
-        local = changes[LOCAL_KEY].newValue || emptyLocal();
-        for (const cb of localListeners) BC.util.guard(() => cb(local), "local storage");
-      }
+      if (changes[KEY]) refresh(KEY);
+      if (changes[LOCAL_KEY]) refresh(LOCAL_KEY);
     });
   }
 })();

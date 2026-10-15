@@ -133,7 +133,7 @@
   }
 
   function render(courseId, settings) {
-    const target = document.querySelector("#grades_summary, #student-grades-right-content, #GradeSummarySelectMenuGroup, #main");
+    const target = BC.util.firstOf(["#grades_summary", "#student-grades-right-content", "#GradeSummarySelectMenuGroup", "#main"]);
     if (!target) return;
     BC.injector.setStyle("bc-grade-tools", CSS);
     const panel = BC.injector.ensureNode("bc-grade-tools", target.parentNode || target, () => {
@@ -157,7 +157,7 @@
 
       // History plus a virtual point for today (the write above lands async).
       let hist = ((BC.storage.local && BC.storage.local.gradeHistory) || {})[courseId] || [];
-      const today = new Date().toISOString().slice(0, 10);
+      const today = BC.dt.ymd(new Date());
       if (total != null && !hist.some((e) => e.date === today)) {
         hist = hist.concat([{ date: today, score: +total.toFixed(3) }]);
       }
@@ -306,7 +306,7 @@
   }
 
   function renderRubric(courseId, assignmentId, settings) {
-    const host = document.querySelector("#right-side, #assignment_show, #content");
+    const host = BC.util.firstOf(["#right-side", "#assignment_show", "#content"]);
     if (!host) return;
     BC.injector.setStyle("bc-grade-tools", CSS);
     const panel = BC.injector.ensureNode("bc-rubric", host, () => {
@@ -340,14 +340,16 @@
   // caller is what makes the trend chart, dashboard sparklines and the Insights tab
   // actually accumulate data.
   BC.grades.recordScore = function (courseId, total) { recordHistory(String(courseId), total); };
+  // Days are LOCAL calendar days. toISOString() is UTC, so in the Americas the "day"
+  // rolled over in the late afternoon and an evening visit was filed under tomorrow.
   function recordHistory(courseId, total) {
-    const key = courseId + ":" + new Date().toISOString().slice(0, 10);
+    const today = BC.dt.ymd(new Date());
+    const key = courseId + ":" + today;
     if (total == null || historyRecorded.has(key)) return;
     historyRecorded.add(key);
     BC.storage.updateLocal((d) => {
       const gh = (d.gradeHistory = d.gradeHistory || {});
       const arr = gh[courseId] || [];
-      const today = new Date().toISOString().slice(0, 10);
       if (!arr.some((e) => e.date === today)) arr.push({ date: today, score: +total.toFixed(3) });
       gh[courseId] = arr.slice(-90);
     });
@@ -359,25 +361,35 @@
     const onGrades = ctx.page === "grades" && !!ctx.courseId &&
       settings.grades.panelEnabled;
 
+    syncAutoRefresh(onGrades, settings, ctx);
+
     if (!onAssignment) BC.injector.removeNode("bc-rubric");
     if (!onGrades) BC.injector.removeNode("bc-grade-tools");
     if (!onAssignment && !onGrades) { BC.injector.setStyle("bc-grade-tools", ""); return; }
 
     if (onGrades) render(ctx.courseId, settings);
     if (onAssignment) renderRubric(ctx.courseId, m[1], settings);
+  }
 
-    // Auto-refresh was a headline README claim wired to nothing. No page reload
-    // needed — invalidate the cached groups and re-render the existing panel.
-    // pageBag means the interval dies on SPA navigation for free, and render()
-    // already declines to rebuild while the user is typing in the panel.
-    if (onGrades && settings.grades.autoRefresh) {
-      const bag = BC.lifecycle.pageBag("grades");
-      const mins = Math.max(1, settings.grades.autoRefreshMin | 0);
-      bag.once("auto:" + mins, () => bag.interval(() => {
-        BC.cache.invalidate("LIST " + location.origin + "/api/v1/courses/" + ctx.courseId + "/assignment_groups");
-        render(ctx.courseId, BC.storage.current);
-      }, mins * 60000));
-    }
+  // Auto-refresh was a headline README claim wired to nothing. No page reload
+  // needed — invalidate the cached groups and re-render the existing panel.
+  // pageBag means the interval dies on SPA navigation for free, and render()
+  // already declines to rebuild while the user is typing in the panel. Switching it
+  // off, or changing the interval, now replaces the timer: before, the first one
+  // kept firing until the page was left, and a new interval stacked on top of it.
+  function syncAutoRefresh(onGrades, settings, ctx) {
+    const bag = BC.lifecycle.pageBag("grades");
+    const want = onGrades && settings.grades.autoRefresh
+      ? "auto:" + ctx.courseId + ":" + Math.max(1, settings.grades.autoRefreshMin | 0) : "";
+    if (want ? bag.has(want) : !bag.has("armed")) return;
+    bag.clear();
+    if (!want) return;
+    const mins = Math.max(1, settings.grades.autoRefreshMin | 0);
+    bag.once("armed", () => {});
+    bag.once(want, () => bag.interval(() => {
+      BC.cache.invalidate("LIST " + location.origin + "/api/v1/courses/" + ctx.courseId + "/assignment_groups");
+      render(ctx.courseId, BC.storage.current);
+    }, mins * 60000));
   }
 
   BC.registry.register({ id: "grades", styles: ["bc-grade-tools"], nodes: ["bc-grade-tools", "bc-rubric"], apply });

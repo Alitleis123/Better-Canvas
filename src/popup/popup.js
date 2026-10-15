@@ -58,7 +58,16 @@
   $("open-palette").addEventListener("click", async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab && tab.id != null) {
-      chrome.tabs.sendMessage(tab.id, { type: "bc:openPalette" }, () => window.close());
+      chrome.tabs.sendMessage(tab.id, { type: "bc:openPalette" }, (resp) => {
+        // Not a Canvas tab (or the page hasn't loaded us): say so instead of closing
+        // silently as though it had worked.
+        if (chrome.runtime.lastError || !resp || !resp.ok) {
+          const box = $("site-status");
+          if (box) box.textContent = "The palette works on Canvas pages — open one and try again.";
+          return;
+        }
+        window.close();
+      });
     }
   });
 

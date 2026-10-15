@@ -74,7 +74,7 @@
   };
 
   BC.defaults = {
-    version: 4,
+    version: 5,
     enabled: true,
     activeProfile: "default",
     firstRun: true,
@@ -106,13 +106,28 @@
 
     todo: {
       mode: "default",             // default | clean | custom
-      view: "list",                // list | day | week | kanban | timeblock
-      rangeDays: 7,                // 3 | 7 | 14 | 30 | custom
+      view: "list",                // list | kanban | timeblock
+      rangeDays: 7,                // 3 | 7 | 14 | 30
+      startOn: "today",            // today | sunday | monday — where the window begins
       showCompleted: false,
+      showOverdue: true,           // unfinished work from the last two weeks, on top
+      starredFirst: true,
+      collapseAfter: 0,            // 0 = show every item; else "Show N more" per group
+      compact: false,              // one-line rows
+      showViewSwitch: false,       // List / Board / Day buttons on the list itself
+      // Which kinds of planner item to list. Unknown kinds always show.
+      types: {
+        assignment: true, quiz: true, discussion_topic: true, announcement: true,
+        wiki_page: true, calendar_event: true, planner_note: true,
+      },
+      rowDetails: { course: true, time: true, points: true, icon: true },
       accent: "",
       allowNewTask: true,
+      newTaskDay: "today",         // today | tomorrow
+      celebrate: true,             // a small burst when the window is cleared
       groupBy: "day",              // day | course | priority | tag | none
-      ring: true,                  // weekly progress ring
+      ring: true,                  // show progress at all
+      progressStyle: "ring",       // ring | bar
       streaks: {
         enabled: true,
         graceDays: 2,
@@ -176,6 +191,7 @@
         pattern: "none",           // none | dots | grid | diagonal | topography
         blur: 0,
         opacity: 100,
+        when: "always",            // always | dark | light — which mode shows it
       },
       customCss: "",
     },
@@ -247,8 +263,9 @@
       autoSaveDrafts: true,
       quizDraftSaver: true,
       wordCount: true,
-      printFriendly: true,
-      copyUrlButton: true,
+      quickActions: true,          // the round quick-actions button, bottom right
+      printFriendly: true,         // …its "Print this page" item
+      copyUrlButton: true,         // …its "Copy link" item
       readingProgress: true,
     },
 
@@ -270,8 +287,10 @@
         commandPalette: "Mod+K",
         settings: "Mod+Shift+S",
         toggleDark: "Mod+Shift+D",
-        quickTask: "Mod+Shift+T",
-        quickNote: "Mod+Shift+N",
+        // Not Mod+Shift+T / Mod+Shift+N: Chrome and Firefox reserve those (reopen
+        // tab, incognito/private window) and never deliver them to the page.
+        quickTask: "Alt+Shift+T",
+        quickNote: "Alt+Shift+N",
         gotoDashboard: "g d",
         gotoGrades: "g g",
         gotoInbox: "g i",
@@ -298,9 +317,23 @@
     return JSON.parse(JSON.stringify(BC.defaults));
   };
 
+  // Backups and shared themes are data, including objects nested inside arrays.
+  // Never allow imported keys to change an object's prototype during a merge.
+  BC.cleanData = function cleanData(value) {
+    if (Array.isArray(value)) return value.map(cleanData);
+    if (!value || typeof value !== "object") return value;
+    const out = {};
+    for (const k of Object.keys(value)) {
+      if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
+      out[k] = cleanData(value[k]);
+    }
+    return out;
+  };
+
   BC.mergeDefaults = function (stored, carry) {
     const base = BC.cloneDefaults();
     if (!stored || typeof stored !== "object") return base;
+    stored = BC.cleanData(stored);
     const merge = (target, src) => {
       for (const k of Object.keys(src)) {
         const sv = src[k];
@@ -312,10 +345,14 @@
       return target;
     };
     const merged = merge(base, stored);
+    // The version must come from what was STORED. Merging onto the defaults first
+    // meant an object without a version field (an old bare export, a hand-edited
+    // file) inherited the current schema version and skipped every migration.
+    merged.version = typeof stored.version === "number" ? stored.version : 2;
     return BC.migrate(merged, carry);
   };
 
-  BC.SETTINGS_VERSION = 4;
+  BC.SETTINGS_VERSION = 5;
 
   // Each entry upgrades settings from (v-1) to v. `carry` collects data that
   // must move to the bcLocal store — storage.load() persists it there.
@@ -379,6 +416,15 @@
 
       // Sanitize a stored value whose options no longer exist.
       if (s.todo && ["list", "kanban", "timeblock"].indexOf(s.todo.view) === -1) s.todo.view = "list";
+    },
+
+    5(s) {
+      // The old quick-task / quick-note defaults were browser-reserved combos that
+      // could never fire. Move only users still on them; a custom binding is theirs.
+      const b = s.shortcuts && s.shortcuts.bindings;
+      if (!b) return;
+      if (b.quickTask === "Mod+Shift+T") b.quickTask = "Alt+Shift+T";
+      if (b.quickNote === "Mod+Shift+N") b.quickNote = "Alt+Shift+N";
     },
   };
 

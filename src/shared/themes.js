@@ -4,16 +4,16 @@
   const BC = (globalThis.BC = globalThis.BC || {});
 
   BC.DARK_TONES = {
-    neutral:  { bg: "#1a1d24", label: "Neutral" },
-    slate:    { bg: "#1c2130", label: "Slate (cool)" },
-    black:    { bg: "#0d0f14", label: "Midnight" },
+    neutral:  { bg: "#111113", label: "Neutral" },
+    slate:    { bg: "#141821", label: "Slate (cool)" },
+    black:    { bg: "#09090b", label: "Midnight" },
     nord:     { bg: "#2e3440", label: "Nord" },
     dracula:  { bg: "#282a36", label: "Dracula" },
     solarized:{ bg: "#002b36", label: "Solarized Dark" },
   };
 
   BC.LIGHT_PRESETS = {
-    default:   { bg: "#f6f7fb", accent: "",        label: "Default" },
+    default:   { bg: "#fafafa", accent: "",        label: "Default" },
     rose:      { bg: "#fdf2f7", accent: "#c2185b", label: "Rose" },
     forest:    { bg: "#f0f7ee", accent: "#2e7d32", label: "Forest" },
     ocean:     { bg: "#eff7fb", accent: "#0277bd", label: "Ocean" },

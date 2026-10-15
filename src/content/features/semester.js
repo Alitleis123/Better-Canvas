@@ -52,7 +52,7 @@
       const weeks = Math.max(week, Math.round((e - s) / (7 * DAY)));
       const daysLeft = Math.max(0, Math.ceil((e - now) / DAY));
 
-      const host = document.querySelector("#dashboard_header_container, #content") || document.body;
+      const host = BC.util.firstOf(["#dashboard_header_container", "#content"]) || document.body;
       const node = BC.injector.ensureNode("bc-semester", host, () => {
         const div = document.createElement("div");
         div.className = "bc-semester";

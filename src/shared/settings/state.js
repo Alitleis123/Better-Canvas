@@ -44,6 +44,11 @@
     let dirty = false;
     let retry = 0;
     let unsubAdapter = null;
+    // Snapshots handed to adapter.save() whose storage echo hasn't come back yet.
+    // An echo is always OLDER than `state` once the user has kept editing, and it
+    // used to be adopted as a foreign change: mid-drag a slider snapped back to the
+    // value from a moment ago, and the trailing save then persisted that stale value.
+    const pendingEchoes = [];
 
     function notify(kind) {
       for (const cb of listeners) BC.util.guard(() => cb(state, kind || "value"), "state listener");
@@ -60,6 +65,8 @@
     // write-rate quota (that's storage.sync).
     const flushSave = BC.util.throttle(() => {
       const snapshot = clone(state);
+      pendingEchoes.push(snapshot);
+      if (pendingEchoes.length > 20) pendingEchoes.shift();
       Promise.resolve(adapter.save(snapshot))
         .then(() => { dirty = false; retry = 0; })
         .catch((e) => {
@@ -122,7 +129,11 @@
         // Our own write echoes back through here; suppressing it keeps the echo
         // out of the undo stack, where it used to masquerade as a foreign edit
         // and make Undo appear to do nothing.
-        if (!incoming || BC.util.deepEqual(incoming, state)) return;
+        if (!incoming) return;
+        const own = pendingEchoes.findIndex((p) => BC.util.deepEqual(p, incoming));
+        // Echoes arrive in save order, so everything queued before this one is done.
+        if (own !== -1) { pendingEchoes.splice(0, own + 1); return; }
+        if (BC.util.deepEqual(incoming, state)) return;
         overwrite(state, incoming);
         notify("structural");
       });
@@ -143,18 +154,23 @@
         listeners.clear();
       },
       exportJSON() { return JSON.stringify(state, null, 2); },
+      // Returns the migration carry-over (always an object, so truthy) or false.
+      // Old backups kept planner metadata and grade history INSIDE settings; the
+      // migrations lift that out into `carry`, and the caller has to land it in
+      // bcLocal — discarding it, as this used to, dropped that data on import.
       importJSON(text) {
         try {
           const parsed = JSON.parse(text);
-          if (!parsed || typeof parsed !== "object") throw new Error("invalid");
-          swap(BC.mergeDefaults(parsed));
-          return true;
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid");
+          const carry = {};
+          swap(BC.mergeDefaults(parsed, carry));
+          return carry;
         } catch (e) { return false; }
       },
       reset() { swap(BC.cloneDefaults()); },
       applyPreset(preset) {
         set((d) => {
-          const src = preset.settings || preset;
+          const src = BC.cleanData(preset.settings || preset);
           const deep = (t, s) => {
             for (const k of Object.keys(s)) {
               const v = s[k];

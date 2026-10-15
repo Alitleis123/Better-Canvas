@@ -15,6 +15,8 @@ const CONTENT_JS = [
   "src/content/core/detect.js",
   "src/content/core/injector.js",
   "src/content/core/lifecycle.js",
+  "src/content/core/icons.js",
+  "src/content/core/darkengine.js",
   "src/content/core/ui.js",
   "src/content/core/cache.js",
   "src/content/core/api.js",
@@ -58,20 +60,33 @@ const FRAME_JS = [
   "src/content/core/datetime.js",
   "src/content/core/color.js",
   "src/shared/tokens.js",
+  "src/content/core/darkengine.js",
   "src/content/frame.js",
 ];
 
 const DYNAMIC_ID = "bc-dynamic";
 const DYNAMIC_FRAME_ID = "bc-dynamic-frame";
+const MENU_ID = "bc-add-task";
+const BASE_PATTERNS = ["*://*.instructure.com/*"];
 
 function customOrigins(origins) {
   return (origins || []).filter((o) => !/instructure\.com/.test(o));
+}
+
+// The "add this as a task" menu was limited to *.instructure.com, so it never
+// appeared on a custom school domain even after access was granted there.
+function syncMenuPatterns(matches) {
+  try {
+    chrome.contextMenus.update(MENU_ID, { documentUrlPatterns: BASE_PATTERNS.concat(matches) },
+      () => void chrome.runtime.lastError);
+  } catch (_) {}
 }
 
 async function syncRegistration() {
   try {
     const perms = await chrome.permissions.getAll();
     const matches = customOrigins(perms.origins);
+    syncMenuPatterns(matches);
     const ids = [DYNAMIC_ID, DYNAMIC_FRAME_ID];
     const existing = await chrome.scripting.getRegisteredContentScripts({ ids });
     if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: existing.map((s) => s.id) });
@@ -90,6 +105,39 @@ async function syncRegistration() {
 }
 
 chrome.runtime.onInstalled.addListener(syncRegistration);
+
+// Tabs that were open during an update keep running the old copy (cut off from the
+// extension) until they're refreshed. Inject the new one; it asks the old one to
+// step aside, so the tab switches over without a reload.
+async function reinjectOpenTabs(details) {
+  if (!details || (details.reason !== "update" && details.reason !== "install")) return;
+  try {
+    const perms = await chrome.permissions.getAll();
+    const custom = (perms.origins || []).filter((o) => !/instructure\.com/.test(o));
+    const tabs = await chrome.tabs.query({ url: ["*://*.instructure.com/*"].concat(custom) });
+    for (const t of tabs) {
+      if (t.discarded || !t.id) continue;
+      try {
+        // A copy from THIS install already answers; nothing to do.
+        const alive = await new Promise((res) => {
+          try { chrome.tabs.sendMessage(t.id, { type: "bc:ping" }, (r) => { void chrome.runtime.lastError; res(!!r); }); }
+          catch (_) { res(false); }
+        });
+        if (alive) continue;
+        // A copy from before the handover existed can't be asked to step aside, and
+        // two copies would fight over the same stylesheets — that tab needs a refresh.
+        const [probe] = await chrome.scripting.executeScript({ target: { tabId: t.id }, func: () => ({
+          old: !!document.querySelector("style[data-better-canvas]"),
+          handover: document.documentElement.hasAttribute("data-bc-handover"),
+        }) });
+        if (probe && probe.result && probe.result.old && !probe.result.handover) continue;
+        await chrome.scripting.executeScript({ target: { tabId: t.id }, files: CONTENT_JS });
+        await chrome.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: FRAME_JS });
+      } catch (_) { /* a tab mid-navigation or an error page; it'll load fresh anyway */ }
+    }
+  } catch (_) {}
+}
+chrome.runtime.onInstalled.addListener(reinjectOpenTabs);
 chrome.runtime.onStartup.addListener(syncRegistration);
 if (chrome.permissions && chrome.permissions.onAdded) chrome.permissions.onAdded.addListener(syncRegistration);
 if (chrome.permissions && chrome.permissions.onRemoved) chrome.permissions.onRemoved.addListener(syncRegistration);
@@ -98,6 +146,8 @@ if (chrome.permissions && chrome.permissions.onRemoved) chrome.permissions.onRem
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || !msg.type) return;
   if (msg.type === "bc:syncRegistration") { syncRegistration().then(() => sendResponse({ ok: true })); return true; }
+  // Content scripts can't open the options page themselves.
+  if (msg.type === "bc:openOptions") { chrome.runtime.openOptionsPage(); sendResponse({ ok: true }); return; }
   if (msg.type === "bc:setBadge") {
     try {
       const n = msg.count | 0;
@@ -112,14 +162,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 try {
   chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
-      id: "bc-add-task",
+      id: MENU_ID,
       title: "Better Canvas: add this as a task",
       contexts: ["page", "selection", "link"],
-      documentUrlPatterns: ["*://*.instructure.com/*"],
-    }, () => chrome.runtime.lastError);
+      documentUrlPatterns: BASE_PATTERNS,
+    }, () => {
+      void chrome.runtime.lastError;
+      // onInstalled fires syncRegistration too, but possibly before this create()
+      // lands — re-apply the custom-domain patterns once the item exists.
+      chrome.permissions.getAll().then((p) => syncMenuPatterns(customOrigins(p.origins)), () => {});
+    });
   });
   chrome.contextMenus.onClicked.addListener((info, tab) => {
-    if (info.menuItemId !== "bc-add-task" || !tab || tab.id == null) return;
-    chrome.tabs.sendMessage(tab.id, { type: "bc:addTaskFromContext", info });
+    if (info.menuItemId !== MENU_ID || !tab || tab.id == null) return;
+    // A callback, so a tab without the content script (a page still loading, or one
+    // opened before install) doesn't surface as an unhandled rejection.
+    chrome.tabs.sendMessage(tab.id, { type: "bc:addTaskFromContext", info }, () => void chrome.runtime.lastError);
   });
 } catch (_) {}
