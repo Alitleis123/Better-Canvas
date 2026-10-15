@@ -1,9 +1,9 @@
 # Better Canvas 3.1
 
-The most feature-complete browser extension for Instructure Canvas — free forever, local-only, no accounts, no telemetry.
+The most feature-complete browser extension for Instructure Canvas — free forever, settings stored locally, no accounts, no telemetry.
 
 - **Cross-browser.** Chrome (Manifest V3), Firefox, Zen.
-- **Same-origin only.** Every Canvas API call uses your existing session — nothing is sent off-domain.
+- **Canvas API calls stay on your school's domain** and use your existing session. Theme search queries go to Openverse, and theme images load directly from their publishers. Canvas grades and coursework are not sent to the theme library.
 - **No paywalls, no accounts.** Every feature ships free.
 
 ---
@@ -14,8 +14,9 @@ The most feature-complete browser extension for Instructure Canvas — free fore
 - Dark mode: Off / On / Auto (system) / Scheduled window.
 - **Dark mode inside iframes** — SpeedGrader submissions, New Quizzes, and other embedded Canvas frames.
 - **6 dark palettes** (Neutral, Slate, Midnight, Nord, Dracula, Solarized) + **6 light palettes** + custom-background derivation.
-- **12 built-in preset themes** with one-click apply.
-- **Theme creator** — save your current look as a named custom theme, export/import as JSON, share without accounts.
+- **40 featured themes** across Nature, Space, City, Art, and Minimal, with image previews and searchable categories. Four collections use different coordinated pictures across courses. Visual themes replace existing course-card pictures; the Default theme restores Canvas images.
+- **Explore online** — search the growing [Openverse image library](https://api.openverse.org/v1/), load more results, and apply a photo or artwork in light or dark mode. Apply one image or a set across courses; optionally use it as the page background. Selected online themes are saved locally with source and license credits. No API key needed. Requests are cached for ten minutes; Refresh fetches fresh results, and service outages/rate limits display a retry message.
+- **Theme creator** — save your current look, including card artwork, export/import as JSON, and share without accounts. Images require their publisher to be reachable; minimal themes work offline.
 - **Theme rotation** — cycle through selected themes daily or weekly.
 - Accent color, custom font stack, five font-size scales, line-height + letter-spacing sliders.
 - Density (Compact/Default/Spacious/Cozy), global corner-radius slider, rounded-vs-square UI toggle, sidebar-width control.
@@ -128,7 +129,7 @@ Three modes:
 
 1. Build the unpacked extensions:
    ```powershell
-   node.exe --test tests/regressions.test.cjs
+   node.exe --test tests/regressions.test.cjs tests/themes.test.cjs
    powershell -ExecutionPolicy Bypass -File build.ps1
    ```
    This populates `dist/chrome` and `dist/firefox` after syntax-checking every JS file.
@@ -166,6 +167,8 @@ src/
   shared/
     defaults.js                          settings schema + deep-merge + migrations
     themes.js                            preset themes + isDarkActive
+    theme-library.js                     online image themes + source validation
+    theme-artwork.js                     featured artwork + licenses
     tokens.js                            the single design-token emitter, shared by the
                                          page, the drawer's shadow root, the options
                                          page and the popup (+ the readability guard)

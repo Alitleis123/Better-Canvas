@@ -64,8 +64,8 @@ test("course artwork assignment survives ordering changes and applies to new cou
 
 test("featured library has distinct themes across all five categories with image credits", () => {
   const { BC } = context();
-  assert.equal(BC.PRESET_THEMES.length, 36);
-  assert.equal(new Set(BC.PRESET_THEMES.map((p) => p.id)).size, 36);
+  assert.equal(BC.PRESET_THEMES.length, 40);
+  assert.equal(new Set(BC.PRESET_THEMES.map((p) => p.id)).size, 40);
   for (const category of BC.themeLibrary.categories) {
     const items = BC.PRESET_THEMES.filter((p) => p.category === category.id && p.id !== "bc-default");
     assert.ok(items.length >= 6);
@@ -105,6 +105,24 @@ test("image themes retain deterministic IDs, mode and optional page background",
   const c = BC.themeLibrary.makeTheme([image], { dark: true });
   assert.notEqual(a.id, c.id);
   assert.equal(c.settings.cosmetics.background.mode, "none");
+});
+
+test("automatic rotation applies image collections without disabling future rotation", async () => {
+  const ctx = context(), { BC } = ctx, state = BC.cloneDefaults();
+  const theme = BC.PRESET_THEMES.find((p) => p.name === "Deep Space");
+  state.theming.rotation = { enabled: true, mode: "daily", themeIds: [theme.id] };
+  let feature, writes = 0;
+  BC.registry = { register: (f) => { feature = f; } };
+  BC.storage = { local: {}, updateLocal: async (fn) => fn(BC.storage.local), update: async (fn) => { writes++; fn(state); } };
+  BC.toast = { info() {} }; BC.diag = { push(_, e) { throw e; } };
+  vm.runInContext(fs.readFileSync(path.join(root, "src/content/features/rotation.js"), "utf8"), ctx);
+  feature.apply(state);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(state.dashboard.themeImages.length, 6);
+  assert.equal(state.theming.rotation.enabled, true);
+  feature.apply(state);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(writes, 1);
 });
 
 function background(fetch) {

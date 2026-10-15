@@ -158,7 +158,7 @@ async function searchThemeImages(msg) {
   if (themeSearchPending.has(key)) return themeSearchPending.get(key);
   const request = (async () => {
     const params = new URLSearchParams({ q: query, page: String(page), page_size: "20",
-      license: "cc0,pdm,by,by-sa", mature: "false", aspect_ratio: "wide" });
+      license: "cc0,pdm,by,by-sa", mature: "false", aspect_ratio: "wide", filter_dead: "true" });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
     try {

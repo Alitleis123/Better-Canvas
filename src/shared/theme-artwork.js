@@ -33,53 +33,57 @@
     "category": "nature",
     "dark": true,
     "image": {
-      "url": "https://live.staticflickr.com/2592/4084907519_904712a296_b.jpg",
-      "source": "https://www.flickr.com/photos/90949166@N00/4084907519",
-      "title": "New Forest Landscape - Leaving Pittswood",
-      "creator": "davidgsteadman",
+      "url": "https://live.staticflickr.com/65535/51461034500_0430e28a49_b.jpg",
+      "source": "https://www.flickr.com/photos/7156765@N05/51461034500",
+      "title": "Adirondack Mountains - Whiteface Mountain - Lake Placid - New York -",
+      "creator": "Onasill - Bill Badzo - 149 Million Views - Thank Y",
       "license": "PDM",
       "licenseUrl": "https://creativecommons.org/publicdomain/mark/1.0/",
-      "thumbnail": "https://api.openverse.org/v1/images/5c375642-55f8-4bbf-9ad4-417dd01780f3/thumb/"
-    }
+      "thumbnail": "https://api.openverse.org/v1/images/573b07f3-c0ae-4b7b-9f69-426f28422aa8/thumb/"
+    },
+    "name": "Mountain Lake 1"
   },
   {
     "category": "nature",
     "dark": false,
     "image": {
-      "url": "https://live.staticflickr.com/3422/3825009791_6f5fff45cb_b.jpg",
-      "source": "https://www.flickr.com/photos/90949166@N00/3825009791",
-      "title": "New Forest Landscape",
-      "creator": "davidgsteadman",
-      "license": "PDM",
-      "licenseUrl": "https://creativecommons.org/publicdomain/mark/1.0/",
-      "thumbnail": "https://api.openverse.org/v1/images/79de273d-7ff2-4da0-8d05-f0832de0035f/thumb/"
-    }
+      "url": "https://upload.wikimedia.org/wikipedia/commons/4/4c/Turquoise_mountain_lake_%28Unsplash%29.jpg",
+      "source": "https://commons.wikimedia.org/w/index.php?curid=61645387",
+      "title": "Turquoise mountain lake (Unsplash)",
+      "creator": "Volker Schnäbele volker",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/deed.en/",
+      "thumbnail": "https://api.openverse.org/v1/images/27cb3614-c990-4158-9a5b-cf7aa5ea5acb/thumb/"
+    },
+    "name": "Mountain Lake 2"
   },
   {
     "category": "nature",
     "dark": true,
     "image": {
-      "url": "https://live.staticflickr.com/2642/3825011169_de12f79357_b.jpg",
-      "source": "https://www.flickr.com/photos/90949166@N00/3825011169",
-      "title": "New Forest Landscape",
-      "creator": "davidgsteadman",
-      "license": "PDM",
-      "licenseUrl": "https://creativecommons.org/publicdomain/mark/1.0/",
-      "thumbnail": "https://api.openverse.org/v1/images/622a65fb-6f89-4325-9ade-defad0ac9104/thumb/"
-    }
+      "url": "https://cdn.stocksnap.io/img-thumbs/960w/9FM2TZZYP4.jpg",
+      "source": "https://stocksnap.io/photo/tropical-beach-9FM2TZZYP4",
+      "title": "Tropical Beach",
+      "creator": "Joe deSousa",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "thumbnail": "https://api.openverse.org/v1/images/cdd4a7bf-246f-4122-b514-4d4294d01c25/thumb/"
+    },
+    "name": "Tropical Shore"
   },
   {
     "category": "nature",
     "dark": false,
     "image": {
-      "url": "https://live.staticflickr.com/305/19914776809_7d1642a47b_b.jpg",
-      "source": "https://www.flickr.com/photos/132795455@N08/19914776809",
-      "title": "Rain Forest Landscape",
-      "creator": "Image Catalog",
+      "url": "https://live.staticflickr.com/1633/23959074279_6f899dfe4f_b.jpg",
+      "source": "https://www.flickr.com/photos/137643065@N06/23959074279",
+      "title": "art-desert-dunes-bw",
+      "creator": "pixellaphoto",
       "license": "CC0",
       "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
-      "thumbnail": "https://api.openverse.org/v1/images/a00294e3-01ad-4fb5-940d-68b2017a1dac/thumb/"
-    }
+      "thumbnail": "https://api.openverse.org/v1/images/4394e513-678e-41b7-812f-21b4172cebc7/thumb/"
+    },
+    "name": "Desert Dunes"
   },
   {
     "category": "space",
@@ -241,27 +245,29 @@
     "category": "art",
     "dark": true,
     "image": {
-      "url": "https://live.staticflickr.com/7441/10538965076_3a9379898e_b.jpg",
-      "source": "https://www.flickr.com/photos/104736837@N03/10538965076",
-      "title": "2007.09 - 'Seascape with a view on the two needle cliffs in the bay of Etretat', in Normandy France with a quiet sea; French landscape photography, Fons Heijnsb",
-      "creator": "Amsterdam free photos & pictures of the Dutch city",
-      "license": "PDM",
-      "licenseUrl": "https://creativecommons.org/publicdomain/mark/1.0/",
-      "thumbnail": "https://api.openverse.org/v1/images/5e244616-4b58-4ccf-8514-42e1a539421c/thumb/"
-    }
+      "url": "https://images.rawpixel.com/editor_1024/cHJpdmF0ZS9sci9pbWFnZXMvd2Vic2l0ZS8yMDIyLTEwL3BkbWlzYzNiYXRjaDItcGRtaXNjLTg3NDctaW1hZ2UuanBn.jpg",
+      "source": "https://www.rawpixel.com/image/7661324/image-art-vintage-public-domain",
+      "title": "Hokusai's Wave Kanagawa (1830-1833) vintage",
+      "creator": "",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "thumbnail": "https://api.openverse.org/v1/images/540fb75e-0078-404a-8a05-08897f44a923/thumb/"
+    },
+    "name": "Hokusai Wave"
   },
   {
     "category": "art",
     "dark": false,
     "image": {
-      "url": "https://upload.wikimedia.org/wikipedia/commons/4/42/Clevelandart_1951.323.jpg",
-      "source": "https://commons.wikimedia.org/w/index.php?curid=76000484",
-      "title": "Villerville Seen from Le Ratier",
-      "creator": "Charles-FranÃ§ois Daubigny",
-      "license": "CC0",
-      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/deed.en/",
-      "thumbnail": "https://api.openverse.org/v1/images/3437c236-5287-46dc-9c03-f48132ff9eb9/thumb/"
-    }
+      "url": "https://live.staticflickr.com/7915/47034104101_71329bcf70_b.jpg",
+      "source": "https://www.flickr.com/photos/36417567@N03/47034104101",
+      "title": "Wassily Kandinsky (1866–1944), Landscape with Rain, 1913",
+      "creator": "Tulip Hysteria / Go to albums",
+      "license": "PDM",
+      "licenseUrl": "https://creativecommons.org/publicdomain/mark/1.0/",
+      "thumbnail": "https://api.openverse.org/v1/images/966e4f3b-d107-4e03-99e0-4e76a08628c3/thumb/"
+    },
+    "name": "Kandinsky Painting"
   },
   {
     "category": "art",
@@ -280,14 +286,15 @@
     "category": "art",
     "dark": false,
     "image": {
-      "url": "https://live.staticflickr.com/65535/53867899893_3f742164ec_b.jpg",
-      "source": "https://www.flickr.com/photos/200781279@N05/53867899893",
-      "title": "Villerville Seen from Le Ratier 1855",
-      "creator": "museado",
-      "license": "CC0",
-      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
-      "thumbnail": "https://api.openverse.org/v1/images/32e090b1-7977-446f-b8f8-7d701b8f6ac0/thumb/"
-    }
+      "url": "https://live.staticflickr.com/1518/25690234400_ef88ac4377_b.jpg",
+      "source": "https://www.flickr.com/photos/92948506@N03/25690234400",
+      "title": "Vincent van Gogh, Starry Night Over the Rhone",
+      "creator": "Prudence Heward",
+      "license": "PDM",
+      "licenseUrl": "https://creativecommons.org/publicdomain/mark/1.0/",
+      "thumbnail": "https://api.openverse.org/v1/images/278dd07a-0b55-416b-b1f5-05798f64cf34/thumb/"
+    },
+    "name": "Van Gogh Starry Night"
   },
   {
     "category": "art",
@@ -316,5 +323,10 @@
     }
   }
 ];
+  const collections = { nature: "Wild Places", space: "Deep Space", city: "City Lights", art: "Gallery Walls" };
+  for (const [category, name] of Object.entries(collections)) {
+    BC.PRESET_THEMES.push(BC.themeLibrary.makeTheme(artwork.filter((i) => i.category === category).map((i) => i.image),
+      { name, category, dark: category !== "art" }));
+  }
   for (const item of artwork) BC.PRESET_THEMES.push(BC.themeLibrary.makeTheme([item.image], item));
 })();

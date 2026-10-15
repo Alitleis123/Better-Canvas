@@ -20,7 +20,7 @@
     tabAt = Date.now();
     tabP = (async () => {
       const perms = await chrome.permissions.getAll();
-      const patterns = new Set(["*://*.instructure.com/*", ...(perms.origins || [])]);
+      const patterns = new Set(["*://*.instructure.com/*", ...(perms.origins || []).filter((p) => p !== "https://api.openverse.org/*")]);
       let tabs = [];
       for (const p of patterns) { try { tabs = tabs.concat(await chrome.tabs.query({ url: p })); } catch (_) {} }
       const seen = new Set();

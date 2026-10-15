@@ -366,11 +366,15 @@
     if (artwork) {
       box.classList.add("bcs-theme__preview--image");
       const img = el("img", { src: artwork.thumbnail || artwork.url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" });
+      let originalTried = !artwork.thumbnail || artwork.thumbnail === artwork.url;
       img.addEventListener("error", () => {
+        if (!originalTried) { originalTried = true; img.src = artwork.url; return; }
         img.hidden = true;
         box.appendChild(el("span", { class: "bcs-theme__image-error", text: "Preview unavailable" }));
-      }, { once: true });
+      });
       box.prepend(img);
+      const count = settings.dashboard.themeImages.length;
+      if (count > 1) box.appendChild(el("span", { class: "bcs-theme__count", text: count + " images" }));
     }
     if (t.darkMode === "auto") box.classList.add("bcs-theme__preview--auto");
     return box;
@@ -395,14 +399,18 @@
     syncSelected(); S().bindings.add(apply, syncSelected);
     card.appendChild(apply);
     const art = BC.themeImages(p.settings && p.settings.dashboard && p.settings.dashboard.themeImages)[0];
-    if (art && art.source) card.appendChild(el("a", { class: "bcs-theme__credit bc-truncate", href: art.source,
-      target: "_blank", rel: "noopener noreferrer", title: [art.title, art.creator, art.license].filter(Boolean).join(" · "),
-      text: [art.creator || "Image source", art.license].filter(Boolean).join(" · ") }));
+    if (art && art.source) card.appendChild(el("div", { class: "bcs-theme__credit bc-truncate" }, [
+      el("a", { href: art.source, target: "_blank", rel: "noopener noreferrer", title: art.title, text: art.creator || "Image source" }),
+      art.license ? " · " : null,
+      art.licenseUrl ? el("a", { href: art.licenseUrl, target: "_blank", rel: "noopener noreferrer", text: art.license }) : art.license,
+    ]));
     const credits = BC.themeImages(p.settings && p.settings.dashboard && p.settings.dashboard.themeImages).filter((i) => i.source);
     if (credits.length > 1) card.appendChild(el("details", { class: "bcs-theme__credits" }, [
       el("summary", { text: credits.length + " image credits" }),
-      ...credits.map((i) => el("a", { href: i.source, target: "_blank", rel: "noopener noreferrer",
-        text: [i.title, i.creator, i.license].filter(Boolean).join(" · ") })),
+      ...credits.map((i) => el("div", null, [
+        el("a", { href: i.source, target: "_blank", rel: "noopener noreferrer", text: [i.title, i.creator].filter(Boolean).join(" · ") }),
+        i.licenseUrl ? el("a", { href: i.licenseUrl, target: "_blank", rel: "noopener noreferrer", text: i.license }) : null,
+      ])),
     ]));
     if (custom) {
       const more = BC.ui.iconButton("more", { label: "Theme actions for " + p.name, size: "sm" });
@@ -1737,6 +1745,7 @@
 .bcs-theme__preview--image .bcs-theme__panel { top: auto; height: 38px; bottom: 6px; opacity: .92; }
 .bcs-theme__preview--image .bcs-theme__panel b { display: none; }
 .bcs-theme__image-error { position: absolute; top: 12px; left: 20px; right: 5px; font-size: 11px; color: var(--bc-muted); }
+.bcs-theme__count { position: absolute; right: 5px; top: 5px; padding: 2px 5px; border-radius: 4px; font-size: 10px; color: #fff; background: rgba(0,0,0,.65); }
 .bcs-theme__credit { display: block; padding: 4px 6px; max-width: 100%; font-size: 10px; }
 .bcs-theme__credits { padding: 0 6px; font-size: 11px; }
 .bcs-theme__credits a { display: block; margin-top: 4px; overflow-wrap: anywhere; }
