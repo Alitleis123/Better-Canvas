@@ -128,6 +128,7 @@
       celebrate: true,             // a small burst when the window is cleared
       groupBy: "day",              // day | course | priority | tag | none
       ring: true,                  // show progress at all
+      dueFormat: "relative",
       progressStyle: "ring",       // ring | bar
       streaks: {
         enabled: true,
@@ -186,6 +187,7 @@
     },
 
     cosmetics: {
+      motion: "none",
       background: {
         mode: "none",              // none | color | gradient | image | pattern
         color: "#0b1220",

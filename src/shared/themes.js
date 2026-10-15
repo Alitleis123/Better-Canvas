@@ -118,7 +118,7 @@
       if (typeof image === "string") image = { url: image };
       if (!image || typeof image !== "object") return null;
       const url = typeof image.url === "string" ? image.url.trim() : "";
-      if (!/^(https:\/\/|data:image\/)/i.test(url)) return null;
+      if (!/^(https:\/\/|data:image\/)/i.test(url) && !(BC.themeMedia && BC.themeMedia.parse(url))) return null;
       if (seen.has(url)) return null;
       seen.add(url);
       const out = { url };

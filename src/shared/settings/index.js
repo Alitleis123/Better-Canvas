@@ -34,6 +34,7 @@
   // ============ TABS =====================================================
 
   const TABS = [
+    { id: "locker", group: "Library", label: "My locker", icon: "book", description: "Notes, bookmarks and study sets. Saved privately on this device.", render: (_store, _adapter, ctx) => ctx.searching ? [] : [BC.renderLocker()] },
     { id: "theming",       group: "Look",    label: "Appearance",       icon: "contrast",     description: "Dark mode, colors, type and spacing for all of Canvas.", render: renderTheming },
     { id: "themes",        group: "Look",    label: "Themes",           icon: "layers",       description: "Image themes, an online gallery, and your saved looks.", render: renderThemes },
     { id: "cosmetics",     group: "Look",    label: "Background & CSS", icon: "image",        description: "A page background behind Canvas, and your own CSS.", render: renderCosmetics },
@@ -52,8 +53,9 @@
     { id: "insights",      group: "More",    label: "Insights",         icon: "activity",     description: "Your study time, focus sessions and grade trends, kept on this device.", render: renderInsights },
     { id: "about",         group: "More",    label: "About",            icon: "info",         description: "Version, privacy, diagnostics and reset.", render: renderAbout },
   ];
+  const EDIT_TABS = ["themes", "theming", "cosmetics", "dashboard", "todo", "navigation", "accessibility"];
   const GROUPS = ["Look", "Home", "Courses", "Tools", "More"];
-  let lastTab = "theming";   // reopening the panel returns to where you were
+  let lastTab = "themes";   // reopening the panel returns to where you were
 
   BC.SettingsUI = {
     render(root, adapter, opts) {
@@ -64,7 +66,7 @@
 
       const app = el("div", { class: "bc-root bc-app" + (o.variant === "page" ? " bc-app--page" : "") });
       root.appendChild(app);
-      app.appendChild(el("style", null, BC.ui.css() + CSS));
+      app.appendChild(el("style", null, BC.ui.css() + CSS + BC.studioCSS));
       // When the token guard decides a custom "dark" background is too light to
       // keep these surfaces dark, tokens.css() emits the neutral override for
       // .bc-app at DOCUMENT level — which can't reach into the panel's shadow root.
@@ -122,20 +124,47 @@
         ]),
       ]);
       const navBtns = new Map();
-      for (const g of GROUPS) {
-        nav.appendChild(el("div", { class: "bcs-nav__group", text: g }));
-        for (const t of TABS.filter((x) => x.group === g)) {
-          const b = el("button", { class: "bcs-nav__item", type: "button", "data-tab": t.id, title: t.label }, [
-            BC.ui.icon(t.icon), el("span", { class: "bcs-nav__label", text: t.label }),
-          ]);
-          b.addEventListener("click", () => { search.input.value = ""; showTab(t.id); });
-          navBtns.set(t.id, b);
-          nav.appendChild(b);
-        }
+      function navButton(id, label, icon) {
+        const b = el("button", { class: "bcs-nav__item", type: "button", "data-tab": id, title: label }, [BC.ui.icon(icon), el("span", { class: "bcs-nav__label", text: label })]);
+        b.addEventListener("click", () => { search.input.value = ""; showTab(id === "edit" ? "themes" : id); });
+        navBtns.set(id, b); nav.appendChild(b);
       }
-
+      navButton("edit", "Edit Canvas", "layers");
+      navButton("locker", "My locker", "book");
+      for (const g of ["Courses", "Tools", "More"]) {
+        nav.appendChild(el("div", { class: "bcs-nav__group", text: g === "Courses" ? "Keep track" : g }));
+        for (const t of TABS.filter((x) => x.group === g && !EDIT_TABS.includes(x.id))) navButton(t.id, t.label, t.icon);
+      }
       const main = el("main", { class: "bcs-main" });
-      app.appendChild(el("div", { class: "bcs-shell" }, [nav, main]));
+      const subnav = el("nav", { class: "bcs-subnav", "aria-label": "Edit Canvas sections" });
+      for (const id of EDIT_TABS) {
+        const t = TABS.find((x) => x.id === id);
+        const b = el("button", { type: "button", "data-tab": id, text: { cosmetics: "Background", navigation: "Sidebar", accessibility: "Accessibility" }[id] || t.label });
+        b.onclick = () => { search.input.value = ""; showTab(id); }; subnav.appendChild(b); navBtns.set(id, b);
+      }
+      const workspaceTitle = el("h1", { text: "Edit Canvas" });
+      const workspaceDesc = el("p", { text: "Make room for your kind of focus." });
+      const preview = BC.StudioPreview(), draftBar = el("div", { class: "bcs-draft-bar", hidden: true });
+      const previewColumn = el("div", { class: "bcs-preview-column" }, [preview.root, draftBar]);
+      const workspaceBody = el("div", { class: "bcs-workspace-body" }, [previewColumn, main]);
+      const workspace = el("div", { class: "bcs-workspace" }, [el("div", { class: "bcs-workspace-head" }, [workspaceTitle, workspaceDesc, subnav]), workspaceBody]);
+      app.appendChild(el("div", { class: "bcs-shell" }, [nav, workspace]));
+      let draft = null;
+      function paintPreview() {
+        const state = JSON.parse(JSON.stringify(store.get()));
+        if (draft) BC.applyTheme(state, draft.preset);
+        preview.paint(state, draft && draft.preset.name);
+      }
+      function cancelDraft() { draft = null; draftBar.hidden = true; paintPreview(); }
+      store.previewTheme = (preset, commit) => {
+        draft = { preset, commit }; paintPreview(); draftBar.hidden = false;
+        draftBar.replaceChildren(el("strong", { text: preset.name }), BC.ui.button("Cancel", { variant: "ghost", size: "sm", onClick: cancelDraft }), BC.ui.button("Apply theme", { size: "sm", onClick: () => {
+          const selected = draft; draft = null; draftBar.hidden = true;
+          if (selected.commit) selected.commit(); else store.applyPreset(selected.preset);
+          paintPreview(); BC.toast && BC.toast.success("Applied " + selected.preset.name);
+        } }));
+      };
+      store.cancelThemePreview = cancelDraft;
 
       let active = TABS.some((t) => t.id === o.initialTab) ? o.initialTab : lastTab;
 
@@ -152,8 +181,14 @@
         const tab = TABS.find((t) => t.id === id) || TABS[0];
         main.classList.toggle("bcs-main--still", !!still);
         active = lastTab = tab.id;
+        cancelDraft();
+        const editing = EDIT_TABS.includes(active);
+        workspaceBody.classList.toggle("is-editing", editing);
+        previewColumn.hidden = subnav.hidden = !editing;
+        workspaceTitle.textContent = editing ? "Edit Canvas" : tab.label;
+        workspaceDesc.textContent = editing ? "Make room for your kind of focus." : tab.description;
         for (const [tid, b] of navBtns) {
-          if (tid === active) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+          if (tid === active || (tid === "edit" && editing)) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
         }
         // Controls in the outgoing tab detach here; bindings prune themselves.
         main.replaceChildren(pageHead(tab.label, tab.description), ...[].concat(tab.render(store, adapter, {})));
@@ -165,6 +200,8 @@
       // Search covers EVERY section, not just the open tab: each tab is rendered
       // (without its network-backed parts) and only matching rows are kept.
       function showSearch(q) {
+        cancelDraft(); previewColumn.hidden = subnav.hidden = true; workspaceBody.classList.remove("is-editing");
+        workspaceTitle.textContent = "Search settings"; workspaceDesc.textContent = "Find a control anywhere in Better Canvas.";
         const query = q.trim().toLowerCase();
         for (const b of navBtns.values()) b.removeAttribute("aria-current");
         const groups = [];
@@ -203,6 +240,7 @@
         S().bindings.sync(state);
         syncSafeSurface(state);
         paintMaster(state);
+        paintPreview();
         undoBtn.disabled = !store.canUndo();
         redoBtn.disabled = !store.canRedo();
         // Wholesale replacement (reset / import / undo / redo / external change) can
@@ -367,17 +405,11 @@
     const artwork = artworks[0];
     if (artwork) {
       box.classList.add("bcs-theme__preview--image");
-      const img = el("img", { src: bg && bg.mode === "image" ? bg.image : artwork.url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" });
-      let originalTried = !artwork.thumbnail || artwork.thumbnail === artwork.url;
-      img.addEventListener("error", () => {
-        if (!originalTried) { originalTried = true; img.src = artwork.url; return; }
-        img.hidden = true;
-        box.appendChild(el("span", { class: "bcs-theme__image-error", text: "Preview unavailable" }));
-      });
+      const img = el("div", { class: "bcs-theme-art", style: BC.themeMedia.style(bg && bg.mode === "image" ? bg.image : artwork.url) });
       box.prepend(img);
       panel.replaceChildren(el("i", { class: "bcs-theme__heading" }), el("div", { class: "bcs-theme__mini-cards" },
         artworks.slice(1, 4).concat(artworks).slice(0, 3).map((art) => el("div", { style: "background:" + p.bg2 }, [
-          el("img", { src: art.url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" }),
+          el("div", { class: "bcs-theme-art", style: BC.themeMedia.style(art.url) }),
           el("i", { style: "background:" + p.muted }), el("b", { style: "background:" + accent }),
         ]))));
       panel.style.background = "transparent";
@@ -392,15 +424,17 @@
 
   function themeCard(store, p, custom, onApply) {
     const card = el("div", { class: "bcs-theme" });
-    const apply = el("button", { class: "bcs-theme__apply", type: "button", "aria-label": "Apply theme " + p.name }, [
+    const apply = el("button", { class: "bcs-theme__apply", type: "button", "aria-label": "Preview theme " + p.name }, [
       themePreview(p.settings || {}),
       el("span", { class: "bcs-theme__name bc-truncate", text: p.name }),
       p.description ? el("span", { class: "bcs-theme__description", text: p.description }) : null,
     ]);
     apply.addEventListener("click", () => {
       if (onApply) onApply();
+      else if (store.previewTheme) store.previewTheme(p);
       else { store.applyPreset(p); BC.toast && BC.toast.success("Applied " + p.name); }
     });
+    if (p.animated) apply.querySelector(".bcs-theme__preview").appendChild(el("span", { class: "bcs-motion-badge", text: "Live scenery" }));
     const syncSelected = () => {
       const current = store.get(), t = p.settings && p.settings.theming || {};
       const activeImages = current.dashboard.themeImages || [], presetImages = p.settings && p.settings.dashboard && p.settings.dashboard.themeImages || [];
@@ -476,14 +510,15 @@
     }
     function featured() {
       const q = search.value.trim().toLowerCase();
-      const matches = BC.PRESET_THEMES.filter((p) => !!p.classic === (source === "classic") && (category === "all" || p.category === category) &&
+      const matches = BC.PRESET_THEMES.filter((p) => !!p.classic === (source === "classic") && (category === "all" || p.category === category || category === "animated" && p.animated) &&
         (p.name + " " + p.category + " " + (p.description || "")).toLowerCase().includes(q))
-        .sort((a, b) => Number(b.id.startsWith("photos-")) - Number(a.id.startsWith("photos-")));
+        .sort((a, b) => Number(!!b.animated) - Number(!!a.animated) || Number(b.id.startsWith("photos-")) - Number(a.id.startsWith("photos-")));
       grid.replaceChildren(...matches.map((p) => themeCard(store, p, false)));
       status.textContent = matches.length ? matches.length + (source === "classic" ? " classic palettes · colors and simple card artwork" : " complete themes · wallpaper + distinct course images + styled surfaces") : "No themes match. Try Explore online.";
       more.hidden = set.hidden = true;
     }
-    function applyOnline(theme) {
+    function applyOnline(theme, commit) {
+      if (!commit && store.previewTheme) { store.previewTheme(theme, () => applyOnline(theme, true)); return; }
       store.set((x) => {
         const saved = x.customThemes || [];
         x.customThemes = saved.filter((p) => p.id !== theme.id).concat([theme]);
@@ -595,6 +630,7 @@
     const C = S();
     const themesSig = () => JSON.stringify((store.get().customThemes || []).map((p) => [p.id, p.name]));
     return [
+      row({ label: "Scene motion", hint: "Ambient motion on wallpaper and cards. Reduced motion always takes priority.", control: C.select({ ariaLabel: "Scene motion", get: () => store.get().cosmetics.motion || "none", set: (v) => store.set((x) => { x.cosmetics.motion = v; }), options: ["none", "fireflies", "rain", "stars", "petals"].map((v) => ({ value: v, label: v === "none" ? "Still" : v.charAt(0).toUpperCase() + v.slice(1) })) }) }),
       themeBrowser(store),
       row({ label: "Course images", hint: "Clear theme artwork and individual image overrides to restore Canvas's original course pictures.", stacked: true,
         control: BC.ui.button("Restore Canvas images", { size: "sm", onClick: () => store.set((x) => {
@@ -862,7 +898,7 @@
     const t = store.get().todo;
     const put = (fn) => (v) => store.set((x) => fn(x.todo, v));
     const planner = (s) => s.todo.mode === "custom";
-    const progress = () => (t.ring === false ? "off" : t.progressStyle === "bar" ? "bar" : "ring");
+    const progress = () => (t.ring === false ? "off" : t.progressStyle || "ring");
     return [
       sec("Style", [
         row({ label: "To Do list", stacked: true,
@@ -885,10 +921,11 @@
           options: [{ value: "today", label: "Today" }, { value: "sunday", label: "Sunday" }, { value: "monday", label: "Monday" }] }) }),
         row({ label: "Group by", enabledWhen: planner, control: C.segmented({ ariaLabel: "Group by", get: () => t.groupBy, set: put((x, v) => { x.groupBy = v; }),
           options: [{ value: "day", label: "Day" }, { value: "course", label: "Course" }, { value: "priority", label: "Priority" }, { value: "tag", label: "Tag" }, { value: "none", label: "None" }] }) }),
-        row({ label: "Progress", enabledWhen: planner, control: C.segmented({ ariaLabel: "Progress", get: progress,
+        row({ label: "Progress", enabledWhen: planner, control: C.select({ ariaLabel: "Progress", get: progress,
           set: (v) => store.set((x) => { x.todo.ring = v !== "off"; if (v !== "off") x.todo.progressStyle = v; }),
-          options: [{ value: "ring", label: "Ring" }, { value: "bar", label: "Bar" }, { value: "off", label: "Off" }] }) }),
+          options: [{ value: "ring", label: "Circle" }, { value: "rainbow", label: "Rainbow" }, { value: "bar", label: "Bar" }, { value: "heart", label: "Heart" }, { value: "cloud", label: "Cloud" }, { value: "off", label: "None" }] }) }),
       ], { description: "These apply when the To Do list is set to Planner." }),
+      sec("Dates", [row({ label: "Due-date format", enabledWhen: planner, control: C.segmented({ ariaLabel: "Due-date format", get: () => t.dueFormat || "relative", set: put((x,v) => { x.dueFormat = v; }), options: [{ value: "relative", label: "Relative" }, { value: "absolute", label: "Date & time" }] }) })]),
       sec("What to show", [
         row({ label: "Kinds of work", stacked: true, enabledWhen: planner,
           control: C.chips({ ariaLabel: "Kinds of work", get: () => t.types, set: put((x, v) => { x.types = v; }),

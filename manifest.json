@@ -2,22 +2,35 @@
   "manifest_version": 3,
   "name": "Better Canvas",
   "version": "3.2.0",
-  "description": "The most comprehensive Canvas LMS customizer. Dark mode everywhere, theme creator + rotation, kanban planner, Pomodoro, GPA + rubric predictor, quiz draft saver, module progress, study insights — free, local, no telemetry.",
+  "description": "The most comprehensive Canvas LMS customizer. Dark mode everywhere, theme creator + rotation, kanban planner, Pomodoro, GPA + rubric predictor, quiz draft saver, module progress, study insights \u00e2\u20ac\u201d free, local, no telemetry.",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "permissions": ["storage", "scripting", "alarms", "contextMenus", "notifications"],
-  "optional_host_permissions": ["*://*/*"],
-  "host_permissions": ["*://*.instructure.com/*", "https://api.openverse.org/*"],
+  "permissions": [
+    "storage",
+    "scripting",
+    "alarms",
+    "contextMenus",
+    "notifications"
+  ],
+  "optional_host_permissions": [
+    "*://*/*"
+  ],
+  "host_permissions": [
+    "*://*.instructure.com/*",
+    "https://api.openverse.org/*"
+  ],
   "background": {
     "service_worker": "src/background/service-worker.js"
   },
   "content_scripts": [
     {
-      "matches": ["*://*.instructure.com/*"],
+      "matches": [
+        "*://*.instructure.com/*"
+      ],
       "run_at": "document_start",
       "all_frames": false,
       "js": [
@@ -26,6 +39,7 @@
         "src/shared/theme-library.js",
         "src/shared/theme-scenes.js",
         "src/shared/theme-artwork.js",
+        "src/shared/theme-media.js",
         "src/content/core/util.js",
         "src/content/core/datetime.js",
         "src/content/core/color.js",
@@ -45,6 +59,8 @@
         "src/content/core/commandPalette.js",
         "src/shared/settings/state.js",
         "src/shared/settings/components.js",
+        "src/shared/settings/locker.js",
+        "src/shared/settings/studio.js",
         "src/shared/settings/index.js",
         "src/content/features/theming.js",
         "src/content/features/cosmetics.js",
@@ -74,7 +90,9 @@
       ]
     },
     {
-      "matches": ["*://*.instructure.com/*"],
+      "matches": [
+        "*://*.instructure.com/*"
+      ],
       "run_at": "document_start",
       "all_frames": true,
       "match_about_blank": true,
@@ -99,5 +117,15 @@
       "128": "icons/icon-128.png"
     }
   },
-  "options_page": "src/options/options.html"
+  "options_page": "src/options/options.html",
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/assets/themes/*.png"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
 }

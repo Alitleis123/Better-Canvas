@@ -23,7 +23,7 @@
     else if (cfg.mode === "image" && BC.util.isSafeUrl(cfg.image)) {
       const scene = BC.themeScenes && BC.themeScenes[settings.theming.experience];
       const fallback = scene && !cfg.image.startsWith("data:") ? `, url("${BC.util.cssUrl(BC.sceneArt(scene.id, 731, true).url)}") center/cover no-repeat` : "";
-      layer = `background: url("${BC.util.cssUrl(cfg.image)}") center/cover no-repeat${fallback};`;
+      layer = BC.themeMedia && BC.themeMedia.parse(cfg.image) ? BC.themeMedia.style(cfg.image, true) : `background: url("${BC.util.cssUrl(cfg.image)}") center/cover no-repeat${fallback};`;
     } else if (cfg.mode === "gradient") {
       layer = `background: linear-gradient(${cfg.gradient.angle|0}deg, ${BC.util.cssSafe(cfg.gradient.from)} 0%, ${BC.util.cssSafe(cfg.gradient.to)} 100%);`;
     } else if (cfg.mode === "pattern") {
@@ -58,7 +58,7 @@
         --bc-scene-line: color-mix(in srgb, var(--bc-accent) 25%, var(--bc-border));
         --bc-scene-shadow: 0 12px 40px ${dark ? "#0004" : "#30241620"};
         --ic-brand-font-color-dark: var(--bc-text); --ic-link-color: var(--bc-link); }
-      ${s} #bc-bg-layer::after { content: ""; position: absolute; inset: 0;
+      ${s} #bc-bg-layer::before { content: ""; position: absolute; inset: 0;
         background: linear-gradient(110deg, color-mix(in srgb, var(--bc-surface-1) 35%, transparent), transparent 60%, color-mix(in srgb, var(--bc-surface-1) 15%, transparent)); }
       ${s} body { color: var(--bc-text) !important; }
       ${s} .ic-app-header { background: color-mix(in srgb, var(--bc-surface-1) 92%, transparent) !important;
@@ -127,7 +127,7 @@
       BC.injector.removeNode("bc-bg");
     }
     BC.injector.setStyle("bc-custom-css", cos.customCss || "");
-    BC.injector.setStyle("bc-experience", experienceCSS(settings));
+    BC.injector.setStyle("bc-experience", experienceCSS(settings) + (BC.themeMotionCSS && !settings.theming.reducedMotion ? BC.themeMotionCSS(cos.motion, "#bc-bg-layer, .ic-DashboardCard__header_image") : ""));
   }
 
   BC.registry.register({ id: "cosmetics", styles: ["bc-bg", "bc-custom-css", "bc-experience"], nodes: ["bc-bg"], apply,

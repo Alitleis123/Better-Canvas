@@ -845,7 +845,7 @@
     const when = day ? BC.dt.fmtDay(r.start) : BC.dt.fmtRange(r.start, lastDay);
     const sub = when + (!ring && model.total ? " · " + model.done + " of " + model.total + " done" : "");
     return el("div", { class: "pl-head" }, [
-      ring ? ringEl(model) : null,
+      ring ? progressEl(t, model) : null,
       el("div", { class: "pl-titles" }, [
         el("h2", { class: "pl-title", text: "To Do" }),
         el("div", { class: "pl-sub", text: sub }),
@@ -860,6 +860,14 @@
 
   // Drawn at the previous value and moved to the new one a frame later, so the
   // ring animates instead of snapping.
+  function progressEl(t, model) {
+    if (!["rainbow", "heart", "cloud"].includes(t.progressStyle) || !BC.progressArt) return ringEl(model);
+    const shape = BC.progressArt(t.progressStyle, model.done, model.total);
+    shape.style.cssText = "width:50px;flex:none;text-align:center;font-size:10px;line-height:1";
+    shape.querySelector("svg").style.cssText = "width:44px;height:44px;display:block;margin:auto";
+    return shape;
+  }
+
   function ringEl(model) {
     const { done, total } = model;
     const pct = total ? (done / total) * 100 : 0;
@@ -1100,7 +1108,7 @@
       const late = !done && due.getTime() < Date.now();
       const soon = !done && !late && due.getTime() - Date.now() < 3 * 3600000;
       // Inside a day group the header already says the day.
-      const label = extra && extra.timeOnly ? shortTime(due) : dueLabel(due);
+      const label = t.dueFormat === "absolute" ? due.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " - " + shortTime(due) : extra && extra.timeOnly ? shortTime(due) : dueLabel(due);
       grp([el("span", { class: "pl-due" + (late ? " pl-due--late" : soon ? " pl-due--soon" : ""), text: label,
         title: BC.dt.fmtDay(due) + ", " + BC.dt.fmtTime(due) + (late ? " · past due" : "") })]);
     }

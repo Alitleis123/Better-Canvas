@@ -170,8 +170,8 @@
       // our last value so the school image cannot silently overwrite a theme.
       if (want && (last !== want || header.style.backgroundImage !== want || header.style.getPropertyPriority("background-image") !== "important")) {
         header.style.setProperty("background-image", want, "important");
-        header.style.setProperty("background-size", "cover", "important");
-        header.style.setProperty("background-position", "center", "important");
+        header.style.setProperty("background-size", BC.themeMedia && BC.themeMedia.parse(spec.bgImage) ? "400% 800%" : "cover", "important");
+        header.style.setProperty("background-position", BC.themeMedia ? BC.themeMedia.position(spec.bgImage) : "center", "important");
         appliedImg.set(header, want);
       } else if (!want && last !== undefined) {
         for (const [key, value, priority] of originalImages.get(header) || []) {

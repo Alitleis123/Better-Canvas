@@ -110,6 +110,7 @@
     // newlines alone, so a URL containing `")` closed the string and the rest of an
     // imported setting became live CSS.
     cssUrl(s) {
+      if (BC.themeMedia) s = BC.themeMedia.resolve(s);
       return String(s == null ? "" : s).trim()
         .replace(/[\r\n\f]/g, "")
         .replace(/[\\"'()<>]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0"));
@@ -127,7 +128,7 @@
     isSafeUrl(url) {
       if (!url) return false;
       const s = String(url).trim();
-      return /^(https?:|data:image\/)/i.test(s);
+      return /^(https?:|data:image\/)/i.test(s) || !!(BC.themeMedia && BC.themeMedia.parse(s));
     },
 
     isSafeHttpUrl(url) {
