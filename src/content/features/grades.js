@@ -17,31 +17,70 @@
     return { points: 0, letter: "F" };
   };
 
-  BC.grades.computeTotal = function (groups) {
-    // Weighted (sum of group_weight) or points-based.
-    const hasWeights = groups.some((g) => g.group_weight);
-    if (hasWeights) {
-      let num = 0, denom = 0;
-      for (const g of groups) {
-        const asns = (g.assignments || []).filter((a) => !a.omit_from_final_grade);
-        let pts = 0, poss = 0;
-        for (const a of asns) {
-          const sub = a.submission;
-          if (!sub || sub.score == null) continue;
-          pts += sub.score; poss += a.points_possible || 0;
-        }
-        if (poss > 0) { num += (pts / poss) * (g.group_weight || 0); denom += (g.group_weight || 0); }
-      }
-      return denom > 0 ? (num / denom) * 100 : null;
-    }
-    let pts = 0, poss = 0;
-    for (const g of groups) for (const a of (g.assignments || [])) {
-      if (a.omit_from_final_grade) continue;
+  function keptAssignments(group) {
+    const graded = (group.assignments || []).filter((a) => {
       const sub = a.submission;
-      if (!sub || sub.score == null) continue;
-      pts += sub.score; poss += a.points_possible || 0;
+      return !a.omit_from_final_grade && a.workflow_state !== "unpublished" &&
+        !(a.submission_types || []).includes("not_graded") && sub && !sub.excused &&
+        sub.workflow_state !== "pending_review" && sub.score != null && sub.score !== "" && Number.isFinite(Number(sub.score));
+    });
+    const rules = group.rules || {};
+    const never = new Set((rules.never_drop || []).map(String));
+    const fixed = graded.filter((a) => never.has(String(a.id)));
+    let eligible = graded.filter((a) => !never.has(String(a.id)));
+    if (!eligible.length) return fixed;
+    const count = (n) => Number.isFinite(Number(n)) ? Math.max(0, Math.floor(Number(n))) : 0;
+    const low = Math.min(count(rules.drop_lowest), eligible.length - 1);
+    const high = low + count(rules.drop_highest) >= eligible.length ? 0 : count(rules.drop_highest);
+    // Canvas drops by impact on the group's points ratio, not by assignment
+    // percentage. Apply lowest first, then highest, and retain a droppable score.
+    // https://community.instructure.com/en/kb/articles/660670-how-do-i-create-rules-for-an-assignment-group
+    // Order and limits match Instructure's AssignmentGroupGradeCalculator:
+    // https://github.com/instructure/canvas-lms/blob/master/ui/shared/grading/AssignmentGroupGradeCalculator.ts
+    if (low) eligible = selectRatio(eligible, fixed, eligible.length - low, true);
+    if (high) eligible = selectRatio(eligible, fixed, eligible.length - high, false);
+    return fixed.concat(eligible);
+  }
+  const points = (a) => Math.max(0, Number(a.points_possible) || 0);
+  const score = (a) => Number(a.submission.score);
+  function selectRatio(eligible, fixed, keep, maximize) {
+    const all = fixed.concat(eligible), positive = all.map(points).filter((n) => n > 0);
+    const tie = (a, b) => String(a.id).localeCompare(String(b.id), "en", { numeric: true });
+    if (!positive.length) return eligible.slice().sort((a, b) => (maximize ? score(b) - score(a) : score(a) - score(b)) || tie(a, b)).slice(0, keep);
+    // For a proposed ratio q, ranking score - q * possible selects the best
+    // fixed-size subset. Binary search its zero instead of enumerating subsets.
+    const bound = all.reduce((sum, a) => sum + Math.abs(score(a)), 0) / Math.min(...positive) + 1;
+    let lo = -bound, hi = bound, best = null, bestRatio = maximize ? -Infinity : Infinity;
+    for (let iteration = 0; iteration < 80; iteration++) {
+      const q = (lo + hi) / 2, residual = (a) => score(a) - q * points(a);
+      const ranked = eligible.slice().sort((a, b) => (maximize ? residual(b) - residual(a) : residual(a) - residual(b)) || tie(a, b));
+      const chosen = ranked.slice(0, keep);
+      if (!fixed.concat(chosen).some((a) => points(a) > 0)) {
+        const pointed = ranked.find((a) => points(a) > 0);
+        if (pointed) chosen[chosen.length - 1] = pointed;
+      }
+      const selected = fixed.concat(chosen);
+      const possible = selected.reduce((sum, a) => sum + points(a), 0);
+      const earned = selected.reduce((sum, a) => sum + score(a), 0);
+      const ratio = earned / possible;
+      if (best === null || (maximize ? ratio > bestRatio : ratio < bestRatio)) { best = chosen; bestRatio = ratio; }
+      if (earned - q * possible > 0) lo = q; else hi = q;
     }
-    return poss > 0 ? (pts / poss) * 100 : null;
+    return best;
+  }
+
+  BC.grades.computeTotal = function (groups) {
+    const weighted = groups.some((g) => g.group_weight);
+    let earned = 0, possible = 0;
+    for (const group of groups) {
+      const kept = keptAssignments(group);
+      const pts = kept.reduce((sum, a) => sum + score(a), 0);
+      const poss = kept.reduce((sum, a) => sum + points(a), 0);
+      if (weighted) {
+        if (poss > 0) { earned += pts / poss * (group.group_weight || 0); possible += group.group_weight || 0; }
+      } else { earned += pts; possible += poss; }
+    }
+    return possible > 0 ? earned / possible * 100 : null;
   };
 
   const CSS = `
