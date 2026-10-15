@@ -545,7 +545,12 @@
     if (!d.showSparkline)   BC.injector.removeNode("bc-card-spark");
 
     // Apply per-card overrides
-    const artworkByCourse = BC.assignThemeImages(d.themeImages, cardsById.keys());
+    const scene = BC.themeScenes && BC.themeScenes[settings.theming.experience];
+    const pool = (d.themeImages || []).slice();
+    // Larger rosters keep getting different compositions instead of wrapping
+    // back to the beginning of a finite photograph collection.
+    if (scene && pool.length) for (let i = pool.length; i < cardsById.size; i++) pool.push(BC.sceneArt(scene.id, 1000 + i));
+    const artworkByCourse = BC.assignThemeImages(pool, cardsById.keys());
     cardsTouched = true;
     let shown = 0;
     for (const [id, card] of cardsById) {
@@ -560,7 +565,6 @@
         || (d.autoHideConcluded && concludedIds && concludedIds.has(id))
         || (!!query && name.indexOf(query) === -1);
       const artwork = artworkByCourse.get(id);
-      const scene = BC.themeScenes && BC.themeScenes[settings.theming.experience];
       const fallback = !spec.bgImage && artwork && !artwork.url.startsWith("data:") && scene
         ? BC.sceneArt(scene.id, Array.from(artworkByCourse.keys()).indexOf(id)).url : "";
       overlayCard(card, { ...spec, bgImage: spec.bgImage || (artwork && artwork.url), bgFallback: fallback, hidden: effHidden });

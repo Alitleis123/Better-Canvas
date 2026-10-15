@@ -16,7 +16,7 @@
     { id: "paper", name: "Quiet Hours", category: "minimal", dark: false, colors: ["#e8e2d6", "#c0b4a1", "#8f9786", "#a48d78"], accent: "#655d4d", description: "Architectural shadows · warm linen · bookish typography" },
     { id: "mono", name: "Graphite", category: "minimal", dark: true, colors: ["#181b20", "#373d47", "#6a737b", "#b5b9b5"], accent: "#bdc9c4", description: "Monochrome forms · hairline borders · precise typography" },
   ];
-  const byId = Object.fromEntries(scenes.map((s) => [s.id, s]));
+  const byId = Object.assign(Object.create(null), Object.fromEntries(scenes.map((s) => [s.id, s])));
   const cache = new Map();
   function artwork(id, seed, wallpaper = false) {
     const s = byId[id] || byId.woodland;
