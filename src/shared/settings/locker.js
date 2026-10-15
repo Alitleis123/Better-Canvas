@@ -3,6 +3,7 @@
   "use strict";
   const BC = globalThis.BC = globalThis.BC || {};
   const PREFIX = "bcLocker:item:", el = (t, a, c) => BC.ui.el(t, a, c);
+  const renderers = new Set();
   const plain = (v, n) => typeof v === "string" ? v.slice(0, n) : "";
   function normalize(value) {
     if (!value || typeof value !== "object" || !["note", "set", "link"].includes(value.type)) return null;
@@ -26,21 +27,45 @@
     await call("set", writes);
     return incoming;
   }
-  BC.Locker = { normalize, save, list, importBatch, remove: (id) => /^[a-zA-Z0-9-]{1,80}$/.test(id) ? call("remove", PREFIX + id) : Promise.reject(new Error("Invalid item")) };
+  async function remove(id) {
+    if (!/^[a-zA-Z0-9-]{1,80}$/.test(id)) throw new Error("Invalid item");
+    // A hidden or recently disposed editor may still have a queued snapshot.
+    await Promise.all([...renderers].map((renderer) => renderer.cancelItem(id)));
+    await call("remove", PREFIX + id);
+  }
+  BC.Locker = { normalize, save, list, importBatch, remove };
   BC.renderLocker = function () {
     const root = el("div", { class: "bcs-locker" }), listPane = el("div", { class: "bcs-locker-list" }), editor = el("div", { class: "bcs-locker-editor" });
     const status = el("span", { class: "bc-caption", role: "status", text: "Saved on this device" });
     const search = el("input", { class: "bc-input", type: "search", placeholder: "Search your locker…", "aria-label": "Search your locker" });
-    let items = [], active = null, query = "", filter = "all", timer, pending = Promise.resolve();
+    let items = [], active = null, query = "", filter = "all", timer, pending = Promise.resolve(), disposed = false;
+    const renderer = {
+      cancelItem(id) {
+        if (active?.id === id) { clearTimeout(timer); active = null; }
+        items = items.filter((item) => item.id !== id);
+        if (!disposed) { paintEditor(); paintList(); }
+        return pending.catch(() => {});
+      },
+    };
+    renderers.add(renderer);
+    root.dispose = () => {
+      if (disposed) return pending;
+      // Flush the last edit before detaching. Keep tracking the write until it
+      // settles so a delete in the next editor waits for it.
+      const result = persist(); disposed = true; clearTimeout(timer); active = null;
+      result.catch(() => {}).then(() => renderers.delete(renderer));
+      return result;
+    };
     const report = (e) => { status.textContent = "Could not save. Your changes are still open; try Save again."; BC.toast && BC.toast.error("Locker could not save: " + e.message); };
     function persist() {
       clearTimeout(timer);
-      if (!active) return pending;
+      if (disposed || !active) return pending;
       const snapshot = normalize(active);
       pending = pending.catch(() => {}).then(() => save(snapshot)).then(() => { status.textContent = "Saved on this device"; }).catch((e) => { report(e); throw e; });
       pending.catch(() => {}); return pending;
     }
     function change(fn) {
+      if (disposed || !active) return;
       fn(active); active.updated = Date.now(); status.textContent = "Saving…";
       clearTimeout(timer); timer = setTimeout(persist, 350); paintList();
     }
@@ -136,7 +161,7 @@
     const tabs = BC.ui.segmented({ value: "all", ariaLabel: "Locker item type", options: [{ value: "all", label: "All" }, { value: "note", label: "Notes" }, { value: "set", label: "Study sets" }, { value: "link", label: "Links" }], onChange: (v) => { filter = v; paintList(); } });
     root.append(el("style", null, CSS), el("div", { class: "bcs-locker-toolbar" }, [BC.ui.button("New note", { icon: "plus", onClick: () => create("note") }), BC.ui.button("Study set", { icon: "layers", variant: "ghost", onClick: () => create("set") }), BC.ui.button("Bookmark", { icon: "link", variant: "ghost", onClick: () => create("link") }), el("span", { class: "bc-spacer" }), BC.ui.button("Import", { size: "sm", variant: "ghost", onClick: importItems }), BC.ui.button("Export", { size: "sm", variant: "ghost", onClick: exportItems })]),
       status, el("div", { class: "bcs-locker-layout" }, [el("aside", null, [search, tabs.root, listPane]), editor]));
-    list().then((data) => { items = data; paintList(); paintEditor(); }).catch(report);
+    list().then((data) => { if (!disposed) { items = data; paintList(); paintEditor(); } }).catch(report);
     return root;
   };
   const CSS = `

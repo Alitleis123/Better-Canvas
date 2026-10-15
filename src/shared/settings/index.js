@@ -61,6 +61,7 @@
   BC.SettingsUI = {
     render(root, adapter, opts) {
       const o = opts || {};
+      if (root.dispose) root.dispose();
       root.innerHTML = "";
       const store = BC.SettingsState.create(adapter);
       S().bindings.reset();
@@ -139,6 +140,10 @@
         for (const t of TABS.filter((x) => x.group === g && !EDIT_TABS.includes(x.id))) navButton(t.id, t.label, t.icon);
       }
       const main = el("main", { class: "bcs-main" });
+      const disposeTab = () => { for (const node of main.querySelectorAll(".bcs-locker")) node.dispose?.().catch(() => {}); };
+      const destroyStore = store.destroy;
+      store.destroy = () => { disposeTab(); destroyStore(); };
+      root.dispose = store.destroy;
       const subnav = el("nav", { class: "bcs-subnav", "aria-label": "Edit Canvas sections" });
       for (const id of EDIT_TABS) {
         const t = TABS.find((x) => x.id === id);
@@ -183,6 +188,7 @@
       // `still` skips the entrance animation, for rebuilds the user didn't ask for
       // (undo, reset, a change made in another tab).
       function showTab(id, still) {
+        disposeTab();
         const tab = TABS.find((t) => t.id === id) || TABS[0];
         main.classList.toggle("bcs-main--still", !!still);
         active = lastTab = tab.id;
@@ -205,6 +211,7 @@
       // Search covers EVERY section, not just the open tab: each tab is rendered
       // (without its network-backed parts) and only matching rows are kept.
       function showSearch(q) {
+        disposeTab();
         cancelDraft(); previewColumn.hidden = subnav.hidden = true; workspaceBody.classList.remove("is-editing");
         workspaceTitle.textContent = "Search settings"; workspaceDesc.textContent = "Find a control anywhere in Better Canvas.";
         const query = q.trim().toLowerCase();
