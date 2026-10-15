@@ -443,10 +443,14 @@
       el("span", { class: "bcs-theme__name bc-truncate", text: p.name }),
       p.description ? el("span", { class: "bcs-theme__description", text: p.description }) : null,
     ]);
-    apply.addEventListener("click", () => {
+    apply.addEventListener("click", async () => {
       if (onApply) onApply();
       else if (store.previewTheme) store.previewTheme(p);
-      else { store.applyPreset(p); BC.toast && BC.toast.success("Applied " + p.name); }
+      else {
+        store.applyPreset(p);
+        try { await store.flush(); BC.toast && BC.toast.success("Applied " + p.name); }
+        catch (error) { BC.toast && BC.toast.error("Theme could not be saved: " + error.message); }
+      }
     });
     if (p.animated) apply.querySelector(".bcs-theme__preview").appendChild(el("span", { class: "bcs-motion-badge", text: "Live scenery" }));
     const syncSelected = () => {
@@ -633,8 +637,9 @@
           const saved = { id: BC.util.uuid(), name: String(j.name || "Imported theme").slice(0, 80), settings };
           store.set((x) => { x.customThemes = (x.customThemes || []).concat([saved]); });
           store.applyPreset(saved);
+          await store.flush();
           BC.toast && BC.toast.success("Imported " + saved.name);
-        } catch (_) { BC.toast && BC.toast.error("That isn't a Better Canvas theme file"); }
+        } catch (error) { BC.toast && BC.toast.error("Theme could not be imported: " + error.message); }
       });
     };
     inp.click();
@@ -654,10 +659,11 @@
       live(() => {
         const custom = store.get().customThemes || [];
         const name = BC.ui.input({ size: "sm", placeholder: "Name this look", ariaLabel: "Theme name" });
-        const save = BC.ui.button("Save current look", { size: "sm", icon: "plus", onClick: () => {
+        const save = BC.ui.button("Save current look", { size: "sm", icon: "plus", onClick: async () => {
           const n = name.value.trim() || "My theme";
           store.set((x) => { x.customThemes = (x.customThemes || []).concat([themeSnapshot(store, n)]); });
-          BC.toast && BC.toast.success("Saved " + n);
+          try { await store.flush(); BC.toast && BC.toast.success("Saved " + n); }
+          catch (error) { BC.toast && BC.toast.error("Theme could not be saved: " + error.message); }
         } });
         return sec("My themes", [
           custom.length
