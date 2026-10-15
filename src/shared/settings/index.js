@@ -362,10 +362,12 @@
     panel.style.borderColor = p.border;
     for (const i of panel.querySelectorAll("i")) i.style.background = p.muted;
     panel.querySelector("b").style.background = accent;
-    const artwork = BC.themeImages(settings.dashboard && settings.dashboard.themeImages)[0];
+    const artworks = BC.themeImages(settings.dashboard && settings.dashboard.themeImages);
+    const bg = settings.cosmetics && settings.cosmetics.background;
+    const artwork = artworks[0];
     if (artwork) {
       box.classList.add("bcs-theme__preview--image");
-      const img = el("img", { src: artwork.thumbnail || artwork.url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" });
+      const img = el("img", { src: bg && bg.mode === "image" ? bg.image : artwork.url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" });
       let originalTried = !artwork.thumbnail || artwork.thumbnail === artwork.url;
       img.addEventListener("error", () => {
         if (!originalTried) { originalTried = true; img.src = artwork.url; return; }
@@ -373,8 +375,16 @@
         box.appendChild(el("span", { class: "bcs-theme__image-error", text: "Preview unavailable" }));
       });
       box.prepend(img);
+      panel.replaceChildren(el("i", { class: "bcs-theme__heading" }), el("div", { class: "bcs-theme__mini-cards" },
+        artworks.slice(1, 4).concat(artworks).slice(0, 3).map((art) => el("div", { style: "background:" + p.bg2 }, [
+          el("img", { src: art.url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" }),
+          el("i", { style: "background:" + p.muted }), el("b", { style: "background:" + accent }),
+        ]))));
+      panel.style.background = "transparent";
+      panel.style.borderColor = "transparent";
+      panel.querySelector(".bcs-theme__heading").style.background = p.text;
       const count = settings.dashboard.themeImages.length;
-      if (count > 1) box.appendChild(el("span", { class: "bcs-theme__count", text: count + " images" }));
+      if (count > 1) box.appendChild(el("span", { class: "bcs-theme__count", text: count + " different images" }));
     }
     if (t.darkMode === "auto") box.classList.add("bcs-theme__preview--auto");
     return box;
@@ -385,6 +395,7 @@
     const apply = el("button", { class: "bcs-theme__apply", type: "button", "aria-label": "Apply theme " + p.name }, [
       themePreview(p.settings || {}),
       el("span", { class: "bcs-theme__name bc-truncate", text: p.name }),
+      p.description ? el("span", { class: "bcs-theme__description", text: p.description }) : null,
     ]);
     apply.addEventListener("click", () => {
       if (onApply) onApply();
@@ -392,7 +403,8 @@
     });
     const syncSelected = () => {
       const current = store.get(), t = p.settings && p.settings.theming || {};
-      const selected = JSON.stringify(current.dashboard.themeImages || []) === JSON.stringify(p.settings && p.settings.dashboard && p.settings.dashboard.themeImages || [])
+      const activeImages = current.dashboard.themeImages || [], presetImages = p.settings && p.settings.dashboard && p.settings.dashboard.themeImages || [];
+      const selected = activeImages.length === presetImages.length && activeImages.every((img, i) => img.url === presetImages[i].url)
         && current.theming.darkMode === (t.darkMode || "off") && current.theming.accentColor === (t.accentColor || "");
       apply.setAttribute("aria-pressed", String(selected));
     };
@@ -427,7 +439,7 @@
   function themeBrowser(store) {
     const library = BC.themeLibrary;
     let source = "featured", category = "all", generation = 0, page = 0, pages = 0;
-    let results = [], dark = true, background = false, activeQuery = "";
+    let results = [], dark = true, background = true, activeQuery = "";
     const grid = el("div", { class: "bcs-themes" });
     const status = el("p", { class: "bc-caption", role: "status", "aria-live": "polite" });
     const search = BC.ui.input({ size: "sm", placeholder: "Search themes…", ariaLabel: "Search themes" });
@@ -440,19 +452,19 @@
     const onlineOptions = el("div", { class: "bcs-inline bcs-theme-options", hidden: true }, [
       S().segmented({ ariaLabel: "Image theme appearance", get: () => dark ? "dark" : "light", set: (v) => { dark = v === "dark"; paintOnline(); },
         options: [{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }] }),
-      BC.ui.checkbox({ label: "Also use as page background", checked: false, onChange: (on) => { background = on; paintOnline(); } }),
+      BC.ui.checkbox({ label: "Include wallpaper", checked: true, onChange: (on) => { background = on; paintOnline(); } }),
     ]);
     const more = BC.ui.button("Load more", { size: "sm", onClick: () => load(page + 1) });
     more.hidden = true;
     const set = BC.ui.button("Use these images as a set", { size: "sm", onClick: () => {
-      if (results.length) applyOnline(library.makeTheme(results, { name: activeQuery + " collection", category, dark, background }));
+      if (results.length) completeOnline(results[0]);
     } });
     set.hidden = true;
     const refresh = BC.ui.button("Refresh", { size: "sm", variant: "ghost", onClick: () => load(1, true) });
     refresh.hidden = true;
     const root = sec("Browse themes", [sources, form, categories, onlineOptions, status, grid,
       el("div", { class: "bcs-inline" }, [more, set, refresh])], {
-      description: "Themes replace your course-card images. Explore online for more photos and art, or pick a minimal look below.",
+      description: "A whole new study space: wallpaper, distinct course artwork, coordinated navigation, typography and panels. Choose a full theme, or build one from online images.",
     });
 
     function controls() {
@@ -464,10 +476,10 @@
     }
     function featured() {
       const q = search.value.trim().toLowerCase();
-      const matches = BC.PRESET_THEMES.filter((p) => (category === "all" || p.category === category) &&
+      const matches = BC.PRESET_THEMES.filter((p) => !!p.classic === (source === "classic") && (category === "all" || p.category === category) &&
         (p.name + " " + p.category).toLowerCase().includes(q));
       grid.replaceChildren(...matches.map((p) => themeCard(store, p, false)));
-      status.textContent = matches.length ? matches.length + " featured themes" : "No featured themes match. Try Explore online.";
+      status.textContent = matches.length ? matches.length + (source === "classic" ? " classic palettes · colors and simple card artwork" : " complete themes · wallpaper + distinct course images + styled surfaces") : "No themes match. Try Explore online.";
       more.hidden = set.hidden = true;
     }
     function applyOnline(theme) {
@@ -481,10 +493,34 @@
     function paintOnline() {
       if (source !== "online") return;
       grid.replaceChildren(...results.map((image) => {
-        const p = library.makeTheme([image], { category, dark, background });
-        return themeCard(store, p, false, () => applyOnline(p));
+        const p = library.makeTheme([image, ...results.filter((r) => r.url !== image.url)], { category, dark, background });
+        return themeCard(store, p, false, () => completeOnline(image));
       }));
       set.hidden = results.length < 2;
+    }
+    async function completeOnline(cover) {
+      const seq = ++generation, query = activeQuery;
+      const options = { name: query + " · " + cover.title, category, dark, background };
+      const collection = [cover, ...results.filter((r) => r.url !== cover.url)];
+      const seen = new Set(collection.map((r) => r.url));
+      grid.setAttribute("aria-busy", "true");
+      status.textContent = "Collecting different images for your courses…";
+      try {
+        for (let p = page + 1; collection.length < 48 && p <= Math.min(pages, page + 3); p++) {
+          const data = await library.search(query, p);
+          if (seq !== generation || !root.isConnected || source !== "online") return;
+          for (const image of data.images) if (!seen.has(image.url)) { collection.push(image); seen.add(image.url); }
+        }
+        if (seq !== generation || !root.isConnected || source !== "online") return;
+        const theme = library.makeTheme(collection.slice(0, 64), options);
+        // Small searches still get distinct cards. Fill shortages with the
+        // matching original illustration collection instead of repeating a photo.
+        const style = theme.settings.theming.experience;
+        for (let i = 0; theme.settings.dashboard.themeImages.length < 48; i++) theme.settings.dashboard.themeImages.push(BC.sceneArt(style, i));
+        applyOnline(theme);
+        status.textContent = "Applied a complete theme with " + theme.settings.dashboard.themeImages.length + " different course images.";
+      } catch (e) { if (seq === generation) status.textContent = e.message; }
+      finally { if (seq === generation) grid.removeAttribute("aria-busy"); }
     }
     async function load(nextPage = 1, force = false) {
       const seq = ++generation;
@@ -504,7 +540,7 @@
         page = data.page; pages = data.pages;
         paintOnline();
         more.hidden = page >= pages;
-        status.textContent = results.length ? results.length + " images shown · Openverse · Select one to apply and save a theme." : "No images found. Try another search.";
+        status.textContent = results.length ? results.length + " wallpapers · Openverse · Pick one; matching images fill your course cards." : "No images found. Try another search.";
       } catch (e) {
         if (seq !== generation || !root.isConnected || source !== "online") return;
         status.textContent = e.message;
@@ -514,8 +550,8 @@
       }
     }
     function runSearch() { if (source === "online") load(); else featured(); }
-    search.addEventListener("input", () => { if (source === "featured") featured(); });
-    for (const [id, label] of [["featured", "Featured"], ["online", "Explore online"]]) {
+    search.addEventListener("input", () => { if (source !== "online") featured(); });
+    for (const [id, label] of [["featured", "Full themes"], ["online", "Explore online"], ["classic", "Classic palettes"]]) {
       const b = BC.ui.button(label, { size: "sm", onClick: () => {
         if (source === id) return;
         source = id; generation++; controls();
@@ -1730,7 +1766,7 @@
 .bcs-dom { width: 64px; }
 
 /* themes */
-.bcs-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: var(--bc-space-3, 12px); }
+.bcs-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 16px; }
 .bcs-theme { position: relative; }
 .bcs-theme__apply {
   display: flex; flex-direction: column; gap: var(--bc-space-2, 8px); width: 100%; padding: 6px 6px 10px;
@@ -1739,11 +1775,15 @@
   transition: border-color var(--bc-dur-1, 90ms) ease, box-shadow var(--bc-dur-1, 90ms) ease;
 }
 .bcs-theme__apply:hover { border-color: var(--bc-border-strong, #d4d4d8); box-shadow: var(--bc-shadow-1, 0 1px 2px rgba(0,0,0,.08)); }
-.bcs-theme__preview { position: relative; height: 110px; border-radius: var(--bc-radius-md, 8px); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
+.bcs-theme__preview { position: relative; height: 160px; border-radius: var(--bc-radius-md, 8px); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
 .bcs-theme__preview > img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .bcs-theme__preview--image .bcs-theme__bar { opacity: .85; }
-.bcs-theme__preview--image .bcs-theme__panel { top: auto; height: 38px; bottom: 6px; opacity: .92; }
-.bcs-theme__preview--image .bcs-theme__panel b { display: none; }
+.bcs-theme__preview--image .bcs-theme__panel { top: 35px; bottom: 10px; padding: 8px; }
+.bcs-theme__mini-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 8px; }
+.bcs-theme__mini-cards > div { overflow: hidden; border-radius: 4px; box-shadow: 0 2px 8px #0003; }
+.bcs-theme__mini-cards img { display: block; width: 100%; height: 44px; object-fit: cover; }
+.bcs-theme__mini-cards i { height: 3px; margin: 8px 5px 6px; }
+.bcs-theme__mini-cards b { height: 3px; width: 16px; margin: 0 5px 8px; }
 .bcs-theme__image-error { position: absolute; top: 12px; left: 20px; right: 5px; font-size: 11px; color: var(--bc-muted); }
 .bcs-theme__count { position: absolute; right: 5px; top: 5px; padding: 2px 5px; border-radius: 4px; font-size: 10px; color: #fff; background: rgba(0,0,0,.65); }
 .bcs-theme__credit { display: block; padding: 4px 6px; max-width: 100%; font-size: 10px; }
@@ -1760,7 +1800,8 @@
 .bcs-theme__panel i { display: block; height: 4px; border-radius: 2px; width: 70%; opacity: .55; }
 .bcs-theme__panel i + i { width: 45%; }
 .bcs-theme__panel b { display: block; width: 26px; height: 8px; border-radius: 3px; margin-top: auto; }
-.bcs-theme__name { padding: 0 4px; font-size: var(--bc-text-xs, 12px); font-weight: var(--bc-weight-medium, 500); }
+.bcs-theme__name { padding: 2px 4px; font-size: var(--bc-text-sm, 13px); font-weight: 650; }
+.bcs-theme__description { display: block; padding: 0 4px 4px; color: var(--bc-muted); font-size: 11px; line-height: 1.6; min-height: 35px; }
 .bcs-theme__more { position: absolute; right: 6px; bottom: 4px; }
 
 /* GPA */

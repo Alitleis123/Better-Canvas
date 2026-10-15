@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, "..");
 const copy = (v) => JSON.parse(JSON.stringify(v));
 function context() {
   const ctx = vm.createContext({ URL, console, setTimeout, clearTimeout, structuredClone });
-  for (const file of ["defaults", "themes", "theme-library", "theme-artwork"]) {
+  for (const file of ["defaults", "themes", "theme-library", "theme-scenes", "theme-artwork"]) {
     vm.runInContext(fs.readFileSync(path.join(root, "src/shared/" + file + ".js"), "utf8"), ctx);
   }
   return ctx;
@@ -38,7 +38,7 @@ test("switching themes replaces image overrides, preserves course data and rotat
 
 test("shared theme imports round-trip artwork and credits without accepting course/account settings", () => {
   const { BC } = context();
-  const p = BC.PRESET_THEMES.find((p) => p.category === "space");
+  const p = BC.PRESET_THEMES.find((p) => p.id === "photos-space");
   const source = copy(p.settings);
   source.dashboard.courses = { "1": { hidden: true, nickname: "Unwanted" } };
   source.enabled = false;
@@ -64,14 +64,20 @@ test("course artwork assignment survives ordering changes and applies to new cou
 
 test("featured library has distinct themes across all five categories with image credits", () => {
   const { BC } = context();
-  assert.equal(BC.PRESET_THEMES.length, 40);
-  assert.equal(new Set(BC.PRESET_THEMES.map((p) => p.id)).size, 40);
+  const complete = BC.PRESET_THEMES.filter((p) => !p.classic);
+  assert.equal(complete.length, 16);
+  assert.equal(new Set(BC.PRESET_THEMES.map((p) => p.id)).size, BC.PRESET_THEMES.length);
   for (const category of BC.themeLibrary.categories) {
-    const items = BC.PRESET_THEMES.filter((p) => p.category === category.id && p.id !== "bc-default");
-    assert.ok(items.length >= 6);
+    const items = complete.filter((p) => p.category === category.id);
+    assert.ok(items.length >= 2);
     for (const p of items) {
-      assert.ok(p.settings.dashboard.themeImages.length);
-      if (category.id !== "minimal") {
+      assert.equal(p.settings.dashboard.themeImages.length, 48);
+      assert.equal(new Set(p.settings.dashboard.themeImages.map((i) => i.url)).size, 48);
+      assert.equal(p.settings.cosmetics.background.mode, "image");
+      assert.equal(p.settings.cosmetics.background.opacity, 100);
+      assert.ok(p.settings.theming.experience);
+      assert.ok(JSON.stringify(p).length < 1500000, "theme fits in local storage with saved copies");
+      if (p.id.startsWith("photos-")) {
         const image = p.settings.dashboard.themeImages[0];
         assert.ok(image.title && image.license && image.source && image.licenseUrl);
       }
@@ -95,7 +101,7 @@ test("online image data is validated and markup never becomes executable theme c
   assert.equal(state.dashboard.themeImages.length, 0);
 });
 
-test("image themes retain deterministic IDs, mode and optional page background", () => {
+test("image themes retain deterministic IDs and include wallpaper by default", () => {
   const { BC } = context(), image = { url: "https://images.example.org/a.jpg" };
   const a = BC.themeLibrary.makeTheme([image], { dark: false, background: true, category: "city" });
   const b = BC.themeLibrary.makeTheme([image], { dark: false, background: true, category: "city" });
@@ -104,7 +110,35 @@ test("image themes retain deterministic IDs, mode and optional page background",
   assert.equal(a.settings.cosmetics.background.image, image.url);
   const c = BC.themeLibrary.makeTheme([image], { dark: true });
   assert.notEqual(a.id, c.id);
-  assert.equal(c.settings.cosmetics.background.mode, "none");
+  assert.equal(c.settings.cosmetics.background.mode, "image");
+  assert.equal(BC.themeLibrary.makeTheme([image], { background: false }).settings.cosmetics.background.mode, "none");
+});
+
+test("course assignment resolves hash collisions without repeats and ignores display order", () => {
+  const { BC } = context();
+  const pool = BC.PRESET_THEMES.find((p) => p.id === "scene-woodland").settings.dashboard.themeImages;
+  const ids = Array.from({ length: 48 }, (_, i) => String(100 + i * 48));
+  const a = BC.assignThemeImages(pool, ids), b = BC.assignThemeImages(pool, ids.slice().reverse());
+  assert.equal(new Set(Array.from(a.values(), (i) => i.url)).size, 48);
+  for (const id of ids) assert.equal(a.get(id), b.get(id));
+  assert.equal(BC.assignThemeImages([], ids).size, 0);
+  assert.equal(BC.themeImages([pool[0], pool[0], pool[1]]).length, 2);
+});
+
+test("full themes reset completely to defaults, preserve course preferences and round-trip", () => {
+  const { BC } = context(), s = BC.cloneDefaults();
+  s.dashboard.layout = "list"; s.dashboard.courseOrder = ["3", "2"];
+  BC.applyTheme(s, BC.PRESET_THEMES.find((p) => p.id === "scene-gallery"));
+  const imported = BC.themeOnly(copy(s));
+  assert.equal(imported.theming.experience, "gallery");
+  assert.equal(imported.dashboard.themeImages.length, 48);
+  assert.equal(s.dashboard.layout, "list");
+  BC.applyTheme(s, BC.PRESET_THEMES.find((p) => p.id === "bc-default"));
+  assert.equal(s.theming.experience, "");
+  assert.equal(s.theming.lightBg, "");
+  assert.equal(s.cosmetics.background.mode, "none");
+  assert.equal(s.dashboard.themeImages.length, 0);
+  assert.deepEqual(copy(s.dashboard.courseOrder), ["3", "2"]);
 });
 
 test("automatic rotation applies image collections without disabling future rotation", async () => {
@@ -118,7 +152,7 @@ test("automatic rotation applies image collections without disabling future rota
   vm.runInContext(fs.readFileSync(path.join(root, "src/content/features/rotation.js"), "utf8"), ctx);
   feature.apply(state);
   await new Promise((r) => setImmediate(r));
-  assert.equal(state.dashboard.themeImages.length, 6);
+  assert.equal(state.dashboard.themeImages.length, 48);
   assert.equal(state.theming.rotation.enabled, true);
   feature.apply(state);
   await new Promise((r) => setImmediate(r));

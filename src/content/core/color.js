@@ -140,7 +140,7 @@
       const accent = color.normalizeHex(t.accentColor) || color.normalizeHex(lp.accent) || "#4f46e5";
       return {
         dark:  { ...color.darkSurface(darkBase), accent, link: color.lighten(accent, 0.15) },
-        light: { ...color.lightSurface(lp.bg),   accent, link: accent },
+        light: { ...color.lightSurface(color.isHex(t.lightBg) ? t.lightBg : lp.bg), accent, link: accent },
       };
     },
 

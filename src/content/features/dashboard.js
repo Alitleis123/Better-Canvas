@@ -160,7 +160,8 @@
     }
     const header = imageNode(card);
     if (header) {
-      const want = (spec.bgImage && BC.util.isSafeUrl(spec.bgImage)) ? `url("${BC.util.cssUrl(spec.bgImage)}")` : null;
+      const fallback = spec.bgFallback && BC.util.isSafeUrl(spec.bgFallback) ? `, url("${BC.util.cssUrl(spec.bgFallback)}")` : "";
+      const want = (spec.bgImage && BC.util.isSafeUrl(spec.bgImage)) ? `url("${BC.util.cssUrl(spec.bgImage)}")${fallback}` : null;
       const last = appliedImg.get(header);
       if (want && last === undefined) originalImages.set(header,
         ["background-image", "background-size", "background-position"].map((key) =>
@@ -544,6 +545,7 @@
     if (!d.showSparkline)   BC.injector.removeNode("bc-card-spark");
 
     // Apply per-card overrides
+    const artworkByCourse = BC.assignThemeImages(d.themeImages, cardsById.keys());
     cardsTouched = true;
     let shown = 0;
     for (const [id, card] of cardsById) {
@@ -557,8 +559,11 @@
       const effHidden = spec.hidden === true
         || (d.autoHideConcluded && concludedIds && concludedIds.has(id))
         || (!!query && name.indexOf(query) === -1);
-      const artwork = BC.themeImageForCourse(d.themeImages, id);
-      overlayCard(card, { ...spec, bgImage: spec.bgImage || (artwork && artwork.url), hidden: effHidden });
+      const artwork = artworkByCourse.get(id);
+      const scene = BC.themeScenes && BC.themeScenes[settings.theming.experience];
+      const fallback = !spec.bgImage && artwork && !artwork.url.startsWith("data:") && scene
+        ? BC.sceneArt(scene.id, Array.from(artworkByCourse.keys()).indexOf(id)).url : "";
+      overlayCard(card, { ...spec, bgImage: spec.bgImage || (artwork && artwork.url), bgFallback: fallback, hidden: effHidden });
       if (!effHidden) shown++;
       if (d.showInlineGrade)   overlayInlineGrade(card, id, scoresMap);
       if (d.showProgressBar)   overlayProgress(card, plannerCountByCourse);

@@ -8,6 +8,7 @@ const CONTENT_JS = [
   "src/shared/defaults.js",
   "src/shared/themes.js",
   "src/shared/theme-library.js",
+  "src/shared/theme-scenes.js",
   "src/shared/theme-artwork.js",
   "src/content/core/util.js",
   "src/content/core/datetime.js",

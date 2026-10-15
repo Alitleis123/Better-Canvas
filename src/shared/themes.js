@@ -113,11 +113,14 @@
   // A theme carries portable artwork, never course names, grades or course IDs.
   BC.themeImages = function (images) {
     if (!Array.isArray(images)) return [];
-    return images.slice(0, 32).map((image) => {
+    const seen = new Set();
+    return images.slice(0, 128).map((image) => {
       if (typeof image === "string") image = { url: image };
       if (!image || typeof image !== "object") return null;
       const url = typeof image.url === "string" ? image.url.trim() : "";
       if (!/^(https:\/\/|data:image\/)/i.test(url)) return null;
+      if (seen.has(url)) return null;
+      seen.add(url);
       const out = { url };
       for (const key of ["title", "creator", "license"]) {
         if (typeof image[key] === "string") out[key] = image[key].slice(0, 200);
@@ -182,6 +185,22 @@
     return images[hash % images.length];
   };
 
+  // Resolve collisions across the whole roster, not independently per card.
+  // Sorting IDs keeps assignments identical when cards are dragged or filtered.
+  BC.assignThemeImages = function (images, courseIds) {
+    const pool = Array.from(new Map((images || []).map((image) => [image.url, image])).values());
+    const assigned = new Map(), used = new Set();
+    if (!pool.length) return assigned;
+    for (const id of Array.from(new Set(Array.from(courseIds, String))).sort()) {
+      if (used.size === pool.length) used.clear();
+      let slot = pool.indexOf(BC.themeImageForCourse(pool, id));
+      while (used.has(slot)) slot = (slot + 1) % pool.length;
+      used.add(slot);
+      assigned.set(id, pool[slot]);
+    }
+    return assigned;
+  };
+
   // Local vector artwork gives the minimal presets real card images, even
   // offline. Three coordinated variations are used across the course cards.
   function minimalArt(accent, base, n) {
@@ -190,6 +209,7 @@
   }
   for (const preset of BC.PRESET_THEMES) {
     preset.category = "minimal";
+    preset.classic = true;
     const t = preset.settings.theming;
     const base = (BC.DARK_TONES[t.darkTone] || BC.DARK_TONES.neutral).bg;
     preset.settings.dashboard = { themeImages: preset.id === "bc-default" ? [] :

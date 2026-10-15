@@ -155,6 +155,8 @@
       darkSchedule: { start: "20:00", end: "07:00" },
       darkTone: "neutral",         // neutral | slate | black | nord | dracula | solarized
       darkBg: "",
+      lightBg: "",
+      experience: "",             // coordinated wallpaper, navigation and surfaces
       lightPreset: "default",      // default | rose | forest | ocean | sand | solarized
       accentColor: "",
       font: "",

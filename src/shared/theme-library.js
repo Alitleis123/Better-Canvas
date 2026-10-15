@@ -30,7 +30,7 @@
       thumbnail: "https://api.openverse.org/v1/images/" + result.id + "/thumb/" };
   }
 
-  function makeTheme(images, { name, category = "nature", dark = true, background = false } = {}) {
+  function makeTheme(images, { name, category = "nature", dark = true, background = true } = {}) {
     const c = categories.find((item) => item.id === category) || categories[0];
     const art = BC.themeImages(images);
     let hash = 2166136261;
@@ -41,9 +41,10 @@
       category: c.id,
       settings: {
         theming: { darkMode: dark ? "on" : "off", darkBg: c.tone, lightPreset: c.light,
-          accentColor: dark ? c.accent : ({ space: "#7c3aed", city: "#0369a1", minimal: "#4f46e5" }[c.id] || c.accent), radius: 12 },
+          accentColor: dark ? c.accent : ({ space: "#7c3aed", city: "#0369a1", minimal: "#4f46e5" }[c.id] || c.accent),
+          experience: { nature: "woodland", space: "orbit", city: "metro", art: "gallery", minimal: "paper" }[c.id], radius: 18 },
         cosmetics: { background: background && art.length
-          ? { mode: "image", image: art[0].url, opacity: 18, blur: 0, when: "always" }
+          ? { mode: "image", image: art[0].url, opacity: 100, blur: 0, when: "always" }
           : { mode: "none" } },
         dashboard: { themeImages: art },
       },

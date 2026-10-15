@@ -371,7 +371,7 @@
     signature(theming) {
       const t = theming || {};
       return [
-        t.darkMode, t.darkTone, t.darkBg, t.lightPreset, t.accentColor,
+        t.darkMode, t.darkTone, t.darkBg, t.lightBg, t.lightPreset, t.accentColor, t.experience,
         t.font, t.fontSizeScale, t.lineHeight, t.letterSpacing, t.density,
         t.radius, t.roundedUI, t.cursor, t.focusRing, t.colorBlind,
         t.highContrast, t.reducedMotion, t.animSpeed, t.sidebarWidth,
