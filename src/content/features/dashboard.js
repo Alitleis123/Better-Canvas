@@ -383,59 +383,71 @@
   let plannerCountByCourse = new Map();
   let dueSoonByCourse = new Map();
 
-  // idle | loading | done | failed. The guard has to be the STATE, not map
-  // emptiness: a legitimately empty result — API error, start of term, teacher
-  // enrollment, nothing inside the planner window — leaves the map empty
-  // forever, so `!map.size` re-fires the load on every apply and spins applyAll
-  // at the debounce floor indefinitely. Errors deliberately propagate here
-  // instead of being swallowed, so `failed` is reachable.
-  const loadState = { scores: "idle", planner: "idle" };
-
+  const loadState = { scores: { status: "idle", next: 0, failures: 0, generation: 0 }, planner: { status: "idle", next: 0, failures: 0, generation: 0 } };
+  function invalidateLoad(key) {
+    const state = loadState[key];
+    state.generation++; state.status = "idle"; state.next = 0; state.failures = 0;
+  }
+  BC.dashboard = {
+    invalidatePlanner() { invalidateLoad("planner"); if (BC.requestApply) BC.requestApply(); },
+  };
   function ensureLoaded(key, loader) {
-    if (loadState[key] !== "idle") return;
-    loadState[key] = "loading";
-    loader().then(() => {
-      loadState[key] = "done";
+    const state = loadState[key];
+    if (state.status === "loading" || Date.now() < state.next) return;
+    const generation = state.generation;
+    state.status = "loading";
+    const wake = (delay) => BC.lifecycle.pageBag("dashboard").timeout(() => { if (BC.requestApply) BC.requestApply(); }, delay);
+    Promise.resolve().then(loader).then((data) => {
+      if (state.generation !== generation) return;
+      if (key === "scores") scoresMap = data;
+      else { plannerCountByCourse = data.counts; dueSoonByCourse = data.dueSoon; }
+      state.status = "done"; state.failures = 0;
+      const ttl = key === "scores" ? BC.api.TTL.courses : BC.api.TTL.planner;
+      state.next = Date.now() + ttl; wake(ttl);
       if (BC.requestApply) BC.requestApply();
     }).catch((e) => {
-      loadState[key] = "failed";
+      if (state.generation !== generation) return;
+      state.status = "failed";
+      const delay = Math.min(60000, 1000 * 2 ** Math.min(state.failures++, 6));
+      state.next = Date.now() + delay; wake(delay);
       BC.diag.push("dashboard:" + key, e);
     });
   }
 
   async function loadInlineGrades() {
     const list = await BC.api.coursesWithScores();
-    scoresMap.clear();
+    const scores = new Map();
     for (const c of list) {
       const enr = (c.enrollments || [])[0] || {};
       const s = enr.computed_current_score != null ? enr.computed_current_score : enr.computed_final_score;
-      if (s != null) scoresMap.set(String(c.id), Number(s));
+      if (s != null) scores.set(String(c.id), Number(s));
     }
+    return scores;
   }
 
   async function loadPlannerCounts() {
     const start = new Date(); start.setDate(start.getDate() - 30);
     const end = new Date(); end.setDate(end.getDate() + 14);
     const items = await BC.api.plannerItems(start.toISOString(), end.toISOString());
-    plannerCountByCourse.clear();
-    dueSoonByCourse.clear();
+    const counts = new Map(), dueSoon = new Map();
     const now = Date.now();
     for (const it of items) {
       const cid = it.course_id ? String(it.course_id) : (it.context_type === "Course" ? String(it.context_id) : null);
       if (!cid) continue;
-      const entry = plannerCountByCourse.get(cid) || { total: 0, done: 0 };
+      const entry = counts.get(cid) || { total: 0, done: 0 };
       entry.total++;
       const done = BC.api.plannerItemDone(it);
       if (done) entry.done++;
-      plannerCountByCourse.set(cid, entry);
+      counts.set(cid, entry);
 
       // Due-in-24h count for the card badge — free from the data we already have.
       const dueISO = it.plannable_date || (it.plannable && it.plannable.due_at);
       if (!done && dueISO) {
         const diff = new Date(dueISO).getTime() - now;
-        if (diff > 0 && diff <= 24 * 60 * 60 * 1000) dueSoonByCourse.set(cid, (dueSoonByCourse.get(cid) || 0) + 1);
+        if (diff > 0 && diff <= 24 * 60 * 60 * 1000) dueSoon.set(cid, (dueSoon.get(cid) || 0) + 1);
       }
     }
+    return { counts, dueSoon };
   }
 
   function apply(settings, ctx) {
@@ -459,8 +471,8 @@
     // once per page visit. The underlying BC.api calls are TTL-cached, so
     // navigating back is a cache hit rather than a refetch.
     BC.lifecycle.pageBag("dashboard").once("loaders", () => {
-      loadState.scores = "idle";
-      loadState.planner = "idle";
+      invalidateLoad("scores");
+      invalidateLoad("planner");
     });
 
     // widget CSS
@@ -602,8 +614,8 @@
       dueSoonByCourse.clear();
       concludedIds = null;
       concludedFetching = false;
-      loadState.scores = "idle";
-      loadState.planner = "idle";
+      invalidateLoad("scores");
+      invalidateLoad("planner");
       query = "";
     },
   });

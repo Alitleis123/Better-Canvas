@@ -13,11 +13,13 @@
       if (hit && hit.expires > now) return hit.value;
       if (inflight.has(key)) return inflight.get(key);
       const p = Promise.resolve().then(fetcher).then((val) => {
-        store.set(key, { value: val, expires: now + ttlMs });
-        inflight.delete(key);
+        if (inflight.get(key) === p) {
+          store.set(key, { value: val, expires: now + ttlMs });
+          inflight.delete(key);
+        }
         return val;
       }).catch((e) => {
-        inflight.delete(key);
+        if (inflight.get(key) === p) inflight.delete(key);
         throw e;
       });
       inflight.set(key, p);
@@ -25,8 +27,9 @@
     },
 
     invalidate(prefix) {
-      if (!prefix) { store.clear(); return; }
+      if (!prefix) { store.clear(); inflight.clear(); return; }
       for (const k of Array.from(store.keys())) if (k.indexOf(prefix) === 0) store.delete(k);
+      for (const k of Array.from(inflight.keys())) if (k.indexOf(prefix) === 0) inflight.delete(k);
     },
 
     peek(key) {

@@ -67,6 +67,13 @@
     course: 5 * 60000,
   };
 
+  async function plannerMutation(method, path, body) {
+    const result = await api.mutate(method, path, body);
+    BC.cache && BC.cache.invalidate("LIST " + base + "/api/v1/planner/items");
+    if (BC.dashboard) BC.dashboard.invalidatePlanner();
+    return result;
+  }
+
   const api = (BC.api = {
     TTL,
 
@@ -201,30 +208,26 @@
       const body = overrideId
         ? { marked_complete: !!complete }
         : { plannable_type: plannableType, plannable_id: plannableId, marked_complete: !!complete };
-      BC.cache && BC.cache.invalidate("LIST " + base + "/api/v1/planner/items");
-      return api.mutate(method, path, body);
+      return plannerMutation(method, path, body);
     },
 
     createPlannerNote({ title, todoDate, courseId, details }) {
-      BC.cache && BC.cache.invalidate("LIST " + base + "/api/v1/planner/items");
       const body = { title: title, todo_date: todoDate };
       if (details) body.details = details;
       if (courseId) body.course_id = courseId;
-      return api.mutate("POST", "/api/v1/planner_notes", body);
+      return plannerMutation("POST", "/api/v1/planner_notes", body);
     },
 
     updatePlannerNote(id, { title, todoDate, details } = {}) {
-      BC.cache && BC.cache.invalidate("LIST " + base + "/api/v1/planner/items");
       const body = {};
       if (title != null) body.title = title;
       if (todoDate) body.todo_date = todoDate;
       if (details != null) body.details = details;
-      return api.mutate("PUT", "/api/v1/planner_notes/" + encodeURIComponent(id), body);
+      return plannerMutation("PUT", "/api/v1/planner_notes/" + encodeURIComponent(id), body);
     },
 
     deletePlannerNote(id) {
-      BC.cache && BC.cache.invalidate("LIST " + base + "/api/v1/planner/items");
-      return api.mutate("DELETE", "/api/v1/planner_notes/" + encodeURIComponent(id), {});
+      return plannerMutation("DELETE", "/api/v1/planner_notes/" + encodeURIComponent(id), {});
     },
 
     async mutate(method, path, body) {
