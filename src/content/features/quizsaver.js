@@ -29,6 +29,13 @@
 
   const MAX_DRAFTS = 10;
   const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+  let saverEnabled = false, saveTimer = null;
+
+  function stop() {
+    saverEnabled = false;
+    clearTimeout(saveTimer); saveTimer = null;
+    BC.lifecycle.clear("quizsaver");
+  }
 
   function onTakePage(path) {
     return /^\/courses\/\d+\/quizzes\/\d+\/take/.test(path);
@@ -68,14 +75,15 @@
     const dot = document.querySelector('[data-bc-node="bc-quiz-dot"]');
     if (!dot) return;
     dot.classList.add("show");
-    setTimeout(() => dot.classList.remove("show"), 1200);
+    BC.lifecycle.bag("quizsaver").timeout(() => dot.classList.remove("show"), 1200);
   }
 
   function saveDraft() {
-    if (!onTakePage(location.pathname)) return;
+    if (!saverEnabled || !onTakePage(location.pathname)) return;
     const answers = snapshot();
     const key = draftKey();
     BC.storage.updateLocal((d) => {
+      if (!saverEnabled) return;
       const q = (d.quizDrafts = d.quizDrafts || {});
       if (!Object.keys(answers).length) { delete q[key]; return; }
       q[key] = { savedAt: Date.now(), answers };
@@ -151,8 +159,9 @@
   }
 
   const debouncedSave = () => {
-    if (!debouncedSave._fn) debouncedSave._fn = BC.util.debounce(saveDraft, 800);
-    debouncedSave._fn();
+    if (!saverEnabled) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => { saveTimer = null; saveDraft(); }, 800);
   };
 
   function pruneOld() {
@@ -169,11 +178,13 @@
     const enabled = settings.productivity && settings.productivity.quizDraftSaver;
     const active = enabled && onTakePage(ctx.path) && !!document.querySelector("#questions");
     if (!active) {
+      stop();
       BC.injector.removeNode("bc-quiz-banner");
       BC.injector.removeNode("bc-quiz-dot");
       BC.injector.setStyle("bc-quiz-css", "");
       return;
     }
+    saverEnabled = true;
     BC.injector.setStyle("bc-quiz-css", CSS);
     BC.injector.ensureNode("bc-quiz-dot", document.body, () => {
       const dot = document.createElement("div");
@@ -204,5 +215,6 @@
     styles: ["bc-quiz-css"],
     nodes: ["bc-quiz-banner", "bc-quiz-dot"],
     apply,
+    unmount: stop,
   });
 })();
