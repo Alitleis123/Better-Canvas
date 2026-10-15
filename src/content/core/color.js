@@ -2,6 +2,7 @@
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
+  if (BC.color) return;
 
   const color = (BC.color = {
     isHex(s) {

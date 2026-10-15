@@ -18,6 +18,7 @@
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
+  if (BC.tokens) return;
 
   // Text contrast floor (WCAG AA). Non-text (rings, bars, chart strokes) uses 3:1
   // per WCAG 1.4.11.

@@ -6,6 +6,7 @@
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
+  if (BC.cloneDefaults) return;
 
   BC.VERSION = "3.3.0";
   BC.SETTINGS_KEY = "bcSettings";

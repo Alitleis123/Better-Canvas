@@ -2,6 +2,8 @@
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
+  // The all-frames bundle also runs after the main bundle in the top document.
+  if (BC.PRESET_THEMES) return;
 
   BC.DARK_TONES = {
     neutral:  { bg: "#111113", label: "Neutral" },
