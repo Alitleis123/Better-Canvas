@@ -8,7 +8,7 @@
   const BC = (globalThis.BC = globalThis.BC || {});
   if (BC.cloneDefaults) return;
 
-  BC.VERSION = "3.3.0";
+  BC.VERSION = "3.3.1";
   BC.SETTINGS_KEY = "bcSettings";
   BC.LOCAL_KEY = "bcLocal";
   BC.PROFILES_KEY = "bcProfiles";

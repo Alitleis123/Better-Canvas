@@ -1,4 +1,4 @@
-# Better Canvas 3.3.0
+# Better Canvas 3.3.1
 
 A customizable study workspace for Instructure Canvas — free forever, settings stored locally, no accounts, no telemetry.
 
