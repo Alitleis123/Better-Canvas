@@ -146,7 +146,7 @@
     ensureGroups(courseId).then((groups) => {
       const total = BC.grades.computeTotal(groups);
       const hasWeights = groups.some((g) => g.group_weight);
-      const goal = ((settings.grades.goals || {})[courseId] || {}).target || "";
+      const goal = BC.gradeNumber(((settings.grades.goals || {})[courseId] || {}).target);
       const missing = [];
       for (const g of groups) for (const a of (g.assignments || [])) {
         const sub = a.submission;
@@ -178,12 +178,12 @@
             <div class="bc-gt-label">Current course grade</div>
             <div class="bc-gt-total">${total != null ? total.toFixed(2) + "%" : "—"}</div>
             <div class="bc-gt-goal">Goal:
-              <input type="number" min="0" max="150" step="0.5" value="${goal}" data-goal>
+              <input type="number" min="0" max="150" step="0.5" aria-label="Course grade goal percent" data-goal>
               <span data-goal-status></span>
             </div>
             <div class="bc-gt-final">
-              Need on final: <input type="number" placeholder="target %" data-target>
-              of weight <input type="number" placeholder="weight %" data-weight>
+              Need on final: <input type="number" min="0" max="150" placeholder="target %" aria-label="Final course target percent" data-target>
+              of weight <input type="number" min="0" max="100" placeholder="weight %" aria-label="Final exam weight percent" data-weight>
               <span data-final-needed></span>
             </div>
           </div>
@@ -197,17 +197,18 @@
       `;
 
       const goalInp = panel.querySelector("[data-goal]");
+      goalInp.value = goal === null ? "" : String(goal);
       const goalStatus = panel.querySelector("[data-goal-status]");
       function refreshGoalStatus() {
-        const g = parseFloat(goalInp.value);
-        if (!isFinite(g) || total == null) { goalStatus.textContent = ""; return; }
+        const g = BC.gradeNumber(goalInp.value);
+        if (g === null || total == null) { goalStatus.textContent = ""; return; }
         goalStatus.textContent = total >= g ? "  ✓ on track" : "  ✗ below goal";
         goalStatus.style.color = total >= g ? "var(--bc-success)" : "var(--bc-danger)";
       }
       refreshGoalStatus();
       goalInp.addEventListener("change", () => {
-        const g = parseFloat(goalInp.value);
-        BC.storage.update((d) => { d.grades.goals[courseId] = { target: isFinite(g) ? g : null, notify: true }; });
+        const g = BC.gradeNumber(goalInp.value);
+        BC.storage.update((d) => { d.grades.goals[courseId] = { target: g, notify: true }; });
         refreshGoalStatus();
       });
 
@@ -215,8 +216,8 @@
       const weight = panel.querySelector("[data-weight]");
       const out = panel.querySelector("[data-final-needed]");
       function compute() {
-        const t = parseFloat(target2.value), w = parseFloat(weight.value);
-        if (!isFinite(t) || !isFinite(w) || w <= 0 || total == null) { out.textContent = ""; return; }
+        const t = BC.gradeNumber(target2.value), w = BC.gradeNumber(weight.value, 100);
+        if (t === null || w === null || w <= 0 || total == null) { out.textContent = ""; return; }
         // needed = (target - current * (1 - w/100)) / (w/100)
         const wf = w / 100;
         const current = total;
@@ -251,12 +252,13 @@
     let rows = "";
     for (const c of rubric) {
       const assessed = assessment[c.id] && assessment[c.id].points;
-      const start = draft[c.id] != null ? draft[c.id] : (assessed != null ? assessed : c.points || 0);
+      const max = BC.gradeNumber(c.points, Number.MAX_SAFE_INTEGER) || 0;
+      const start = BC.gradeNumber(draft[c.id], max) ?? BC.gradeNumber(assessed, max) ?? max;
       rows += `
         <div class="bc-rubric-crit" data-crit="${BC.util.escapeHtml(String(c.id))}" data-max="${c.points || 0}">
           <label><span>${BC.util.escapeHtml(c.description || "Criterion")}</span>
             <span><b data-val>${start}</b> / ${c.points || 0}</span></label>
-          <input type="range" min="0" max="${c.points || 0}" step="0.5" value="${start}">
+          <input type="range" min="0" max="${max}" step="0.5" value="${start}" aria-label="${BC.util.escapeHtml(c.description || "Criterion")} points">
         </div>`;
     }
 

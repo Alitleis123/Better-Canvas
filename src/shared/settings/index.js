@@ -1579,7 +1579,7 @@
         const isEnvelope = parsed.kind === "better-canvas-backup" || (parsed.settings && typeof parsed.settings === "object");
         const settingsPart = isEnvelope ? parsed.settings : parsed;
         const rawLocal = isEnvelope ? parsed.local : null;
-        const localPart = rawLocal && typeof rawLocal === "object" && !Array.isArray(rawLocal) ? BC.cleanData(rawLocal) : null;
+        const localPart = rawLocal && typeof rawLocal === "object" && !Array.isArray(rawLocal) ? BC.cleanLocalData(rawLocal) : null;
 
         const carry = store.importJSON(JSON.stringify(settingsPart));
         if (!carry) { BC.toast && BC.toast.error("That isn't a settings file"); return; }

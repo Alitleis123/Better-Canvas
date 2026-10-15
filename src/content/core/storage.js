@@ -55,7 +55,7 @@
             savedSettings = JSON.stringify(current);
             for (const cb of listeners) BC.util.guard(() => cb(current), "storage");
           } else {
-            local = BC.cleanData((res && res[LOCAL_KEY]) || emptyLocal());
+            local = BC.cleanLocalData((res && res[LOCAL_KEY]) || emptyLocal());
             for (const cb of localListeners) BC.util.guard(() => cb(local), "local storage");
           }
         }
@@ -98,7 +98,7 @@
           const carry = {};
           current = BC.mergeDefaults(stored, carry);
           savedSettings = JSON.stringify(current);
-          local = BC.cleanData((res && res[LOCAL_KEY]) || emptyLocal());
+          local = BC.cleanLocalData((res && res[LOCAL_KEY]) || emptyLocal());
           if (carry.gradeHistory) {
             local.gradeHistory = Object.assign({}, carry.gradeHistory, local.gradeHistory || {});
           }

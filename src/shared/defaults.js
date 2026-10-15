@@ -336,6 +336,27 @@
     return out;
   };
 
+  BC.gradeNumber = function (value, max = 150) {
+    if (typeof value !== "number" && typeof value !== "string") return null;
+    if (typeof value === "string" && !value.trim()) return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 && number <= max ? number : null;
+  };
+
+  BC.cleanLocalData = function (value) {
+    const data = BC.cleanData(value);
+    if (data && data.rubricDrafts) {
+      for (const draft of Object.values(data.rubricDrafts)) {
+        if (!draft || typeof draft !== "object") continue;
+        for (const key of Object.keys(draft)) {
+          const number = BC.gradeNumber(draft[key], Number.MAX_SAFE_INTEGER);
+          if (number === null) delete draft[key]; else draft[key] = number;
+        }
+      }
+    }
+    return data;
+  };
+
   BC.mergeDefaults = function (stored, carry) {
     const base = BC.cloneDefaults();
     if (!stored || typeof stored !== "object") return base;
@@ -355,7 +376,15 @@
     // meant an object without a version field (an old bare export, a hand-edited
     // file) inherited the current schema version and skipped every migration.
     merged.version = typeof stored.version === "number" ? stored.version : 2;
-    return BC.migrate(merged, carry);
+    const settings = BC.migrate(merged, carry);
+    if (settings.grades && settings.grades.goals) {
+      for (const [id, goal] of Object.entries(settings.grades.goals)) {
+        const target = BC.gradeNumber(goal && goal.target);
+        if (target === null) delete settings.grades.goals[id];
+        else settings.grades.goals[id] = { target, notify: !!goal.notify };
+      }
+    }
+    return settings;
   };
 
   BC.SETTINGS_VERSION = 5;
