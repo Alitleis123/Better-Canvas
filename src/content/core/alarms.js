@@ -1,4 +1,4 @@
-/* Better Canvas — thin chrome.alarms wrapper (content-side fallback uses setTimeout). */
+/* Better Canvas — content-side scheduling with setTimeout and setInterval. */
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});

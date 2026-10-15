@@ -5,7 +5,7 @@
   BC.features = BC.features || {};
 
   const STEPS = [
-    { title: "Welcome to Better Canvas", body: "Everything you'll see is free and stays on your device. No accounts, no telemetry." },
+    { title: "Welcome to Better Canvas", body: "Settings, notes and drafts stay on this device. Image searches send your query to api.openverse.org. Photo themes and previews contact third-party image hosts. Free, no telemetry." },
     { title: "Dark mode + themes", body: "Head to Appearance for 12+ built-in themes, or write your own custom CSS." },
     { title: "Planner widget", body: "Try the To Do → Planner widget for a weekly ring, streaks, Pomodoro, and grouped views." },
     { title: "Command palette", body: "Press " + BC.util.modLabel() + "+K to jump anywhere: any tab, any course, any setting." },

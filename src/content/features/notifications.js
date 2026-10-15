@@ -2,7 +2,7 @@
  * Better Canvas — notifications.
  * In-page toasts (always) and browser notifications (opt-in) for due-soon
  * assignments, new grades, new announcements, goal breaches, streaks at risk.
- * Uses chrome.alarms via background where possible; falls back to setInterval.
+ * Uses content-side timers and the page Notification API.
  */
 (function () {
   "use strict";

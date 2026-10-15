@@ -1524,7 +1524,7 @@
     return [
       sec("Better Canvas " + (BC.VERSION || ""), [
         el("p", { class: "bcs-prose", text: "Better Canvas customizes Canvas with dark mode, a redesigned dashboard, a planner, grade tools, notifications, keyboard shortcuts and more — all set up from this panel." }),
-        el("p", { class: "bcs-prose", text: "Everything stays on this device. Better Canvas uses your existing Canvas login, never sends anything to another server, and has no accounts or tracking." }),
+        el("p", { class: "bcs-prose", text: "Settings, notes and drafts stay on this device. Canvas tools use your existing Canvas login. Image searches send your query to api.openverse.org. Photo themes and previews load images from third-party hosts. No telemetry." }),
       ]),
       renderDiagnostics(),
       sec("Reset", [
