@@ -7,7 +7,7 @@
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
 
-  BC.VERSION = "3.1.1";
+  BC.VERSION = "3.2.0";
   BC.SETTINGS_KEY = "bcSettings";
   BC.LOCAL_KEY = "bcLocal";
   BC.PROFILES_KEY = "bcProfiles";

@@ -1,4 +1,4 @@
-# Better Canvas 3.1.1
+# Better Canvas 3.2.0
 
 The most feature-complete browser extension for Instructure Canvas — free forever, settings stored locally, no accounts, no telemetry.
 
@@ -14,9 +14,9 @@ The most feature-complete browser extension for Instructure Canvas — free fore
 - Dark mode: Off / On / Auto (system) / Scheduled window.
 - **Dark mode inside iframes** — SpeedGrader submissions, New Quizzes, and other embedded Canvas frames.
 - **6 dark palettes** (Neutral, Slate, Midnight, Nord, Dracula, Solarized) + **6 light palettes** + custom-background derivation.
-- **40 featured themes** across Nature, Space, City, Art, and Minimal, with image previews and searchable categories. Four collections use different coordinated pictures across courses. Visual themes replace existing course-card pictures; the Default theme restores Canvas images.
-- **Explore online** — search the growing [Openverse image library](https://api.openverse.org/v1/), load more results, and apply a photo or artwork in light or dark mode. Apply one image or a set across courses; optionally use it as the page background. Selected online themes are saved locally with source and license credits. No API key needed. Requests are cached for ten minutes; Refresh fetches fresh results, and service outages/rate limits display a retry message.
-- **Theme creator** — save your current look, including card artwork, export/import as JSON, and share without accounts. Images require their publisher to be reachable; minimal themes work offline.
+- **16 complete theme packs** across Nature, Space, City, Art, and Minimal. Each includes a visible wallpaper, different course images, coordinated navigation and panels, and its own typography and shape treatment. Twelve original illustrated collections work offline; four photographic/art collections include 32?48 visually screened images with source and license credits. Twelve classic color palettes have a separate gallery.
+- **Explore online** — search the growing [Openverse image library](https://api.openverse.org/v1/), load more results, and apply a photo or artwork in light or dark mode. Choose a wallpaper and the gallery collects different related images for the course cards. Small result sets are completed with matching original illustrations. Wallpaper is on by default. Selected online themes are saved locally with source and license credits. No API key needed. Requests are cached for ten minutes; Refresh fetches fresh results, and service outages/rate limits display a retry message.
+- **Theme creator** — save your current look, including card artwork, export/import as JSON, and share without accounts. Original illustrations work offline. Photos load from their publishers and fall back to matching illustrations if unavailable.
 - **Theme rotation** — cycle through selected themes daily or weekly.
 - Accent color, custom font stack, five font-size scales, line-height + letter-spacing sliders.
 - Density (Compact/Default/Spacious/Cozy), global corner-radius slider, rounded-vs-square UI toggle, sidebar-width control.
@@ -168,7 +168,8 @@ src/
     defaults.js                          settings schema + deep-merge + migrations
     themes.js                            preset themes + isDarkActive
     theme-library.js                     online image themes + source validation
-    theme-artwork.js                     featured artwork + licenses
+    theme-artwork.js                     photographic collections + licenses
+    theme-scenes.js                      offline scene collections + wallpapers
     tokens.js                            the single design-token emitter, shared by the
                                          page, the drawer's shadow root, the options
                                          page and the popup (+ the readability guard)

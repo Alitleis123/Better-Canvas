@@ -450,9 +450,9 @@
     const sources = el("div", { class: "bcs-inline" });
     const categories = el("div", { class: "bcs-theme-categories", role: "group", "aria-label": "Theme categories" });
     const onlineOptions = el("div", { class: "bcs-inline bcs-theme-options", hidden: true }, [
-      S().segmented({ ariaLabel: "Image theme appearance", get: () => dark ? "dark" : "light", set: (v) => { dark = v === "dark"; paintOnline(); },
+      S().segmented({ ariaLabel: "Image theme appearance", get: () => dark ? "dark" : "light", set: (v) => { dark = v === "dark"; generation++; grid.removeAttribute("aria-busy"); paintOnline(); },
         options: [{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }] }),
-      BC.ui.checkbox({ label: "Include wallpaper", checked: true, onChange: (on) => { background = on; paintOnline(); } }),
+      BC.ui.checkbox({ label: "Include wallpaper", checked: true, onChange: (on) => { background = on; generation++; grid.removeAttribute("aria-busy"); paintOnline(); } }),
     ]);
     const more = BC.ui.button("Load more", { size: "sm", onClick: () => load(page + 1) });
     more.hidden = true;
@@ -477,7 +477,8 @@
     function featured() {
       const q = search.value.trim().toLowerCase();
       const matches = BC.PRESET_THEMES.filter((p) => !!p.classic === (source === "classic") && (category === "all" || p.category === category) &&
-        (p.name + " " + p.category).toLowerCase().includes(q));
+        (p.name + " " + p.category + " " + (p.description || "")).toLowerCase().includes(q))
+        .sort((a, b) => Number(b.id.startsWith("photos-")) - Number(a.id.startsWith("photos-")));
       grid.replaceChildren(...matches.map((p) => themeCard(store, p, false)));
       status.textContent = matches.length ? matches.length + (source === "classic" ? " classic palettes · colors and simple card artwork" : " complete themes · wallpaper + distinct course images + styled surfaces") : "No themes match. Try Explore online.";
       more.hidden = set.hidden = true;
@@ -518,7 +519,7 @@
         const style = theme.settings.theming.experience;
         for (let i = 0; theme.settings.dashboard.themeImages.length < 48; i++) theme.settings.dashboard.themeImages.push(BC.sceneArt(style, i));
         applyOnline(theme);
-        status.textContent = "Applied a complete theme with " + theme.settings.dashboard.themeImages.length + " different course images.";
+        status.textContent = "Applied " + Math.min(64, collection.length) + " photos/artworks" + (collection.length < 48 ? " with matching illustrations for the remaining courses." : " with wallpaper and coordinated surfaces.");
       } catch (e) { if (seq === generation) status.textContent = e.message; }
       finally { if (seq === generation) grid.removeAttribute("aria-busy"); }
     }

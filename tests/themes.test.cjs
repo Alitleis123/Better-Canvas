@@ -71,8 +71,8 @@ test("featured library has distinct themes across all five categories with image
     const items = complete.filter((p) => p.category === category.id);
     assert.ok(items.length >= 2);
     for (const p of items) {
-      assert.equal(p.settings.dashboard.themeImages.length, 48);
-      assert.equal(new Set(p.settings.dashboard.themeImages.map((i) => i.url)).size, 48);
+      assert.ok(p.settings.dashboard.themeImages.length >= 32);
+      assert.equal(new Set(p.settings.dashboard.themeImages.map((i) => i.url)).size, p.settings.dashboard.themeImages.length);
       assert.equal(p.settings.cosmetics.background.mode, "image");
       assert.equal(p.settings.cosmetics.background.opacity, 100);
       assert.ok(p.settings.theming.experience);
