@@ -228,7 +228,7 @@ src/
 
 - **Features self-register** via `BC.registry.register({ id, styles, nodes, apply })`; `content.js` iterates the registry (theming first) and applies each feature's idempotent `apply(settings, ctx)` on every observer tick. Features swap keyed `<style>` text or toggle classes — re-applying is cheap and survives Canvas's React re-renders. Teardown derives its style/node keys from the registry.
 - **`BC.lifecycle.bag(id)`** gives each feature scoped listeners/intervals that are cleared on disable; `pageBag(id)` also clears on SPA navigation. Errors land in the `BC.diag` ring buffer.
-- **Settings UI is shared** via `BC.SettingsUI.render(rootEl, adapter)`. The in-page drawer backs it with live `BC.storage` + `BC.api`; the options page backs it with `chrome.storage` + messaging the active Canvas tab.
+- **Settings UI is shared** via `BC.SettingsUI.render(rootEl, adapter)`. The in-page workspace backs it with live `BC.storage` + `BC.api`; the options page backs it with `chrome.storage` + messaging the active Canvas tab.
 - **Dark mode / theming** is driven by CSS variables. `theming.js` emits one variable block and a static rule set consumes it — re-tinting is a single style swap.
 - **Command palette + shortcuts** are wired centrally in `content.js` from `settings.shortcuts.bindings`, so users can rebind everything from Settings → Shortcuts.
 
@@ -246,4 +246,6 @@ src/
 
 - After editing source, run `build.ps1` and reload the unpacked extension, then refresh Canvas.
 - `build.ps1` runs `node --check` on every `.js` file before copying.
-- No test suite — UI/feature correctness is verified in-browser on a live Canvas instance.
+- Run `node --test tests/regressions.test.cjs tests/themes.test.cjs tests/studio.test.cjs` for storage, import, artwork, library, and locker regression tests.
+- Run `node tests/studio-fixture.cjs` and open `http://localhost:18766` for a synthetic 32-course dashboard. It uses mocked extension storage and Canvas requests, with no school login or account data. Evaluate `tests/studio-browser-checks.js` in that page for the interactive checks. The fixture cannot verify an installed extension's permissions or a school's specific Canvas layout.
+- Check the editor at 1440×900, 1280×800, and 390×844, including all tabs, scrolling, keyboard focus, and the Apply/Cancel bar.

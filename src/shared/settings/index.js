@@ -2,9 +2,9 @@
  * Better Canvas — settings UI.
  * BC.SettingsUI.render(rootEl, adapter, opts) mounts the whole settings surface.
  * The adapter supplies getState / save / subscribe / preview / getCourses /
- * getGpaData / getLocal / saveLocal. Used by the in-page panel (inside a shadow
- * root, docked right so Canvas stays visible as the live preview) and by the
- * standalone options page.
+ * getGpaData / getLocal / saveLocal. Shared by the full-window workspace inside
+ * a shadow root and the standalone options page. Theme previews are staged
+ * independently until Apply; ordinary settings retain immediate preview/save.
  */
 (function () {
   "use strict";
@@ -504,7 +504,7 @@
 
     function controls() {
       for (const b of sources.children) b.setAttribute("aria-pressed", String(b.dataset.source === source));
-      for (const b of categories.children) b.setAttribute("aria-pressed", String(b.dataset.category === category));
+      for (const b of categories.children) { b.setAttribute("aria-pressed", String(b.dataset.category === category)); b.hidden = source === "online" && b.dataset.category === "animated"; }
       onlineOptions.hidden = source !== "online";
       refresh.hidden = source !== "online";
       search.placeholder = source === "online" ? "Search images: mountains, galaxies, Tokyo…" : "Search featured themes…";
@@ -591,7 +591,7 @@
     for (const [id, label] of [["featured", "Full themes"], ["online", "Explore online"], ["classic", "Classic palettes"]]) {
       const b = BC.ui.button(label, { size: "sm", onClick: () => {
         if (source === id) return;
-        source = id; generation++; controls();
+        source = id; if (source === "online" && category === "animated") category = "all"; generation++; controls();
         if (source === "online") load(); else { grid.removeAttribute("aria-busy"); featured(); }
       } });
       b.dataset.source = id; sources.appendChild(b);
