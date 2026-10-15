@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, "..");
 const copy = (v) => JSON.parse(JSON.stringify(v));
 function context() {
   const ctx = vm.createContext({ URL, console, setTimeout, clearTimeout, structuredClone });
-  for (const file of ["defaults", "themes", "theme-library", "theme-scenes", "theme-artwork"]) {
+  for (const file of ["defaults", "themes", "theme-library", "theme-scenes", "theme-artwork", "theme-media"]) {
     vm.runInContext(fs.readFileSync(path.join(root, "src/shared/" + file + ".js"), "utf8"), ctx);
   }
   return ctx;
@@ -62,10 +62,10 @@ test("course artwork assignment survives ordering changes and applies to new cou
   assert.equal(BC.themeImageForCourse([], "123"), null);
 });
 
-test("featured library has distinct themes across all five categories with image credits", () => {
+test("featured library has distinct themes across all six categories with image credits", () => {
   const { BC } = context();
   const complete = BC.PRESET_THEMES.filter((p) => !p.classic);
-  assert.equal(complete.length, 16);
+  assert.equal(complete.length, 22);
   assert.equal(new Set(BC.PRESET_THEMES.map((p) => p.id)).size, BC.PRESET_THEMES.length);
   for (const category of BC.themeLibrary.categories) {
     const items = complete.filter((p) => p.category === category.id);

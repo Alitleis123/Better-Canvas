@@ -3,20 +3,23 @@
   "use strict";
   const BC = globalThis.BC = globalThis.BC || {};
   const parse = (url) => {
+    const wall = /^bc-wall:(anime-garden|anime-night)$/.exec(String(url || ""));
+    if (wall) return { name: wall[1], wallpaper: true, index: 0 };
     const m = /^bc-art:(anime-garden|anime-night)#(\d{1,2})$/.exec(String(url || ""));
     return m && +m[2] < 32 ? { name: m[1], index: +m[2] } : null;
   };
   const resolve = (url) => {
     const art = parse(url);
-    return art ? chrome.runtime.getURL("src/assets/themes/" + art.name + ".png") + "#scene-" + art.index : url;
+    return art ? chrome.runtime.getURL("src/assets/themes/" + art.name + (art.wallpaper ? "-wallpaper.png" : ".png#scene-" + art.index)) : url;
   };
   const position = (url) => {
     const art = parse(url);
-    return art ? (art.index % 4 / 3 * 100) + "% " + (Math.floor(art.index / 4) / 7 * 100) + "%" : "center";
+    return art && !art.wallpaper ? (art.index % 4 / 3 * 100) + "% " + (Math.floor(art.index / 4) / 7 * 100) + "%" : "center";
   };
   const style = (url, wallpaper = false) => {
     if (!BC.util.isSafeUrl(url)) return "";
-    const size = parse(url) ? (wallpaper ? "max(400%, 600vh) max(800%, 533.333vw)" : "400% 800%") : "cover";
+    const art = parse(url);
+    const size = art && !art.wallpaper ? (wallpaper ? "max(400%, 600vh) max(800%, 533.333vw)" : "400% 800%") : "cover";
     return 'background-image:url("' + BC.util.cssUrl(url) + '");background-size:' + size + ';background-position:' + position(url) + ';background-repeat:no-repeat;';
   };
   BC.themeMedia = { parse, resolve, position, style };
@@ -35,7 +38,7 @@
     BC.PRESET_THEMES.push({ id, name, category: "anime", animated: true, description, settings: {
       theming: { darkMode: light ? "off" : "on", darkBg: bg, lightBg: bg, accentColor: accent, radius: 18, experience },
       dashboard: { themeImages: images },
-      cosmetics: { background: { mode: "image", image: images[0].url, opacity: 100, blur: 0, when: "always" }, motion },
+      cosmetics: { background: { mode: "image", image: "bc-wall:" + asset, opacity: 100, blur: 0, when: "always" }, motion },
     } });
   }
   // Compositor-only layers; no remote videos, timers, or motion when reduced motion is requested.

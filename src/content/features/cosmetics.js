@@ -3,6 +3,24 @@
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
   BC.features = BC.features || {};
+  let motionObserver = null;
+  const motionNodes = new Set();
+  function stopMotion() {
+    if (motionObserver) motionObserver.disconnect();
+    motionObserver = null;
+    for (const node of motionNodes) node.removeAttribute("data-bc-motion-visible");
+    motionNodes.clear();
+  }
+  function observeMotion(enabled) {
+    if (!enabled || typeof IntersectionObserver !== "function") { stopMotion(); return; }
+    if (!motionObserver) motionObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) entry.target.toggleAttribute("data-bc-motion-visible", entry.isIntersecting);
+    });
+    for (const node of motionNodes) if (!node.isConnected) { motionObserver.unobserve(node); motionNodes.delete(node); }
+    for (const node of document.querySelectorAll(".ic-DashboardCard__header_image")) if (!motionNodes.has(node)) {
+      motionNodes.add(node); motionObserver.observe(node);
+    }
+  }
 
   const PATTERNS = {
     none: "",
@@ -127,9 +145,14 @@
       BC.injector.removeNode("bc-bg");
     }
     BC.injector.setStyle("bc-custom-css", cos.customCss || "");
-    BC.injector.setStyle("bc-experience", experienceCSS(settings) + (BC.themeMotionCSS && !settings.theming.reducedMotion ? BC.themeMotionCSS(cos.motion, "#bc-bg-layer, .ic-DashboardCard__header_image") : ""));
+    const moving = !!BC.themeMotionCSS && !settings.theming.reducedMotion && ["rain", "stars", "fireflies", "petals"].includes(cos.motion);
+    observeMotion(moving);
+    BC.injector.setStyle("bc-experience", experienceCSS(settings) + (moving ? BC.themeMotionCSS(cos.motion, "#bc-bg-layer, .ic-DashboardCard__header_image") + `
+      .ic-DashboardCard__header_image::after { animation-play-state:paused; }
+      .ic-DashboardCard__header_image[data-bc-motion-visible]::after { animation-play-state:running; }
+    ` : ""));
   }
 
   BC.registry.register({ id: "cosmetics", styles: ["bc-bg", "bc-custom-css", "bc-experience"], nodes: ["bc-bg"], apply,
-    unmount() { document.documentElement.removeAttribute("data-bc-experience"); } });
+    unmount() { stopMotion(); document.documentElement.removeAttribute("data-bc-experience"); } });
 })();

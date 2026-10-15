@@ -25,7 +25,12 @@ function Check-Syntax {
 
 function Build-Target($name, $manifestSource) {
     $out = Join-Path $root "dist\$name"
-    if (Test-Path $out) { Remove-Item $out -Recurse -Force }
+    $resolvedOut = [System.IO.Path]::GetFullPath($out)
+    $expectedParent = [System.IO.Path]::GetFullPath((Join-Path $root "dist"))
+    if ([System.IO.Path]::GetDirectoryName($resolvedOut) -ne $expectedParent -or $name -notin @("chrome", "firefox")) {
+        throw "Refusing to replace an output folder outside the project's dist directory."
+    }
+    if (Test-Path -LiteralPath $resolvedOut) { Remove-Item -LiteralPath $resolvedOut -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $out | Out-Null
     Copy-Item (Join-Path $root "src")   (Join-Path $out "src")   -Recurse
     Copy-Item (Join-Path $root "icons") (Join-Path $out "icons") -Recurse

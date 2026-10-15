@@ -39,6 +39,7 @@
     { id: "themes",        group: "Look",    label: "Themes",           icon: "layers",       description: "Image themes, an online gallery, and your saved looks.", render: renderThemes },
     { id: "cosmetics",     group: "Look",    label: "Background & CSS", icon: "image",        description: "A page background behind Canvas, and your own CSS.", render: renderCosmetics },
     { id: "dashboard",     group: "Home",    label: "Dashboard",        icon: "grid",         description: "How course cards look and what appears around them.", render: renderDashboard },
+    { id: "widgets", group: "Home", label: "Widgets", icon: "grid", description: "Choose what lives beside your courses.", render: renderWidgets },
     { id: "todo",          group: "Home",    label: "To Do",            icon: "check-square", description: "Canvas's To Do list, restyled or replaced by the planner.", render: renderTodo },
     { id: "grades",        group: "Courses", label: "Grades & GPA",     icon: "award",        description: "Grade tools on course pages and the GPA calculator.", render: renderGrades },
     { id: "calendar",      group: "Courses", label: "Calendar",         icon: "calendar",     description: "Calendar export, the mini calendar and syllabus dates.", render: renderCalendar },
@@ -53,7 +54,7 @@
     { id: "insights",      group: "More",    label: "Insights",         icon: "activity",     description: "Your study time, focus sessions and grade trends, kept on this device.", render: renderInsights },
     { id: "about",         group: "More",    label: "About",            icon: "info",         description: "Version, privacy, diagnostics and reset.", render: renderAbout },
   ];
-  const EDIT_TABS = ["themes", "theming", "cosmetics", "dashboard", "todo", "navigation", "accessibility"];
+  const EDIT_TABS = ["themes", "theming", "cosmetics", "dashboard", "widgets", "todo", "navigation", "accessibility"];
   const GROUPS = ["Look", "Home", "Courses", "Tools", "More"];
   let lastTab = "themes";   // reopening the panel returns to where you were
 
@@ -498,7 +499,7 @@
     refresh.hidden = true;
     const root = sec("Browse themes", [sources, form, categories, onlineOptions, status, grid,
       el("div", { class: "bcs-inline" }, [more, set, refresh])], {
-      description: "A whole new study space: wallpaper, distinct course artwork, coordinated navigation, typography and panels. Choose a full theme, or build one from online images.",
+      description: "Wallpaper, distinct course artwork and coordinated surfaces. Preview a look, then make it yours.",
     });
 
     function controls() {
@@ -595,7 +596,7 @@
       } });
       b.dataset.source = id; sources.appendChild(b);
     }
-    for (const c of [{ id: "all", label: "All" }, ...library.categories]) {
+    for (const c of [{ id: "all", label: "All" }, { id: "animated", label: "Animated", query: "landscape" }, ...library.categories]) {
       const b = BC.ui.button(c.label, { size: "sm", variant: "ghost", onClick: () => {
         category = c.id;
         search.value = source === "online" ? c.query || "landscape" : "";
@@ -893,12 +894,29 @@
     return el("span", { class: "pv pv--" + kind }, [i("pv-h"), row(false, true), row(false), row(false)]);
   }
 
+  function renderWidgets(store) {
+    const state = store.get(), C = S();
+    const widget = (label, key) => row({ label, control: C.switch({ ariaLabel: label + " widget", get: () => state.dashboard.widgets[key], set: (v) => store.set((s) => { s.dashboard.widgets[key] = v; }) }) });
+    return [sec("Dashboard widgets", [widget("To Do", "todo"), widget("Coming Up", "comingUp"), widget("Recent Feedback", "recentFeedback"), widget("GPA estimate", "gpa"),
+      row({ label: "Mini calendar", control: C.switch({ ariaLabel: "Mini calendar widget", get: () => state.calendar.miniOnDashboard, set: (v) => store.set((s) => { s.calendar.miniOnDashboard = v; }) }) }),
+      row({ label: "Hide sidebar", control: C.switch({ ariaLabel: "Hide sidebar", get: () => state.dashboard.hideSidebar, set: (v) => store.set((s) => { s.dashboard.hideSidebar = v; }) }) }),
+    ]), sec("On the page", [row({ label: "Sticky notes", hint: "Attach a note to the page you are studying.", control: C.switch({ ariaLabel: "Sticky notes", get: () => state.productivity.stickyNotes, set: (v) => store.set((s) => { s.productivity.stickyNotes = v; }) }) }),
+      row({ label: "Focus timer", control: C.switch({ ariaLabel: "Focus timer widget", get: () => state.todo.pomodoro.enabled, set: (v) => store.set((s) => { s.todo.pomodoro.enabled = v; }) }) }),
+    ])];
+  }
+
+  function progressPicker(store) {
+    const node = S().choice({ ariaLabel: "Progress shape", get: () => store.get().todo.ring === false ? "off" : store.get().todo.progressStyle,
+      set: (value) => store.set((s) => { s.todo.ring = value !== "off"; if (value !== "off") s.todo.progressStyle = value; }),
+      options: [["ring", "Circle"], ["rainbow", "Rainbow"], ["bar", "Bar"], ["heart", "Heart"], ["cloud", "Cloud"], ["off", "None"]].map(([value, label]) => ({ value, label, preview: () => value === "off" ? el("span", { text: "-" }) : BC.progressArt(value, 3, 5) })) });
+    node.classList.add("bcs-progress-picker"); return node;
+  }
+
   function renderTodo(store) {
     const C = S();
     const t = store.get().todo;
     const put = (fn) => (v) => store.set((x) => fn(x.todo, v));
     const planner = (s) => s.todo.mode === "custom";
-    const progress = () => (t.ring === false ? "off" : t.progressStyle || "ring");
     return [
       sec("Style", [
         row({ label: "To Do list", stacked: true,
@@ -921,9 +939,7 @@
           options: [{ value: "today", label: "Today" }, { value: "sunday", label: "Sunday" }, { value: "monday", label: "Monday" }] }) }),
         row({ label: "Group by", enabledWhen: planner, control: C.segmented({ ariaLabel: "Group by", get: () => t.groupBy, set: put((x, v) => { x.groupBy = v; }),
           options: [{ value: "day", label: "Day" }, { value: "course", label: "Course" }, { value: "priority", label: "Priority" }, { value: "tag", label: "Tag" }, { value: "none", label: "None" }] }) }),
-        row({ label: "Progress", enabledWhen: planner, control: C.select({ ariaLabel: "Progress", get: progress,
-          set: (v) => store.set((x) => { x.todo.ring = v !== "off"; if (v !== "off") x.todo.progressStyle = v; }),
-          options: [{ value: "ring", label: "Circle" }, { value: "rainbow", label: "Rainbow" }, { value: "bar", label: "Bar" }, { value: "heart", label: "Heart" }, { value: "cloud", label: "Cloud" }, { value: "off", label: "None" }] }) }),
+        row({ label: "Progress", stacked: true, enabledWhen: planner, control: progressPicker(store) }),
       ], { description: "These apply when the To Do list is set to Planner." }),
       sec("Dates", [row({ label: "Due-date format", enabledWhen: planner, control: C.segmented({ ariaLabel: "Due-date format", get: () => t.dueFormat || "relative", set: put((x,v) => { x.dueFormat = v; }), options: [{ value: "relative", label: "Relative" }, { value: "absolute", label: "Date & time" }] }) })]),
       sec("What to show", [

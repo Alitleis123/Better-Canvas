@@ -1,6 +1,6 @@
-# Better Canvas 3.2.0
+# Better Canvas 3.3.0
 
-The most feature-complete browser extension for Instructure Canvas — free forever, settings stored locally, no accounts, no telemetry.
+A customizable study workspace for Instructure Canvas — free forever, settings stored locally, no accounts, no telemetry.
 
 - **Cross-browser.** Chrome (Manifest V3), Firefox, Zen.
 - **Canvas API calls stay on your school's domain** and use your existing session. Theme search queries go to Openverse, and theme images load directly from their publishers. Canvas grades and coursework are not sent to the theme library.
@@ -10,11 +10,17 @@ The most feature-complete browser extension for Instructure Canvas — free fore
 
 ## Features
 
+### Edit Canvas and locker
+- **Full-window editor** with grouped Themes, Appearance, Background, Dashboard, Widgets, To Do, Sidebar, and Accessibility controls. Responsive at laptop and phone widths.
+- **Read-only layout preview** uses course names from the current dashboard and clearly labeled sample tasks. Preview a theme, then Apply or Cancel; browsing never changes saved settings. Other controls save immediately and support Undo.
+- **My locker** stores notes, bookmarks, folders, pinned items and flashcard sets on this device without an account. Includes autosave, search, JSON import/export and question/answer study sessions with a review-again queue.
+
 ### Appearance (30+ knobs)
 - Dark mode: Off / On / Auto (system) / Scheduled window.
 - **Dark mode inside iframes** — SpeedGrader submissions, New Quizzes, and other embedded Canvas frames.
 - **6 dark palettes** (Neutral, Slate, Midnight, Nord, Dracula, Solarized) + **6 light palettes** + custom-background derivation.
-- **16 complete theme packs** across Nature, Space, City, Art, and Minimal. Each includes a visible wallpaper, different course images, coordinated navigation and panels, and its own typography and shape treatment. Twelve original illustrated collections work offline; four photographic/art collections include 32?48 visually screened images with source and license credits. Twelve classic color palettes have a separate gallery.
+- **22 complete theme packs** across Nature, Space, City, Art, Minimal, and Anime. Each includes a visible wallpaper, different course images, coordinated navigation and panels, and its own typography and shape treatment. Twelve original illustrated collections work offline; four photographic/art collections include 32?48 visually screened images with source and license credits. Twelve classic color palettes have a separate gallery.
+- **Six anime looks** use 64 original painted course scenes across two collections and two full-size wallpapers. Each collection assigns 32 distinct scenes before extending larger rosters with unique illustrations. Fireflies, rain, stars and petals are CSS motion layers over the artwork; Still and reduced-motion controls stop them, and offscreen course cards pause. These assets work offline. [Artwork prompts](docs/artwork-prompts.txt).
 - **Explore online** — search the growing [Openverse image library](https://api.openverse.org/v1/), load more results, and apply a photo or artwork in light or dark mode. Choose a wallpaper and the gallery collects different related images for the course cards. Small result sets are completed with matching original illustrations. Wallpaper is on by default. Selected online themes are saved locally with source and license credits. No API key needed. Requests are cached for ten minutes; Refresh fetches fresh results, and service outages/rate limits display a retry message.
 - **Theme creator** — save your current look, including card artwork, export/import as JSON, and share without accounts. Original illustrations work offline. Photos load from their publishers and fall back to matching illustrations if unavailable.
 - **Theme rotation** — cycle through selected themes daily or weekly.
@@ -39,6 +45,7 @@ Three modes:
 - **Canvas default** — untouched.
 - **Clean circles** — CSS restyle of the native list.
 - **Planner widget** — completion **ring**, week nav, course filter, groupings (day/course/priority/tag/none), views (list/**kanban**/time-block), custom accent, star / snooze, personal tasks.
+- **Progress styles:** Circle, Rainbow, Bar, Heart, Cloud, or None. Absolute or relative due dates, date/course grouping, rolling/Sunday/Monday week starts and configurable date windows.
 - **Kanban board** with drag-and-drop status columns; dropping on Done completes the Canvas item.
 - **Time-block view** — drag tasks onto a 7am–10pm day grid to schedule them.
 - **Recurring tasks** (daily / weekly with weekday mask / monthly), **subtasks**, **tags**, and **priorities** with an item-detail popover.
@@ -152,7 +159,7 @@ Better Canvas makes **no external network requests**. All Canvas calls go to you
 - **Reads (GET):** dashboard cards, courses/scores/terms, planner items, assignment groups, rubrics, modules, files, announcements, course people.
 - **Writes (planner only):** mark a task complete, add a personal task (planner widget + syllabus extract). Uses Canvas's CSRF token — same as the Canvas UI. Nothing else is ever written — no grades, no quiz answers.
 
-Settings live in `bcSettings`. Everything device-local — sticky notes, drafts, quiz drafts, study time, grade history, and planner metadata (stars, snoozes, subtasks, kanban status, streaks) — lives in `bcLocal`. Export/import carries both, so a backup round-trips your planner state as well as your settings. Telemetry is hard-wired **off**.
+Settings live in `bcSettings`. Everything device-local — sticky notes, drafts, quiz drafts, study time, grade history, and planner metadata (stars, snoozes, subtasks, kanban status, streaks) — lives in `bcLocal`. Export/import carries both, so a backup round-trips your planner state as well as your settings. Locker entries use separate `bcLocker:item:<id>` keys so edits to one item cannot overwrite another item or planner metadata. Use **My locker ? Export** to back up notes and study sets separately. Telemetry is hard-wired **off**.
 
 ---
 
