@@ -2,15 +2,30 @@
 (function () {
   "use strict";
   const BC = globalThis.BC;
-  const KEY = BC.SETTINGS_KEY;
   const $ = (id) => document.getElementById(id);
 
   let settings = BC.cloneDefaults();
 
-  function load() {
-    chrome.storage.local.get(KEY, (r) => { settings = BC.mergeDefaults(r[KEY]); render(); });
+  let ready = false;
+  function showError(error) {
+    let box = $("save-error");
+    if (!box) { box = document.createElement("p"); box.id = "save-error"; box.setAttribute("role", "alert"); document.body.appendChild(box); }
+    box.textContent = "Could not save settings: " + error.message + ". Reopen the popup to retry.";
   }
-  function save() { chrome.storage.local.set({ [KEY]: settings }); paintTokens(); }
+  function load() {
+    for (const id of ["enabled", "dashEnabled", "darkMode", "notifsIn"]) $(id).disabled = true;
+    BC.storage.load().then((value) => {
+      settings = value; ready = true; render();
+      for (const id of ["enabled", "dashEnabled", "darkMode", "notifsIn"]) $(id).disabled = false;
+    }).catch(showError);
+  }
+  function save() {
+    if (!ready) return;
+    BC.storage.save(structuredClone(settings)).then(() => {
+      if ($("save-error")) $("save-error").textContent = "";
+      paintTokens();
+    }).catch(showError);
+  }
 
   // The popup is its own document, so nothing emits design tokens into it. Without
   // this it ignored the user's theme completely and shipped a third hardcoded

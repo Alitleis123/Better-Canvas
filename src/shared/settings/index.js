@@ -67,6 +67,8 @@
 
       const app = el("div", { class: "bc-root bc-app" + (o.variant === "page" ? " bc-app--page" : "") });
       root.appendChild(app);
+      const saveStatus = el("p", { role: "alert", hidden: true });
+      app.appendChild(saveStatus);
       app.appendChild(el("style", null, BC.ui.css() + CSS + BC.studioCSS));
       // When the token guard decides a custom "dark" background is too light to
       // keep these surfaces dark, tokens.css() emits the neutral override for
@@ -159,10 +161,12 @@
       function cancelDraft() { draft = null; draftBar.hidden = true; paintPreview(); }
       store.previewTheme = (preset, commit) => {
         draft = { preset, commit }; paintPreview(); draftBar.hidden = false;
-        draftBar.replaceChildren(el("strong", { text: preset.name }), BC.ui.button("Cancel", { variant: "ghost", size: "sm", onClick: cancelDraft }), BC.ui.button("Apply theme", { size: "sm", onClick: () => {
+        draftBar.replaceChildren(el("strong", { text: preset.name }), BC.ui.button("Cancel", { variant: "ghost", size: "sm", onClick: cancelDraft }), BC.ui.button("Apply theme", { size: "sm", onClick: async () => {
           const selected = draft; draft = null; draftBar.hidden = true;
           if (selected.commit) selected.commit(); else store.applyPreset(selected.preset);
-          paintPreview(); BC.toast && BC.toast.success("Applied " + selected.preset.name);
+          paintPreview();
+          try { await store.flush(); BC.toast && BC.toast.success("Applied " + selected.preset.name); }
+          catch (_) { BC.toast && BC.toast.error("Theme could not be saved. Try Apply again."); }
         } }));
       };
       store.cancelThemePreview = cancelDraft;
@@ -238,6 +242,8 @@
       });
 
       store.subscribe((state, kind) => {
+        saveStatus.hidden = !store.saveError;
+        saveStatus.textContent = store.saveError ? "Settings could not be saved: " + store.saveError.message : "";
         S().bindings.sync(state);
         syncSafeSurface(state);
         paintMaster(state);
@@ -525,7 +531,7 @@
         x.customThemes = saved.filter((p) => p.id !== theme.id).concat([theme]);
         BC.applyTheme(x, theme);
       });
-      BC.toast && BC.toast.success("Applied and saved " + theme.name);
+
     }
     function paintOnline() {
       if (source !== "online") return;
@@ -612,7 +618,7 @@
     const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json,.json";
     inp.onchange = () => {
       const f = inp.files && inp.files[0]; if (!f) return;
-      f.text().then((txt) => {
+      f.text().then(async (txt) => {
         try {
           const j = JSON.parse(txt);
           const settings = j && typeof j === "object" ? themeOnly(j.settings) : null;
@@ -1569,7 +1575,7 @@
     const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json,.json";
     inp.onchange = () => {
       const f = inp.files && inp.files[0]; if (!f) return;
-      f.text().then((txt) => {
+      f.text().then(async (txt) => {
         let parsed = null;
         try { parsed = JSON.parse(txt); } catch (_) { parsed = null; }
         if (!parsed || typeof parsed !== "object") { BC.toast && BC.toast.error("That isn't a settings file"); return; }
@@ -1587,6 +1593,7 @@
         // Data an old backup kept inside settings, lifted out by the migrations.
         const lifted = Object.assign({}, carry.local || {});
         const hasLifted = Object.keys(lifted).length > 0 || !!carry.gradeHistory;
+        try { await store.flush(); } catch (error) { BC.toast && BC.toast.error("Settings could not be imported: " + error.message); return; }
         if (!adapter.saveLocal || (!localPart && !hasLifted)) { BC.toast && BC.toast.success("Settings imported"); return; }
         Promise.resolve(localPart || (adapter.getLocal ? adapter.getLocal() : null))
           .then((base) => {
@@ -1597,7 +1604,7 @@
             return adapter.saveLocal(out);
           })
           .then(() => BC.toast && BC.toast.success("Settings and planner data imported"))
-          .catch(() => BC.toast && BC.toast.warn("Settings imported, but planner data could not be restored"));
+          .catch(() => BC.toast && BC.toast.error("Planner data could not be restored"));
       });
     };
     inp.click();

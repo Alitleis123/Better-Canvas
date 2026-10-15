@@ -63,21 +63,26 @@
     // throttle writes immediately and then at most ~4.5Hz, and its trailing call
     // guarantees the final value still lands. chrome.storage.local has no
     // write-rate quota (that's storage.sync).
-    const flushSave = BC.util.throttle(() => {
+    let lastSave = Promise.resolve(), saveError = null, destroyed = false, retryTimer;
+    function saveNow() {
+      if (destroyed) return lastSave;
       const snapshot = clone(state);
       pendingEchoes.push(snapshot);
       if (pendingEchoes.length > 20) pendingEchoes.shift();
-      Promise.resolve(adapter.save(snapshot))
-        .then(() => { dirty = false; retry = 0; })
-        .catch((e) => {
-          // The old code assigned `saved` BEFORE awaiting the write, so a failed
-          // save was believed persisted and never retried — silent data loss on
-          // the next reload.
-          BC.util.warn("settings save failed, retrying", e);
-          retry = Math.min(retry + 1, 5);
-          setTimeout(() => { if (dirty) flushSave(); }, 500 * retry);
-        });
-    }, 220);
+      lastSave = lastSave.catch(() => {}).then(() => adapter.save(snapshot)).then(() => {
+        if (BC.util.deepEqual(snapshot, state)) dirty = false;
+        retry = 0; saveError = null; notify("saved");
+      }).catch((error) => {
+        saveError = error; notify("save-error");
+        BC.util.warn("settings save failed", error);
+        clearTimeout(retryTimer);
+        if (++retry <= 5) retryTimer = setTimeout(() => { if (dirty && !destroyed) flushSave(); }, 500 * retry);
+        throw error;
+      });
+      lastSave.catch(() => {});
+      return lastSave;
+    }
+    const flushSave = BC.util.throttle(() => { saveNow().catch(() => {}); }, 220);
 
     function scheduleSave() { dirty = true; flushSave(); }
 
@@ -141,6 +146,8 @@
 
     return {
       get() { return state; },
+      flush() { return saveNow(); },
+      get saveError() { return saveError; },
       set,
       undo, redo,
       canUndo() { return past.length > 0; },
@@ -150,6 +157,7 @@
       // Lets a re-mounted drawer dispose the previous store instead of leaving it
       // subscribed and rendering into a detached tree forever.
       destroy() {
+        destroyed = true; clearTimeout(retryTimer);
         if (unsubAdapter) { BC.util.guard(unsubAdapter, "state unsub"); unsubAdapter = null; }
         listeners.clear();
       },

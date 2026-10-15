@@ -6,7 +6,6 @@
 (function () {
   "use strict";
   const BC = globalThis.BC;
-  const KEY = BC.SETTINGS_KEY;
 
   function sendToTab(id, msg) {
     return new Promise((res) => chrome.tabs.sendMessage(id, msg, (r) => res(chrome.runtime.lastError ? null : r)));
@@ -59,31 +58,22 @@
   let current = BC.cloneDefaults();
   const adapter = {
     getState() { return current; },
-    save(s) { current = s; return new Promise((res) => chrome.storage.local.set({ [KEY]: s }, res)); },
-    // No page to re-apply here, but the options page should still restyle itself
-    // live as you change the theme.
+    save(s) { return BC.storage.save(s).then(() => { current = s; }); },
     preview(s) { paintTokens(s); },
-    subscribe(cb) {
-      const handler = (changes, area) => {
-        if (area === "local" && changes[KEY]) { current = BC.mergeDefaults(changes[KEY].newValue); cb(current); }
-      };
-      chrome.storage.onChanged.addListener(handler);
-      return () => chrome.storage.onChanged.removeListener(handler);
-    },
-    // bcLocal round-trip for export/import (planner metadata lives there now).
-    getLocal() {
-      return new Promise((res) => chrome.storage.local.get(BC.LOCAL_KEY, (r) => res((r && r[BC.LOCAL_KEY]) || null)));
-    },
-    saveLocal(obj) {
-      return new Promise((res) => chrome.storage.local.set({ [BC.LOCAL_KEY]: obj }, res));
-    },
+    subscribe(cb) { return BC.storage.subscribe((s) => { current = s; cb(s); }); },
+    getLocal() { return BC.storage.loadLocal(); },
+    saveLocal(obj) { return BC.storage.saveLocal(obj); },
     getCourses() { return fromTab("bc:getCourses"); },
     getGpaData() { return fromTab("bc:gpaData"); },
   };
 
-  chrome.storage.local.get(KEY, (r) => {
-    current = BC.mergeDefaults(r[KEY]);
+  BC.storage.load().then((settings) => {
+    current = settings;
     paintTokens(current);
     BC.SettingsUI.render(document.getElementById("bc-settings-root"), adapter, { variant: "page" });
+  }).catch((error) => {
+    const root = document.getElementById("bc-settings-root");
+    root.setAttribute("role", "alert");
+    root.textContent = "Could not load or migrate settings: " + error.message + ". Reopen this page to retry.";
   });
 })();

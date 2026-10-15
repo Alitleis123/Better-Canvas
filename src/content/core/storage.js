@@ -63,19 +63,37 @@
     });
   }
 
+  function readValues(keys) {
+    return new Promise((resolve, reject) => {
+      if (!area()) return resolve({});
+      const done = (result) => {
+        const error = chrome.runtime && chrome.runtime.lastError;
+        if (error) reject(new Error(error.message)); else resolve(result || {});
+      };
+      try {
+        const promise = area().get(keys, done);
+        if (promise && promise.then) promise.then(done, reject);
+      } catch (error) { reject(error); }
+    });
+  }
+
   function writeValues(values) {
     return new Promise((resolve, reject) => {
       const a = area();
       if (!a) return resolve();
       const keys = Object.keys(values);
       for (const key of keys) writing[key]++;
+      let finished = false;
       const done = (error) => {
+        if (finished) return;
+        finished = true;
         for (const key of keys) { writing[key]--; refresh(key); }
         if (error) reject(new Error(error.message || String(error)));
         else resolve();
       };
       try {
-        a.set(values, () => done(chrome.runtime && chrome.runtime.lastError));
+        const promise = a.set(values, () => done(chrome.runtime && chrome.runtime.lastError));
+        if (promise && promise.then) promise.then(() => done(), done);
       } catch (e) { done(e); }
     });
   }
@@ -88,34 +106,22 @@
 
     load() {
       if (loadPromise) return loadPromise;
-      loadPromise = new Promise((resolve) => {
-        if (!area()) {
-          current = BC.cloneDefaults(); savedSettings = JSON.stringify(current);
-          local = local || emptyLocal(); return resolve(current);
+      loadPromise = (async () => {
+        const res = await readValues([KEY, LOCAL_KEY]);
+        const stored = res[KEY], carry = {};
+        current = BC.mergeDefaults(stored, carry);
+        savedSettings = JSON.stringify(current);
+        local = BC.cleanLocalData(res[LOCAL_KEY] || emptyLocal());
+        if (carry.gradeHistory) local.gradeHistory = Object.assign({}, carry.gradeHistory, local.gradeHistory || {});
+        if (carry.local) {
+          for (const k of Object.keys(carry.local)) if (local[k] === undefined) local[k] = carry.local[k];
         }
-        area().get([KEY, LOCAL_KEY], (res) => {
-          const stored = res && res[KEY];
-          const carry = {};
-          current = BC.mergeDefaults(stored, carry);
-          savedSettings = JSON.stringify(current);
-          local = BC.cleanLocalData((res && res[LOCAL_KEY]) || emptyLocal());
-          if (carry.gradeHistory) {
-            local.gradeHistory = Object.assign({}, carry.gradeHistory, local.gradeHistory || {});
-          }
-          // Generic carry-over so future migrations can move any subtree from
-          // bcSettings into bcLocal without bespoke code here. Never clobber a
-          // value that already exists locally.
-          if (carry.local) {
-            for (const k of Object.keys(carry.local)) if (local[k] === undefined) local[k] = carry.local[k];
-          }
-          if (stored && (stored.version || 1) < BC.SETTINGS_VERSION) {
-            revisions[KEY]++; revisions[LOCAL_KEY]++;
-            writeValues({ [KEY]: current, [LOCAL_KEY]: local })
-              .catch((e) => BC.util.warn("storage migration", e));
-          }
-          resolve(current);
-        });
-      });
+        if (stored && (stored.version || 1) < BC.SETTINGS_VERSION) {
+          revisions[KEY]++; revisions[LOCAL_KEY]++;
+          await writeValues({ [KEY]: current, [LOCAL_KEY]: local });
+        }
+        return current;
+      })().catch((error) => { loadPromise = null; throw error; });
       return loadPromise;
     },
 
