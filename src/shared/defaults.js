@@ -102,6 +102,7 @@
       },
       hideSidebar: false,
       courses: {},                 // per-course: {hidden, nickname, color, bgImage, bgGradient, note}
+      themeImages: [],             // theme artwork, assigned consistently across courses
     },
 
     todo: {

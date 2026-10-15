@@ -80,6 +80,7 @@
     const rad = (d.cardRadius|0) + "px";
     let css = `
       .ic-DashboardCard { border-radius: ${rad} !important; overflow: hidden; }
+      .ic-DashboardCard[data-bc-image] .ic-DashboardCard__header_hero { background-color: transparent !important; opacity: 1 !important; }
       .ic-DashboardCard__link, .ic-DashboardCard__box { border-radius: ${rad} !important; }
       ${d.hoverLift ? `.ic-DashboardCard { transition: transform var(--bc-dur-3, 220ms) var(--bc-ease-out, ease), box-shadow var(--bc-dur-3, 220ms) var(--bc-ease-out, ease); }
       .ic-DashboardCard:hover { transform: translateY(-3px); box-shadow: var(--bc-shadow-3, 0 10px 30px rgba(0,0,0,.12)); }
@@ -161,18 +162,24 @@
     if (header) {
       const want = (spec.bgImage && BC.util.isSafeUrl(spec.bgImage)) ? `url("${BC.util.cssUrl(spec.bgImage)}")` : null;
       const last = appliedImg.get(header);
-      if (want && last === undefined) originalImages.set(header, header.style.backgroundImage || "");
-      if (want && last !== want) {
-        header.style.backgroundImage = want;
-        header.style.backgroundSize = "cover";
-        header.style.backgroundPosition = "center";
+      if (want && last === undefined) originalImages.set(header,
+        ["background-image", "background-size", "background-position"].map((key) =>
+          [key, header.style.getPropertyValue(key), header.style.getPropertyPriority(key)]));
+      // React can repaint an existing node. Compare the live style as well as
+      // our last value so the school image cannot silently overwrite a theme.
+      if (want && (last !== want || header.style.backgroundImage !== want || header.style.getPropertyPriority("background-image") !== "important")) {
+        header.style.setProperty("background-image", want, "important");
+        header.style.setProperty("background-size", "cover", "important");
+        header.style.setProperty("background-position", "center", "important");
         appliedImg.set(header, want);
       } else if (!want && last !== undefined) {
-        header.style.backgroundImage = originalImages.get(header);
-        header.style.backgroundSize = "";
-        header.style.backgroundPosition = "";
+        for (const [key, value, priority] of originalImages.get(header) || []) {
+          if (value) header.style.setProperty(key, value, priority);
+          else header.style.removeProperty(key);
+        }
         appliedImg.delete(header);
       }
+      if (card.hasAttribute("data-bc-image") !== !!want) card.toggleAttribute("data-bc-image", !!want);
     }
     const wantDisplay = spec.hidden ? "none" : "";
     if (card.style.display !== wantDisplay) card.style.display = wantDisplay;
@@ -550,7 +557,8 @@
       const effHidden = spec.hidden === true
         || (d.autoHideConcluded && concludedIds && concludedIds.has(id))
         || (!!query && name.indexOf(query) === -1);
-      overlayCard(card, { ...spec, hidden: effHidden });
+      const artwork = BC.themeImageForCourse(d.themeImages, id);
+      overlayCard(card, { ...spec, bgImage: spec.bgImage || (artwork && artwork.url), hidden: effHidden });
       if (!effHidden) shown++;
       if (d.showInlineGrade)   overlayInlineGrade(card, id, scoresMap);
       if (d.showProgressBar)   overlayProgress(card, plannerCountByCourse);

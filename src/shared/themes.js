@@ -110,6 +110,92 @@
     },
   ];
 
+  // A theme carries portable artwork, never course names, grades or course IDs.
+  BC.themeImages = function (images) {
+    if (!Array.isArray(images)) return [];
+    return images.slice(0, 32).map((image) => {
+      if (typeof image === "string") image = { url: image };
+      if (!image || typeof image !== "object") return null;
+      const url = typeof image.url === "string" ? image.url.trim() : "";
+      if (!/^(https:\/\/|data:image\/)/i.test(url)) return null;
+      const out = { url };
+      for (const key of ["title", "creator", "license"]) {
+        if (typeof image[key] === "string") out[key] = image[key].slice(0, 200);
+      }
+      for (const key of ["source", "licenseUrl", "thumbnail"]) {
+        if (typeof image[key] === "string" && /^https:\/\//i.test(image[key])) out[key] = image[key];
+      }
+      return out;
+    }).filter(Boolean);
+  };
+
+  BC.themeOnly = function (src) {
+    if (!src || typeof src !== "object" || Array.isArray(src)) return null;
+    const out = {};
+    for (const key of ["theming", "cosmetics"]) {
+      if (src[key] && typeof src[key] === "object" && !Array.isArray(src[key])) out[key] = BC.cleanData(src[key]);
+    }
+    if (out.theming) delete out.theming.rotation;
+    if (src.dashboard && Array.isArray(src.dashboard.themeImages)) {
+      out.dashboard = { themeImages: BC.themeImages(src.dashboard.themeImages) };
+    }
+    return Object.keys(out).length ? out : null;
+  };
+
+  BC.applyTheme = function (target, preset) {
+    const src = BC.themeOnly(preset.settings || preset);
+    if (!src) return;
+    const merge = (to, from) => {
+      for (const key of Object.keys(from)) {
+        const value = from[key];
+        if (Array.isArray(value)) to[key] = JSON.parse(JSON.stringify(value));
+        else if (value && typeof value === "object") {
+          if (!to[key] || typeof to[key] !== "object" || Array.isArray(to[key])) to[key] = {};
+          merge(to[key], value);
+        } else to[key] = value;
+      }
+    };
+    // Reset the previous look before applying the next. Rotation and the user's
+    // non-visual dashboard settings survive, including names/order/hidden cards.
+    const baseTheming = { ...BC.defaults.theming };
+    delete baseTheming.rotation;
+    const accessibility = {};
+    for (const key of ["colorBlind", "reducedMotion", "fontSizeScale", "cursor"]) {
+      if (!src.theming || !(key in src.theming)) accessibility[key] = target.theming[key];
+    }
+    merge(target.theming, baseTheming);
+    merge(target.cosmetics, BC.defaults.cosmetics);
+    merge(target, src);
+    Object.assign(target.theming, accessibility);
+    target.dashboard.themeImages = BC.themeImages(src.dashboard && src.dashboard.themeImages);
+    for (const course of Object.values(target.dashboard.courses || {})) {
+      if (!course || typeof course !== "object") continue;
+      delete course.bgImage;
+      delete course.bgGradient;
+    }
+  };
+
+  BC.themeImageForCourse = function (images, courseId) {
+    if (!Array.isArray(images) || !images.length) return null;
+    let hash = 0;
+    for (const ch of String(courseId)) hash = (Math.imul(hash, 31) + ch.charCodeAt(0)) >>> 0;
+    return images[hash % images.length];
+  };
+
+  // Local vector artwork gives the minimal presets real card images, even
+  // offline. Three coordinated variations are used across the course cards.
+  function minimalArt(accent, base, n) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400" viewBox="0 0 800 400"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="${base}"/><stop offset="1" stop-color="${accent}"/></linearGradient></defs><path fill="url(#g)" d="M0 0h800v400H0z"/><circle cx="${160 + n * 240}" cy="${100 + n * 30}" r="155" fill="${accent}" opacity=".5"/><path d="M-80 380Q240 ${-60 + n * 100} 880 280" stroke="white" stroke-opacity=".17" stroke-width="120" fill="none"/><circle cx="660" cy="60" r="210" fill="none" stroke="white" stroke-opacity=".16" stroke-width="2"/></svg>`;
+    return { url: "data:image/svg+xml," + encodeURIComponent(svg), title: "Minimal curves" };
+  }
+  for (const preset of BC.PRESET_THEMES) {
+    preset.category = "minimal";
+    const t = preset.settings.theming;
+    const base = (BC.DARK_TONES[t.darkTone] || BC.DARK_TONES.neutral).bg;
+    preset.settings.dashboard = { themeImages: preset.id === "bc-default" ? [] :
+      [0, 1, 2].map((n) => minimalArt(t.accentColor || "#6366f1", base, n)) };
+  }
+
   // isDarkActive — canonical source of truth used by every surface.
   BC.isDarkActive = function (settings) {
     if (!settings || !settings.theming) return false;

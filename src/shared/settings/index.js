@@ -35,7 +35,7 @@
 
   const TABS = [
     { id: "theming",       group: "Look",    label: "Appearance",       icon: "contrast",     description: "Dark mode, colors, type and spacing for all of Canvas.", render: renderTheming },
-    { id: "themes",        group: "Look",    label: "Themes",           icon: "layers",       description: "One-click looks, your saved themes, and automatic rotation.", render: renderThemes },
+    { id: "themes",        group: "Look",    label: "Themes",           icon: "layers",       description: "Image themes, an online gallery, and your saved looks.", render: renderThemes },
     { id: "cosmetics",     group: "Look",    label: "Background & CSS", icon: "image",        description: "A page background behind Canvas, and your own CSS.", render: renderCosmetics },
     { id: "dashboard",     group: "Home",    label: "Dashboard",        icon: "grid",         description: "How course cards look and what appears around them.", render: renderDashboard },
     { id: "todo",          group: "Home",    label: "To Do",            icon: "check-square", description: "Canvas's To Do list, restyled or replaced by the planner.", render: renderTodo },
@@ -319,22 +319,19 @@
   // so taking `settings` whole let a theme rewrite ANY setting. Only what a theme
   // is made of (exactly what themeSnapshot exports) is kept.
   function themeOnly(src) {
-    const out = {};
-    if (src && src.theming && typeof src.theming === "object" && !Array.isArray(src.theming)) {
-      out.theming = BC.cleanData(src.theming);
-      delete out.theming.rotation;
-    }
-    if (src && src.cosmetics && typeof src.cosmetics === "object" && !Array.isArray(src.cosmetics)) {
-      out.cosmetics = BC.cleanData(src.cosmetics);
-    }
-    return Object.keys(out).length ? out : null;
+    return BC.themeOnly(src);
   }
 
   function themeSnapshot(store, name) {
     const cur = store.get();
     const theming = JSON.parse(JSON.stringify(cur.theming));
     delete theming.rotation; // rotation config isn't part of a theme's look
-    return { id: BC.util.uuid(), name, settings: { theming, cosmetics: JSON.parse(JSON.stringify(cur.cosmetics)) } };
+    const images = BC.themeImages(cur.dashboard.themeImages);
+    for (const course of Object.values(cur.dashboard.courses || {})) {
+      if (course && course.bgImage && !images.some((i) => i.url === course.bgImage)) images.push({ url: course.bgImage });
+    }
+    return { id: BC.util.uuid(), name, settings: { theming, cosmetics: JSON.parse(JSON.stringify(cur.cosmetics)),
+      dashboard: { themeImages: BC.themeImages(images) } } };
   }
 
   function download(text, name, type) {
@@ -350,8 +347,8 @@
   }
 
   // A small rendering of the theme: page, panel, text lines and the accent.
-  function themePreview(theming) {
-    const t = theming || {};
+  function themePreview(settings) {
+    const t = settings.theming || {};
     const pal = BC.color.themePalettes(t);
     const dark = t.darkMode === "on";
     const p = dark ? pal.dark : pal.light;
@@ -365,18 +362,48 @@
     panel.style.borderColor = p.border;
     for (const i of panel.querySelectorAll("i")) i.style.background = p.muted;
     panel.querySelector("b").style.background = accent;
+    const artwork = BC.themeImages(settings.dashboard && settings.dashboard.themeImages)[0];
+    if (artwork) {
+      box.classList.add("bcs-theme__preview--image");
+      const img = el("img", { src: artwork.thumbnail || artwork.url, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" });
+      img.addEventListener("error", () => {
+        img.hidden = true;
+        box.appendChild(el("span", { class: "bcs-theme__image-error", text: "Preview unavailable" }));
+      }, { once: true });
+      box.prepend(img);
+    }
     if (t.darkMode === "auto") box.classList.add("bcs-theme__preview--auto");
     return box;
   }
 
-  function themeCard(store, p, custom) {
+  function themeCard(store, p, custom, onApply) {
     const card = el("div", { class: "bcs-theme" });
     const apply = el("button", { class: "bcs-theme__apply", type: "button", "aria-label": "Apply theme " + p.name }, [
-      themePreview((p.settings && p.settings.theming) || {}),
+      themePreview(p.settings || {}),
       el("span", { class: "bcs-theme__name bc-truncate", text: p.name }),
     ]);
-    apply.addEventListener("click", () => { store.applyPreset(p); BC.toast && BC.toast.success("Applied " + p.name); });
+    apply.addEventListener("click", () => {
+      if (onApply) onApply();
+      else { store.applyPreset(p); BC.toast && BC.toast.success("Applied " + p.name); }
+    });
+    const syncSelected = () => {
+      const current = store.get(), t = p.settings && p.settings.theming || {};
+      const selected = JSON.stringify(current.dashboard.themeImages || []) === JSON.stringify(p.settings && p.settings.dashboard && p.settings.dashboard.themeImages || [])
+        && current.theming.darkMode === (t.darkMode || "off") && current.theming.accentColor === (t.accentColor || "");
+      apply.setAttribute("aria-pressed", String(selected));
+    };
+    syncSelected(); S().bindings.add(apply, syncSelected);
     card.appendChild(apply);
+    const art = BC.themeImages(p.settings && p.settings.dashboard && p.settings.dashboard.themeImages)[0];
+    if (art && art.source) card.appendChild(el("a", { class: "bcs-theme__credit bc-truncate", href: art.source,
+      target: "_blank", rel: "noopener noreferrer", title: [art.title, art.creator, art.license].filter(Boolean).join(" · "),
+      text: [art.creator || "Image source", art.license].filter(Boolean).join(" · ") }));
+    const credits = BC.themeImages(p.settings && p.settings.dashboard && p.settings.dashboard.themeImages).filter((i) => i.source);
+    if (credits.length > 1) card.appendChild(el("details", { class: "bcs-theme__credits" }, [
+      el("summary", { text: credits.length + " image credits" }),
+      ...credits.map((i) => el("a", { href: i.source, target: "_blank", rel: "noopener noreferrer",
+        text: [i.title, i.creator, i.license].filter(Boolean).join(" · ") })),
+    ]));
     if (custom) {
       const more = BC.ui.iconButton("more", { label: "Theme actions for " + p.name, size: "sm" });
       more.classList.add("bcs-theme__more");
@@ -387,6 +414,117 @@
       card.appendChild(more);
     }
     return card;
+  }
+
+  function themeBrowser(store) {
+    const library = BC.themeLibrary;
+    let source = "featured", category = "all", generation = 0, page = 0, pages = 0;
+    let results = [], dark = true, background = false, activeQuery = "";
+    const grid = el("div", { class: "bcs-themes" });
+    const status = el("p", { class: "bc-caption", role: "status", "aria-live": "polite" });
+    const search = BC.ui.input({ size: "sm", placeholder: "Search themes…", ariaLabel: "Search themes" });
+    search.type = "search";
+    const form = el("form", { class: "bcs-inline bcs-inline--grow" }, [search,
+      BC.ui.button("Search", { size: "sm", onClick: () => runSearch() })]);
+    form.addEventListener("submit", (e) => { e.preventDefault(); runSearch(); });
+    const sources = el("div", { class: "bcs-inline" });
+    const categories = el("div", { class: "bcs-theme-categories", role: "group", "aria-label": "Theme categories" });
+    const onlineOptions = el("div", { class: "bcs-inline bcs-theme-options", hidden: true }, [
+      S().segmented({ ariaLabel: "Image theme appearance", get: () => dark ? "dark" : "light", set: (v) => { dark = v === "dark"; paintOnline(); },
+        options: [{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }] }),
+      BC.ui.checkbox({ label: "Also use as page background", checked: false, onChange: (on) => { background = on; paintOnline(); } }),
+    ]);
+    const more = BC.ui.button("Load more", { size: "sm", onClick: () => load(page + 1) });
+    more.hidden = true;
+    const set = BC.ui.button("Use these images as a set", { size: "sm", onClick: () => {
+      if (results.length) applyOnline(library.makeTheme(results, { name: activeQuery + " collection", category, dark, background }));
+    } });
+    set.hidden = true;
+    const refresh = BC.ui.button("Refresh", { size: "sm", variant: "ghost", onClick: () => load(1, true) });
+    refresh.hidden = true;
+    const root = sec("Browse themes", [sources, form, categories, onlineOptions, status, grid,
+      el("div", { class: "bcs-inline" }, [more, set, refresh])], {
+      description: "Themes replace your course-card images. Explore online for more photos and art, or pick a minimal look below.",
+    });
+
+    function controls() {
+      for (const b of sources.children) b.setAttribute("aria-pressed", String(b.dataset.source === source));
+      for (const b of categories.children) b.setAttribute("aria-pressed", String(b.dataset.category === category));
+      onlineOptions.hidden = source !== "online";
+      refresh.hidden = source !== "online";
+      search.placeholder = source === "online" ? "Search images: mountains, galaxies, Tokyo…" : "Search featured themes…";
+    }
+    function featured() {
+      const q = search.value.trim().toLowerCase();
+      const matches = BC.PRESET_THEMES.filter((p) => (category === "all" || p.category === category) &&
+        (p.name + " " + p.category).toLowerCase().includes(q));
+      grid.replaceChildren(...matches.map((p) => themeCard(store, p, false)));
+      status.textContent = matches.length ? matches.length + " featured themes" : "No featured themes match. Try Explore online.";
+      more.hidden = set.hidden = true;
+    }
+    function applyOnline(theme) {
+      store.set((x) => {
+        const saved = x.customThemes || [];
+        x.customThemes = saved.filter((p) => p.id !== theme.id).concat([theme]);
+        BC.applyTheme(x, theme);
+      });
+      BC.toast && BC.toast.success("Applied and saved " + theme.name);
+    }
+    function paintOnline() {
+      if (source !== "online") return;
+      grid.replaceChildren(...results.map((image) => {
+        const p = library.makeTheme([image], { category, dark, background });
+        return themeCard(store, p, false, () => applyOnline(p));
+      }));
+      set.hidden = results.length < 2;
+    }
+    async function load(nextPage = 1, force = false) {
+      const seq = ++generation;
+      if (nextPage === 1) {
+        activeQuery = search.value.trim() || (library.categories.find((c) => c.id === category) || library.categories[0]).query;
+        results = []; page = pages = 0; grid.replaceChildren();
+      }
+      const query = activeQuery;
+      more.hidden = set.hidden = true;
+      status.textContent = "Finding image themes…";
+      grid.setAttribute("aria-busy", "true");
+      try {
+        const data = await library.search(query, nextPage, force);
+        if (seq !== generation || !root.isConnected || source !== "online") return;
+        const seen = new Set(results.map((i) => i.url));
+        for (const image of data.images) if (!seen.has(image.url)) { results.push(image); seen.add(image.url); }
+        page = data.page; pages = data.pages;
+        paintOnline();
+        more.hidden = page >= pages;
+        status.textContent = results.length ? results.length + " images shown · Openverse · Select one to apply and save a theme." : "No images found. Try another search.";
+      } catch (e) {
+        if (seq !== generation || !root.isConnected || source !== "online") return;
+        status.textContent = e.message;
+        more.hidden = !(page > 0 && page < pages);
+      } finally {
+        if (seq === generation) grid.removeAttribute("aria-busy");
+      }
+    }
+    function runSearch() { if (source === "online") load(); else featured(); }
+    search.addEventListener("input", () => { if (source === "featured") featured(); });
+    for (const [id, label] of [["featured", "Featured"], ["online", "Explore online"]]) {
+      const b = BC.ui.button(label, { size: "sm", onClick: () => {
+        if (source === id) return;
+        source = id; generation++; controls();
+        if (source === "online") load(); else { grid.removeAttribute("aria-busy"); featured(); }
+      } });
+      b.dataset.source = id; sources.appendChild(b);
+    }
+    for (const c of [{ id: "all", label: "All" }, ...library.categories]) {
+      const b = BC.ui.button(c.label, { size: "sm", variant: "ghost", onClick: () => {
+        category = c.id;
+        search.value = source === "online" ? c.query || "landscape" : "";
+        controls(); runSearch();
+      } });
+      b.dataset.category = c.id; categories.appendChild(b);
+    }
+    controls(); featured();
+    return root;
   }
 
   function importTheme(store) {
@@ -412,9 +550,12 @@
     const C = S();
     const themesSig = () => JSON.stringify((store.get().customThemes || []).map((p) => [p.id, p.name]));
     return [
-      sec("Built-in", [
-        el("div", { class: "bcs-themes" }, BC.PRESET_THEMES.map((p) => themeCard(store, p, false))),
-      ], { description: "Applies the theme's colors, radius and density on top of your other settings." }),
+      themeBrowser(store),
+      row({ label: "Course images", hint: "Clear theme artwork and individual image overrides to restore Canvas's original course pictures.", stacked: true,
+        control: BC.ui.button("Restore Canvas images", { size: "sm", onClick: () => store.set((x) => {
+          x.dashboard.themeImages = [];
+          for (const c of Object.values(x.dashboard.courses || {})) if (c && typeof c === "object") delete c.bgImage;
+        }) }) }),
       live(() => {
         const custom = store.get().customThemes || [];
         const name = BC.ui.input({ size: "sm", placeholder: "Name this look", ariaLabel: "Theme name" });
@@ -1590,7 +1731,20 @@
   transition: border-color var(--bc-dur-1, 90ms) ease, box-shadow var(--bc-dur-1, 90ms) ease;
 }
 .bcs-theme__apply:hover { border-color: var(--bc-border-strong, #d4d4d8); box-shadow: var(--bc-shadow-1, 0 1px 2px rgba(0,0,0,.08)); }
-.bcs-theme__preview { position: relative; height: 64px; border-radius: var(--bc-radius-md, 8px); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
+.bcs-theme__preview { position: relative; height: 110px; border-radius: var(--bc-radius-md, 8px); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
+.bcs-theme__preview > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.bcs-theme__preview--image .bcs-theme__bar { opacity: .85; }
+.bcs-theme__preview--image .bcs-theme__panel { top: auto; height: 38px; bottom: 6px; opacity: .92; }
+.bcs-theme__preview--image .bcs-theme__panel b { display: none; }
+.bcs-theme__image-error { position: absolute; top: 12px; left: 20px; right: 5px; font-size: 11px; color: var(--bc-muted); }
+.bcs-theme__credit { display: block; padding: 4px 6px; max-width: 100%; font-size: 10px; }
+.bcs-theme__credits { padding: 0 6px; font-size: 11px; }
+.bcs-theme__credits a { display: block; margin-top: 4px; overflow-wrap: anywhere; }
+.bcs-theme__apply[aria-pressed="true"] { border-color: var(--bc-accent, #6366f1); box-shadow: 0 0 0 1px var(--bc-accent, #6366f1); }
+.bcs-theme-categories { display: flex; flex-wrap: wrap; gap: 4px; }
+.bcs-theme-categories [aria-pressed="true"], .bcs-inline > [aria-pressed="true"] { background: var(--bc-accent-soft, #eef2ff); color: var(--bc-accent-text, #4338ca); border-color: var(--bc-accent, #6366f1); }
+.bcs-theme-options { flex-wrap: wrap; }
+.bcs-themes[aria-busy="true"] { opacity: .6; }
 .bcs-theme__preview--auto::after { content: ""; position: absolute; inset: 0 0 0 50%; background: rgba(17,17,19,.86); }
 .bcs-theme__bar { position: absolute; left: 0; top: 0; bottom: 0; width: 14px; }
 .bcs-theme__panel { position: absolute; left: 22px; right: 8px; top: 10px; bottom: 10px; border: 1px solid; border-radius: 5px; padding: 7px; display: flex; flex-direction: column; gap: 5px; }

@@ -1,0 +1,147 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const test = require("node:test");
+const vm = require("node:vm");
+const root = path.resolve(__dirname, "..");
+const copy = (v) => JSON.parse(JSON.stringify(v));
+function context() {
+  const ctx = vm.createContext({ URL, console, setTimeout, clearTimeout, structuredClone });
+  for (const file of ["defaults", "themes", "theme-library", "theme-artwork"]) {
+    vm.runInContext(fs.readFileSync(path.join(root, "src/shared/" + file + ".js"), "utf8"), ctx);
+  }
+  return ctx;
+}
+
+test("switching themes replaces image overrides, preserves course data and rotation", () => {
+  const { BC } = context(), state = BC.cloneDefaults();
+  state.dashboard.courses = { "1": { nickname: "Biology", hidden: true, note: "Keep", bgImage: "https://old.example/image.jpg" } };
+  const courses = state.dashboard.courses, rotation = state.theming.rotation;
+  Object.assign(rotation, { enabled: true, themeIds: ["nord", "rose"] });
+  state.theming.reducedMotion = true;
+  state.theming.darkBg = "#123456";
+  state.theming.highContrast = true;
+  state.cosmetics.background = { mode: "image", image: "https://old.example/page.jpg" };
+  BC.applyTheme(state, BC.PRESET_THEMES.find((p) => p.id === "rose"));
+  assert.equal(state.dashboard.courses, courses);
+  assert.deepEqual(copy(courses["1"]), { nickname: "Biology", hidden: true, note: "Keep" });
+  assert.equal(state.dashboard.themeImages.length, 3);
+  assert.equal(state.theming.rotation, rotation);
+  assert.equal(rotation.enabled, true);
+  assert.equal(state.theming.reducedMotion, true);
+  assert.equal(state.theming.highContrast, false);
+  assert.equal(state.theming.darkBg, "");
+  assert.equal(state.cosmetics.background.mode, "none");
+  BC.applyTheme(state, BC.PRESET_THEMES[0]);
+  assert.equal(state.dashboard.themeImages.length, 0);
+});
+
+test("shared theme imports round-trip artwork and credits without accepting course/account settings", () => {
+  const { BC } = context();
+  const p = BC.PRESET_THEMES.find((p) => p.category === "space");
+  const source = copy(p.settings);
+  source.dashboard.courses = { "1": { hidden: true, nickname: "Unwanted" } };
+  source.enabled = false;
+  source.theming.rotation = { enabled: true };
+  const result = BC.themeOnly(source);
+  assert.deepEqual(copy(result.dashboard), copy(p.settings.dashboard));
+  assert.equal(result.theming.rotation, undefined);
+  assert.equal(result.enabled, undefined);
+  const state = BC.cloneDefaults();
+  BC.applyTheme(state, { settings: result });
+  assert.deepEqual(copy(state.dashboard.themeImages), copy(p.settings.dashboard.themeImages));
+  assert.equal(state.enabled, true);
+  assert.ok(state.dashboard.themeImages[0].source);
+});
+
+test("course artwork assignment survives ordering changes and applies to new courses", () => {
+  const { BC } = context(), images = [{ url: "a" }, { url: "b" }, { url: "c" }];
+  const before = Object.fromEntries(["123", "456", "789"].map((id) => [id, BC.themeImageForCourse(images, id)]));
+  for (const id of ["789", "456", "123"]) assert.equal(BC.themeImageForCourse(images, id), before[id]);
+  assert.ok(BC.themeImageForCourse(images, "new-course"));
+  assert.equal(BC.themeImageForCourse([], "123"), null);
+});
+
+test("featured library has distinct themes across all five categories with image credits", () => {
+  const { BC } = context();
+  assert.equal(BC.PRESET_THEMES.length, 36);
+  assert.equal(new Set(BC.PRESET_THEMES.map((p) => p.id)).size, 36);
+  for (const category of BC.themeLibrary.categories) {
+    const items = BC.PRESET_THEMES.filter((p) => p.category === category.id && p.id !== "bc-default");
+    assert.ok(items.length >= 6);
+    for (const p of items) {
+      assert.ok(p.settings.dashboard.themeImages.length);
+      if (category.id !== "minimal") {
+        const image = p.settings.dashboard.themeImages[0];
+        assert.ok(image.title && image.license && image.source && image.licenseUrl);
+      }
+    }
+  }
+});
+
+test("online image data is validated and markup never becomes executable theme code", () => {
+  const ctx = context(), { BC } = ctx;
+  const image = { id: "12345678-1234-1234-1234-123456789abc", title: "<img src=x onerror=alert(1)>Lake", creator: "A",
+    url: "https://images.example.org/lake.jpg", foreign_landing_url: "https://example.org/photo", license: "cc0", license_url: "https://creativecommons.org/publicdomain/zero/1.0/" };
+  assert.equal(BC.themeLibrary.normalize(image).title, "Lake");
+  for (const change of [{ mature: true }, { url: "javascript:alert(1)" }, { url: "https://127.0.0.1/a" },
+    { url: "https://local.internal/a" }, { id: "../../foo" }, { license: "unknown" }]) {
+    assert.equal(BC.themeLibrary.normalize({ ...image, ...change }), null);
+  }
+  const source = JSON.parse('{"theming":{"__proto__":{"polluted":true}},"dashboard":{"themeImages":[{"url":"javascript:alert(1)"}]}}');
+  const state = BC.cloneDefaults();
+  BC.applyTheme(state, { settings: source });
+  assert.equal(vm.runInContext("Object.prototype.polluted", ctx), undefined);
+  assert.equal(state.dashboard.themeImages.length, 0);
+});
+
+test("image themes retain deterministic IDs, mode and optional page background", () => {
+  const { BC } = context(), image = { url: "https://images.example.org/a.jpg" };
+  const a = BC.themeLibrary.makeTheme([image], { dark: false, background: true, category: "city" });
+  const b = BC.themeLibrary.makeTheme([image], { dark: false, background: true, category: "city" });
+  assert.equal(a.id, b.id);
+  assert.equal(a.settings.theming.darkMode, "off");
+  assert.equal(a.settings.cosmetics.background.image, image.url);
+  const c = BC.themeLibrary.makeTheme([image], { dark: true });
+  assert.notEqual(a.id, c.id);
+  assert.equal(c.settings.cosmetics.background.mode, "none");
+});
+
+function background(fetch) {
+  const handlers = [];
+  const event = { addListener() {} };
+  const chrome = { runtime: { onMessage: { addListener: (h) => handlers.push(h) }, onInstalled: event, onStartup: event },
+    permissions: { onAdded: event, onRemoved: event }, contextMenus: { onClicked: event }, tabs: {} };
+  const ctx = vm.createContext({ chrome, fetch, URLSearchParams, AbortController, console, setTimeout, clearTimeout });
+  vm.runInContext(fs.readFileSync(path.join(root, "src/background/service-worker.js"), "utf8"), ctx);
+  return { ctx, message: (msg) => new Promise((resolve) => handlers.at(-1)(msg, {}, resolve)) };
+}
+
+test("theme API requests use a fixed public endpoint, omit credentials and cache/dedupe searches", async () => {
+  const calls = [], pending = [];
+  const bg = background((url, options) => { calls.push({ url, options }); return new Promise((resolve) => pending.push(resolve)); });
+  const msg = { type: "bc:themeSearch", query: "space", page: 1, url: "https://untrusted.example" };
+  const a = bg.message(msg), b = bg.message(msg);
+  assert.equal(calls.length, 1);
+  const url = new URL(calls[0].url);
+  assert.equal(url.origin, "https://api.openverse.org");
+  assert.equal(url.searchParams.get("mature"), "false");
+  assert.equal(calls[0].options.credentials, "omit");
+  assert.equal(calls[0].options.referrerPolicy, "no-referrer");
+  pending[0]({ ok: true, json: async () => ({ results: [], page_count: 100, result_count: 2000 }) });
+  assert.equal((await a).pages, 20); await b;
+  await bg.message(msg); assert.equal(calls.length, 1);
+  const refresh = bg.message({ ...msg, refresh: true });
+  assert.equal(calls.length, 2);
+  pending[1]({ ok: true, json: async () => ({ results: [], page_count: 0 }) }); await refresh;
+  assert.deepEqual(copy(vm.runInContext('customOrigins(["https://api.openverse.org/*", "*://*.instructure.com/*", "https://school.example/*"])', bg.ctx)), ["https://school.example/*"]);
+});
+
+test("theme API failures and rate limits reach the gallery as recoverable errors", async () => {
+  const bg = background(async () => ({ ok: false, status: 429 }));
+  const result = await bg.message({ type: "bc:themeSearch", query: "nature" });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Wait a minute/);
+  const empty = await bg.message({ type: "bc:themeSearch", query: " " });
+  assert.match(empty.error, /Enter something/);
+});

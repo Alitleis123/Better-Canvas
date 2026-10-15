@@ -7,6 +7,8 @@
 const CONTENT_JS = [
   "src/shared/defaults.js",
   "src/shared/themes.js",
+  "src/shared/theme-library.js",
+  "src/shared/theme-artwork.js",
   "src/content/core/util.js",
   "src/content/core/datetime.js",
   "src/content/core/color.js",
@@ -70,7 +72,7 @@ const MENU_ID = "bc-add-task";
 const BASE_PATTERNS = ["*://*.instructure.com/*"];
 
 function customOrigins(origins) {
-  return (origins || []).filter((o) => !/instructure\.com/.test(o));
+  return (origins || []).filter((o) => !/instructure\.com/.test(o) && o !== "https://api.openverse.org/*");
 }
 
 // The "add this as a task" menu was limited to *.instructure.com, so it never
@@ -142,9 +144,50 @@ chrome.runtime.onStartup.addListener(syncRegistration);
 if (chrome.permissions && chrome.permissions.onAdded) chrome.permissions.onAdded.addListener(syncRegistration);
 if (chrome.permissions && chrome.permissions.onRemoved) chrome.permissions.onRemoved.addListener(syncRegistration);
 
+// Only this fixed public endpoint is reachable through the theme message. Never
+// proxy a caller-supplied URL or send Canvas session cookies to the image source.
+const themeSearchCache = new Map();
+const themeSearchPending = new Map();
+async function searchThemeImages(msg) {
+  const query = typeof msg.query === "string" ? msg.query.trim().slice(0, 120) : "";
+  const page = Math.min(20, Math.max(1, Number(msg.page) | 0));
+  if (!query) throw new Error("Enter something to search for.");
+  const key = query.toLowerCase() + ":" + page;
+  const cached = themeSearchCache.get(key);
+  if (!msg.refresh && cached && Date.now() - cached.at < 600000) return cached.data;
+  if (themeSearchPending.has(key)) return themeSearchPending.get(key);
+  const request = (async () => {
+    const params = new URLSearchParams({ q: query, page: String(page), page_size: "20",
+      license: "cc0,pdm,by,by-sa", mature: "false", aspect_ratio: "wide" });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch("https://api.openverse.org/v1/images/?" + params, {
+        credentials: "omit", referrerPolicy: "no-referrer", signal: controller.signal,
+      });
+      if (response.status === 429) throw new Error("The image library is busy. Wait a minute, then try again.");
+      if (!response.ok) throw new Error("The image library is unavailable. Try again shortly.");
+      const body = await response.json();
+      if (!Array.isArray(body.results)) throw new Error("The image library returned an invalid response.");
+      const data = { ok: true, results: body.results.slice(0, 20), page,
+        pages: Math.min(20, Math.max(0, Number(body.page_count) || 0)), total: Math.max(0, Number(body.result_count) || 0) };
+      themeSearchCache.set(key, { at: Date.now(), data });
+      if (themeSearchCache.size > 30) themeSearchCache.delete(themeSearchCache.keys().next().value);
+      return data;
+    } finally { clearTimeout(timer); }
+  })();
+  themeSearchPending.set(key, request);
+  try { return await request; } finally { themeSearchPending.delete(key); }
+}
+
 // Popup-triggered re-sync.
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || !msg.type) return;
+  if (msg.type === "bc:themeSearch") {
+    searchThemeImages(msg).then(sendResponse, (e) => sendResponse({ ok: false, error:
+      e.name === "AbortError" ? "The image library took too long. Try again." : e.message }));
+    return true;
+  }
   if (msg.type === "bc:syncRegistration") { syncRegistration().then(() => sendResponse({ ok: true })); return true; }
   // Content scripts can't open the options page themselves.
   if (msg.type === "bc:openOptions") { chrome.runtime.openOptionsPage(); sendResponse({ ok: true }); return; }

@@ -11,18 +11,6 @@
 
   const DAY = 864e5;
 
-  function deepMerge(target, src) {
-    for (const k of Object.keys(src)) {
-      const v = src[k];
-      if (Array.isArray(v)) target[k] = v.slice();
-      else if (v && typeof v === "object") {
-        if (!target[k] || typeof target[k] !== "object") target[k] = {};
-        deepMerge(target[k], v);
-      } else target[k] = v;
-    }
-    return target;
-  }
-
   let rotating = false;
 
   function apply(settings) {
@@ -53,7 +41,7 @@
     BC.storage.updateLocal((d) => { d.lastRotation = { period, themeId: id }; })
       .then(() => {
         if (!theme || !theme.settings) return;
-        return BC.storage.update((d) => { deepMerge(d, theme.settings); })
+        return BC.storage.update((d) => { BC.applyTheme(d, theme); })
           .then(() => BC.toast.info("Theme rotated: " + (theme.name || id)));
       })
       .catch((e) => BC.diag.push("rotation", e))

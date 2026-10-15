@@ -170,6 +170,7 @@
       reset() { swap(BC.cloneDefaults()); },
       applyPreset(preset) {
         set((d) => {
+          if (BC.applyTheme) { BC.applyTheme(d, preset); return; }
           const src = BC.cleanData(preset.settings || preset);
           const deep = (t, s) => {
             for (const k of Object.keys(s)) {

@@ -11,7 +11,7 @@
   },
   "permissions": ["storage", "scripting", "alarms", "contextMenus", "notifications"],
   "optional_host_permissions": ["*://*/*"],
-  "host_permissions": ["*://*.instructure.com/*"],
+  "host_permissions": ["*://*.instructure.com/*", "https://api.openverse.org/*"],
   "background": {
     "service_worker": "src/background/service-worker.js"
   },
@@ -23,6 +23,8 @@
       "js": [
         "src/shared/defaults.js",
         "src/shared/themes.js",
+        "src/shared/theme-library.js",
+        "src/shared/theme-artwork.js",
         "src/content/core/util.js",
         "src/content/core/datetime.js",
         "src/content/core/color.js",
