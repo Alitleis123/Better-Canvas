@@ -245,7 +245,7 @@
       const el = existing.get(note.id);
       if (!el) { buildNote(note); continue; }
       const ta = el.querySelector("textarea");
-      if (ta && ta.getRootNode().activeElement !== ta && ta.value !== (note.text || "")) ta.value = note.text || "";
+      if (ta && !ta.dataset.bcDirty && ta.getRootNode().activeElement !== ta && ta.value !== (note.text || "")) ta.value = note.text || "";
       if (el !== dragEl) {
         const x = (note.x || 100) + "px", y = (note.y || 100) + "px";
         if (el.style.left !== x) el.style.left = x;
@@ -271,17 +271,18 @@
     el.querySelector(".bc-note-x").addEventListener("click", () => {
       editNotes((notes) => notes.filter((n) => n.id !== note.id)).then(() => el.remove()).catch(() => {});
     });
-    ta.addEventListener("input", BC.util.debounce(() => {
+    const saveText = BC.util.debounce(() => {
       const text = ta.value;
-      editNotes((notes) => notes.map((n) => n.id === note.id ? { ...n, text } : n));
-    }, 400));
+      editNotes((notes) => notes.map((n) => n.id === note.id ? { ...n, text } : n))
+        .then(() => { if (ta.value === text) delete ta.dataset.bcDirty; }).catch(() => {});
+    }, 400);
+    ta.addEventListener("input", () => { ta.dataset.bcDirty = "1"; saveText(); });
   }
 
   BC.quickNote = function () {
     const id = BC.util.uuid();
     const note = { id, text: "", x: 120 + Math.random() * 80, y: 120 + Math.random() * 80 };
-    editNotes((notes) => notes.concat(note));
-    buildNote(note);
+    editNotes((notes) => notes.concat(note)).then(() => buildNote(note)).catch(() => {});
   };
 
   // ---- Auto-save drafts ----

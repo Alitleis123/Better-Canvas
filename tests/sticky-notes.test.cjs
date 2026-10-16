@@ -37,6 +37,14 @@ test("two independent productivity contexts edit different notes on the same pag
     assert.deepEqual(db.data.bcLocal.notes[key].map((n) => n.id), ["b"]);
     assert.ok(db.requests.every((keys) => JSON.stringify(keys) === '["bcLocal"]' || JSON.stringify(keys) === '["bcSettings","bcLocal"]'));
     b.BC.util.warn = () => {}; db.fail("quota");
+    edit(b, "b", "retain unsaved text"); await b.BC.storage.updateLocal(() => {});
+    b.BC.features.productivity.apply({ productivity: { stickyNotes: true, quickActions: false } }); await settle();
+    assert.equal(b.dom.window.document.querySelector('[data-note-id="b"] textarea').value, "retain unsaved text");
+    b.BC.quickNote(); await b.BC.storage.updateLocal(() => {}); await settle();
+    assert.equal(b.dom.window.document.querySelectorAll('[data-note-id]').length, 1, "failed creation does not mount an unpersisted note");
+    db.fail(null); edit(b, "b", "retain unsaved text"); await b.BC.storage.updateLocal(() => {});
+    assert.equal(db.data.bcLocal.notes[key][0].text, "retain unsaved text");
+    db.fail("quota");
     b.dom.window.document.querySelector('[data-note-id="b"] button').click();
     await b.BC.storage.updateLocal(() => {}); await settle();
     assert.ok(b.dom.window.document.querySelector('[data-note-id="b"] textarea'), "failed deletion leaves the editor open");
