@@ -1718,8 +1718,8 @@
     const due = itemDate(it);
     const url = itemUrl(it);
     const pts = itemPoints(it);
-    const subs = ((L.subtasks || {})[key] || []).map((x) => ({ text: x.text, done: !!x.done }));
-    const tags = ((L.tagsByItem || {})[key] || []).slice();
+    let subs = ((L.subtasks || {})[key] || []).map((x) => ({ ...x }));
+    let tags = ((L.tagsByItem || {})[key] || []).slice();
     const save = (fn) => writeTodoLocal(fn);
 
     const courseChip = course.label ? BC.ui.chip(course.label) : null;
@@ -1740,12 +1740,20 @@
 
     const subList = el("div", { class: "pld-subs" });
     const subCount = el("span", { class: "pld-count" });
-    const saveSubs = () => save((x) => { const m = (x.subtasks = x.subtasks || {}); if (subs.length) m[key] = subs; else delete m[key]; });
+    const saveSubs = (operation) => save((x) => {
+      const m = (x.subtasks = x.subtasks || {});
+      const steps = operation(m[key] || []);
+      if (steps.length) m[key] = steps; else delete m[key];
+    }).then(() => { subs = (tlocal().subtasks || {})[key] || []; drawSubs(); }).catch(() => {});
     function drawSubs() {
-      subList.replaceChildren(...subs.map((sub, i) => {
-        const cb = BC.ui.checkbox({ checked: sub.done, label: sub.text, onChange: (v) => { sub.done = v; saveSubs(); drawSubs(); } });
-        const del = BC.ui.iconButton("x", { label: "Remove " + sub.text, size: "sm", onClick: () => { subs.splice(i, 1); saveSubs(); drawSubs(); } });
-        return el("div", { class: "pld-sub" + (sub.done ? " is-done" : "") }, [cb, del]);
+      subList.replaceChildren(...subs.map((sub) => {
+        const cb = BC.ui.checkbox({ checked: sub.done, label: sub.text, onChange: (v) => saveSubs((steps) => steps.map((step) => step.id === sub.id ? { ...step, done: v } : step)) });
+        const rename = BC.ui.iconButton("edit", { label: "Rename " + sub.text, size: "sm", onClick: () => {
+          const text = prompt("Step name", sub.text)?.trim();
+          if (text) saveSubs((steps) => steps.map((step) => step.id === sub.id ? { ...step, text } : step));
+        } });
+        const del = BC.ui.iconButton("x", { label: "Remove " + sub.text, size: "sm", onClick: () => saveSubs((steps) => steps.filter((step) => step.id !== sub.id)) });
+        return el("div", { class: "pld-sub" + (sub.done ? " is-done" : "") }, [cb, rename, del]);
       }));
       subCount.textContent = subs.length ? subs.filter((x) => x.done).length + " of " + subs.length : "";
     }
@@ -1756,15 +1764,19 @@
       e.preventDefault();
       const text = subInput.value.trim();
       if (!text) return;
-      subs.push({ text, done: false });
+      const step = { id: BC.util.uuid(), text, done: false };
       subInput.value = "";
-      saveSubs(); drawSubs();
+      saveSubs((steps) => steps.concat([step]));
     });
 
     const tagWrap = el("div", { class: "pld-chips" });
-    const saveTags = () => save((x) => { const m = (x.tagsByItem = x.tagsByItem || {}); if (tags.length) m[key] = tags.slice(); else delete m[key]; });
+    const saveTags = (operation) => save((x) => {
+      const m = (x.tagsByItem = x.tagsByItem || {});
+      const next = operation(m[key] || []);
+      if (next.length) m[key] = next; else delete m[key];
+    }).then(() => { tags = (tlocal().tagsByItem || {})[key] || []; drawTags(); }).catch(() => {});
     function drawTags() {
-      tagWrap.replaceChildren(...tags.map((tg) => BC.ui.chip(tg, { onRemove: () => { tags.splice(tags.indexOf(tg), 1); saveTags(); drawTags(); } })));
+      tagWrap.replaceChildren(...tags.map((tg) => BC.ui.chip(tg, { onRemove: () => saveTags((fresh) => fresh.filter((tag) => tag !== tg)) })));
     }
     drawTags();
     const listId = "pld-tags-" + Math.random().toString(36).slice(2, 7);
@@ -1775,7 +1787,7 @@
       if (e.key !== "Enter" && e.key !== ",") return;
       e.preventDefault();
       const v = tagInput.value.replace(/,/g, "").trim();
-      if (v && !tags.includes(v)) { tags.push(v); saveTags(); drawTags(); }
+      if (v) saveTags((fresh) => fresh.includes(v) ? fresh : fresh.concat([v]));
       tagInput.value = "";
     });
 

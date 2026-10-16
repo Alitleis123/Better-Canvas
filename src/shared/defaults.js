@@ -354,6 +354,17 @@
         }
       }
     }
+    // Assign legacy steps the same ids in every reader before any operation.
+    for (const steps of Object.values(data?.todo?.subtasks || {})) {
+      if (!Array.isArray(steps)) continue;
+      const used = new Set(steps.map((step) => step.id).filter(Boolean));
+      steps.forEach((step, index) => {
+        if (step.id) return;
+        let id = "legacy-step-" + index;
+        while (used.has(id)) id += "-";
+        step.id = id; used.add(id);
+      });
+    }
     return data;
   };
 
