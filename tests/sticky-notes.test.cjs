@@ -36,5 +36,12 @@ test("two independent productivity contexts edit different notes on the same pag
     edit(a, "a", "stale"); await a.BC.storage.updateLocal(() => {});
     assert.deepEqual(db.data.bcLocal.notes[key].map((n) => n.id), ["b"]);
     assert.ok(db.requests.every((keys) => JSON.stringify(keys) === '["bcLocal"]' || JSON.stringify(keys) === '["bcSettings","bcLocal"]'));
+    b.BC.util.warn = () => {}; db.fail("quota");
+    b.dom.window.document.querySelector('[data-note-id="b"] button').click();
+    await b.BC.storage.updateLocal(() => {}); await settle();
+    assert.ok(b.dom.window.document.querySelector('[data-note-id="b"] textarea'), "failed deletion leaves the editor open");
+    db.fail(null); b.dom.window.document.querySelector('[data-note-id="b"] button').click();
+    await b.BC.storage.updateLocal(() => {}); await settle();
+    assert.equal(b.dom.window.document.querySelector('[data-note-id="b"]'), null);
   } finally { a.BC.features.productivity.unmount(); b.BC.features.productivity.unmount(); a.dom.window.close(); b.dom.window.close(); }
 });

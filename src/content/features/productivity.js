@@ -269,8 +269,7 @@
     ta.value = note.text || "";
     document.body.appendChild(el);
     el.querySelector(".bc-note-x").addEventListener("click", () => {
-      el.remove();
-      editNotes((notes) => notes.filter((n) => n.id !== note.id));
+      editNotes((notes) => notes.filter((n) => n.id !== note.id)).then(() => el.remove()).catch(() => {});
     });
     ta.addEventListener("input", BC.util.debounce(() => {
       const text = ta.value;
