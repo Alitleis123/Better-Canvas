@@ -89,7 +89,6 @@
     for (const t of c) if (!merged.some((x) => x.toLowerCase() === t.toLowerCase())) merged.push(t);
     const sig = JSON.stringify([g, merged.slice(0, 60)]);
     if (sig === lastSnap) return;
-    lastSnap = sig;
     const prev = JSON.stringify([local.navItems || [], known]);
     if (prev === sig || (!g.length && !c.length)) return;
     BC.storage.updateLocal((d) => {
@@ -99,7 +98,7 @@
         for (const t of c) if (!latest.some((x) => x.toLowerCase() === t.toLowerCase())) latest.push(t);
         d.courseNavItems = latest.slice(0, 60);
       }
-    });
+    }).then(() => { lastSnap = sig; }).catch(() => {});
   }
 
   // Flexbox order for one menu item. Saved items take their saved slot; everything

@@ -223,7 +223,9 @@
     }
 
     if (newest && newest !== mark) {
-      BC.storage.updateLocal((d) => { d.annSeenAt = newest; });
+      BC.storage.updateLocal((d) => {
+        if (!d.annSeenAt || new Date(newest) > new Date(d.annSeenAt)) d.annSeenAt = newest;
+      });
     }
   }
 
