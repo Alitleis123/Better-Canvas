@@ -70,3 +70,22 @@ test("invalidated extension requests reject without an uncaught page error", asy
   await assert.rejects(a.storage.updateLocal((d) => { d.notes.lost = true; }), /context invalidated/);
   assert.match(errors[0], /context invalidated/);
 });
+
+
+test("background rejects foreign and missing sender ids before reads or writes", async () => {
+  const db = database(), before = copy(db.data);
+  for (const sender of [{ id: "foreign-extension" }, {}]) {
+    for (const message of [
+      { type: "bc:localRead" }, { type: "bc:localCommit", value: { notes: { foreign: true } } },
+      { type: "bc:locker", action: "create", item: { id: "foreign", type: "note" } },
+    ]) {
+      let response;
+      db.message(message, sender, (value) => { response = value; });
+      assert.equal(response.ok, false); assert.match(response.error, /Untrusted/);
+    }
+  }
+  await settle();
+  assert.deepEqual(db.data, before);
+  assert.equal(db.requests.length, 0);
+  assert.equal(db.events.length, 0);
+});

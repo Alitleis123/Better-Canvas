@@ -10,7 +10,7 @@ function database(seed = {}) {
   const data = { bcLocal: { notes: {}, drafts: {}, cache: {} }, ...copy(seed) };
   const events = [], reads = [], requests = [], tabs = [];
   let failure, beforeSend;
-  const runtime = {};
+  const runtime = { id: "test" };
   const api = {
     get(keys, callback) {
       requests.push(copy(keys));
@@ -41,10 +41,10 @@ function database(seed = {}) {
   function client() {
     const handlers = [];
     const tab = { holdReads: false };
-    tab.chrome = { runtime: { get lastError() { return runtime.lastError; }, getURL: (s) => "chrome-extension://test/" + s,
+    tab.chrome = { runtime: { id: runtime.id, get lastError() { return runtime.lastError; }, getURL: (s) => "chrome-extension://test/" + s,
       sendMessage(message, callback) {
         if (beforeSend) beforeSend(message);
-        messageListener(copy(message), {}, (response) => callback(copy(response)));
+        messageListener(copy(message), { id: runtime.id }, (response) => callback(copy(response)));
       } }, storage: { local: { ...api, get(keys, callback) {
         api.get(keys, (value) => { if (tab.holdReads) reads.push(() => callback(value)); else callback(value); });
       } }, onChanged: { addListener: (fn) => handlers.push(fn) } } };
@@ -60,6 +60,7 @@ function database(seed = {}) {
     return t;
   }
   return { data, persisted: data, events, reads, requests, api, runtime, client, tab, globals,
+    message: (message, sender, respond) => messageListener(copy(message), sender, respond),
     fail: (value) => { failure = value; }, beforeSend: (fn) => { beforeSend = fn; },
     holdReads: (value) => tabs.forEach((t) => { t.holdReads = value; }),
   };

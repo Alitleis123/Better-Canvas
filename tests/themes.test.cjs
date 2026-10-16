@@ -162,11 +162,11 @@ test("automatic rotation applies image collections without disabling future rota
 function background(fetch) {
   const handlers = [];
   const event = { addListener() {} };
-  const chrome = { runtime: { onMessage: { addListener: (h) => handlers.push(h) }, onInstalled: event, onStartup: event },
+  const chrome = { runtime: { id: "test", onMessage: { addListener: (h) => handlers.push(h) }, onInstalled: event, onStartup: event },
     permissions: { onAdded: event, onRemoved: event }, contextMenus: { onClicked: event }, tabs: {} };
   const ctx = vm.createContext({ chrome, fetch, URLSearchParams, AbortController, console, setTimeout, clearTimeout });
   vm.runInContext(fs.readFileSync(path.join(root, "src/background/service-worker.js"), "utf8"), ctx);
-  return { ctx, message: (msg) => new Promise((resolve) => handlers.at(-1)(msg, {}, resolve)) };
+  return { ctx, message: (msg) => new Promise((resolve) => handlers.at(-1)(msg, { id: "test" }, resolve)) };
 }
 
 test("theme API requests use a fixed public endpoint, omit credentials and cache/dedupe searches", async () => {

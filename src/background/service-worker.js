@@ -272,6 +272,7 @@ async function commitLocker(msg) {
 
 // Popup-triggered re-sync.
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender?.id !== chrome.runtime.id) { sendResponse({ ok: false, error: "Untrusted message sender" }); return; }
   if (!msg || !msg.type) return;
   if (msg.type === "bc:localRead") {
     readLocalSnapshot(msg).then(sendResponse, (error) => sendResponse({ ok: false, error: error.message }));
