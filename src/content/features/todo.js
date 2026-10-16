@@ -1205,12 +1205,14 @@
   // locally; real ones go to Canvas.
   function setComplete(it, complete) {
     if (it.bcVirtual) {
-      it.bcDone = complete;
       return writeTodoLocal((L) => {
         const rd = (L.recurringDone = L.recurringDone || {});
         const m = (rd[it.bcRuleId] = rd[it.bcRuleId] || {});
         if (complete) m[it.bcYmd] = true; else delete m[it.bcYmd];
-      }).then(() => noteDone(keyForItem(it), complete)).then(() => true);
+      }).then(() => {
+        it.bcDone = complete;
+        return noteDone(keyForItem(it), complete).catch(() => {});
+      }).then(() => true).catch(() => false);
     }
     const override = it.planner_override && it.planner_override.id;
     return BC.api.setPlannerComplete(it.plannable_type, (it.plannable && it.plannable.id) || it.plannable_id, complete, override)
@@ -1221,7 +1223,7 @@
           saved && saved.id != null ? { id: saved.id } : null, { marked_complete: complete });
         state.localDone.set(keyForItem(it), { complete, id: it.planner_override.id, at: Date.now() });
         // Record only on success, so a failed write can't inflate the streak.
-        return noteDone(keyForItem(it), complete);
+        return noteDone(keyForItem(it), complete).catch(() => {});
       })
       .then(() => true)
       .catch((e) => { BC.toast.error("Couldn't update: " + e.message); return false; });
