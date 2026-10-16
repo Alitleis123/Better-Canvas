@@ -56,3 +56,37 @@ test("grade and rubric renderers validate stored values, avoid injected elements
     assert.equal(dom.window.document.querySelector("[onerror]"), null);
   } finally { dom.window.close(); }
 });
+
+
+test("independent rubric editors save only changed criteria against fresh drafts", async () => {
+  const { database } = require("./storage-harness.cjs");
+  const { root } = require("./audit-helpers.cjs");
+  const db = database();
+  async function view() {
+    const page = domContext('<div id="panel"></div>', { chrome: db.client().chrome });
+    load(page.context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/storage.js");
+    const BC = page.context.BC;
+    await BC.storage.load(); BC.registry = { register() {} };
+    let flush;
+    BC.util.debounce = (fn) => { flush = fn; return () => {}; };
+    require("node:vm").runInContext(require("node:fs").readFileSync(require("node:path").join(root, "src/content/features/grades.js"), "utf8")
+      .replace("  BC.registry.register({", "  BC.testBuildRubric = buildRubricUI;\n  BC.registry.register({"), page.context);
+    const panel = page.dom.window.document.getElementById("panel");
+    const rubric = [{ id: "a", points: 10, description: "First" }, { id: "b", points: 10, description: "Second" }];
+    BC.testBuildRubric(panel, { id: 1 }, rubric, null, 7);
+    return { ...page, BC, panel, async edit(index, value) {
+      const input = panel.querySelectorAll("input")[index]; input.value = value;
+      input.dispatchEvent(new page.dom.window.Event("input", { bubbles: true }));
+      await new Promise((resolve) => page.dom.window.requestAnimationFrame(resolve));
+      flush(); await BC.storage.updateLocal(() => {});
+    } };
+  }
+  const a = await view(), b = await view();
+  try {
+    assert.equal(db.events.length, 0, "mounting a rubric does not write untouched default values");
+    await a.edit(0, "4"); await b.edit(1, "7");
+    assert.deepEqual(db.data.bcLocal.rubricDrafts[1], { a: 4, b: 7 });
+    await a.edit(0, "5");
+    assert.deepEqual(db.data.bcLocal.rubricDrafts[1], { a: 5, b: 7 });
+  } finally { a.dom.window.close(); b.dom.window.close(); }
+});

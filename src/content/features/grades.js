@@ -326,10 +326,12 @@
       <div class="bc-rubric-impact" data-impact></div>
     `;
 
-    const saveDraft = BC.util.debounce((values) => {
+    let edits = {};
+    const saveDraft = BC.util.debounce(() => {
+      const patch = edits; edits = {};
       BC.storage.updateLocal((d) => {
         const rd = (d.rubricDrafts = d.rubricDrafts || {});
-        rd[aid] = values;
+        Object.assign((rd[aid] = rd[aid] || {}), patch);
       });
     }, 500);
 
@@ -337,12 +339,10 @@
     const impactEl = panel.querySelector("[data-impact]");
     const current = groups ? BC.grades.computeTotal(groups) : null;
     function refresh() {
-      const values = {};
       let sum = 0;
       for (const row of panel.querySelectorAll(".bc-rubric-crit")) {
         const v = parseFloat(row.querySelector("input").value) || 0;
         row.querySelector("[data-val]").textContent = v;
-        values[row.dataset.crit] = v;
         sum += v;
       }
       const pct = maxTotal > 0 ? (sum / maxTotal) * 100 : 0;
@@ -356,11 +356,13 @@
             (current != null ? ` (now ${current.toFixed(2)}%)` : "");
         }
       }
-      saveDraft(values);
+      if (Object.keys(edits).length) saveDraft();
     }
     let frame = null;
     panel.addEventListener("input", (e) => {
-      if (e.target?.type !== "range" || frame !== null) return;
+      if (e.target?.type !== "range") return;
+      edits[e.target.closest(".bc-rubric-crit").dataset.crit] = parseFloat(e.target.value) || 0;
+      if (frame !== null) return;
       frame = requestAnimationFrame(() => { frame = null; if (panel.isConnected) refresh(); });
     });
     refresh();
