@@ -70,12 +70,22 @@
       if (disposed || !dirty.size) return pending;
       const snapshots = items.filter((item) => dirty.has(item.id)).map(normalize);
       pending = pending.catch(() => {}).then(async () => {
+        const errors = [];
         for (const snapshot of snapshots) {
           try { await save(snapshot); }
-          catch (e) { failed.add(snapshot.id); report(e); throw e; }
+          catch (e) {
+            if (e.message.includes("deleted in another window")) { dirty.delete(snapshot.id); failed.delete(snapshot.id); }
+            else failed.add(snapshot.id);
+            errors.push(e); continue;
+          }
           const item = items.find((item) => item.id === snapshot.id);
           if (JSON.stringify(normalize(item)) === JSON.stringify(snapshot)) dirty.delete(snapshot.id);
           failed.delete(snapshot.id); showStatus();
+        }
+        if (errors.length) {
+          const error = new Error(errors.map((e) => e.message).join("; "));
+          report(error); if (!failed.size) status.textContent = error.message;
+          throw error;
         }
       });
       pending.catch(() => {}); return pending;

@@ -2,6 +2,51 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { load, domContext, settle, copy } = require("./audit-helpers.cjs");
 
+for (const deleted of [false, true]) {
+  test("a " + (deleted ? "deleted" : "failed") + " locker item does not block another dirty item's save", async () => {
+    const db = require("./storage-harness.cjs").database({
+      "bcLocker:item:a": { id: "a", type: "note", title: "A", body: "old A" },
+      "bcLocker:item:b": { id: "b", type: "note", title: "B", body: "old B" },
+    });
+    const page = domContext("", { chrome: db.client().chrome });
+    load(page.context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/icons.js", "src/content/core/ui.js", "src/content/core/storage.js", "src/shared/settings/locker.js");
+    const BC = page.context.BC, errors = [], attempts = [];
+    BC.toast = { error: (message) => errors.push(message) };
+    const save = BC.storage.request;
+    BC.storage.request = (message) => {
+      if (message.action === "update") {
+        attempts.push(message.item.id);
+        if (!deleted && message.item.id === "a") return Promise.reject(new Error("quota for A"));
+      }
+      return save(message);
+    };
+    const root = BC.renderLocker(); page.dom.window.document.body.append(root);
+    const select = (name) => [...root.querySelectorAll(".bcs-locker-item")].find((b) => b.textContent.startsWith(name)).click();
+    const edit = (text) => { const input = root.querySelector("textarea"); input.value = text; input.dispatchEvent(new page.dom.window.Event("input")); };
+    const clickSave = () => [...root.querySelectorAll("button")].find((b) => b.textContent === "Save").click();
+    try {
+      await settle(); await settle(); select("A");
+      if (deleted) {
+        const other = db.tab(); load(other.context, "src/shared/settings/locker.js");
+        await other.context.BC.Locker.remove("a");
+      }
+      edit("retained A edit"); select("B"); edit("important new B"); clickSave();
+      await settle(); await settle();
+      assert.equal(db.data["bcLocker:item:b"].body, "important new B");
+      assert.match(root.querySelector('[role="status"]').textContent, deleted ? /deleted in another window/ : /Could not save/);
+      assert.match(errors.at(-1), deleted ? /deleted in another window/ : /quota for A/);
+      const beforeRetry = attempts.length;
+      clickSave(); await settle(); await settle();
+      assert.equal(attempts.slice(beforeRetry).includes("a"), !deleted);
+      if (deleted) assert.equal(db.data["bcLocker:item:a"], undefined);
+      else {
+        BC.storage.request = save; clickSave(); await settle(); await settle();
+        assert.equal(db.data["bcLocker:item:a"].body, "retained A edit");
+      }
+    } finally { await root.dispose().catch(() => {}); page.dom.window.close(); }
+  });
+}
+
 test("failed locker edits stay dirty across item switches and export retries inactive edits", async () => {
   const db = require("./storage-harness.cjs").database({
     "bcLocker:item:a": { id: "a", type: "note", title: "A", body: "old A" },
