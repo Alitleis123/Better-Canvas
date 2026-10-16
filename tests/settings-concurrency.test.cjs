@@ -29,6 +29,46 @@ async function surface(db, name) {
     close() { store?.destroy(); page.dom.window.close(); } };
 }
 
+for (const name of ["studio", "options"]) {
+  test(name + " real throttle persists a reversal queued behind an in-flight save", async () => {
+    const db = database(), a = await surface(db, name);
+    let release;
+    try {
+      const send = a.client.chrome.runtime.sendMessage;
+      let held = false;
+      a.client.chrome.runtime.sendMessage = (message, callback) => {
+        if (message.type === "bc:settingsCommit" && !held) {
+          held = true; release = () => send(message, callback); return;
+        }
+        return send(message, callback);
+      };
+      a.store.set((d) => { d.dashboard.cardRadius = 12; });
+      for (let i = 0; i < 100 && !release; i++) await settle();
+      assert.ok(release);
+      a.store.set((d) => { d.dashboard.cardRadius = 8; });
+      // Let the production 220 ms trailing throttle queue the reversal.
+      await new Promise((resolve) => setTimeout(resolve, 260));
+      release();
+      for (let i = 0; i < 100 && db.data.bcSettings?.dashboard.cardRadius !== 8; i++) await new Promise((resolve) => setTimeout(resolve, 5));
+      assert.equal(db.data.bcSettings.dashboard.cardRadius, 8);
+      assert.equal(a.store.get().dashboard.cardRadius, 8);
+    } finally { a.close(); }
+  });
+
+  test(name + " net-zero edits before saving preserve another editor's value", async () => {
+    const db = database(), a = await surface(db, name), b = await surface(db, name === "studio" ? "options" : "studio");
+    try {
+      // Both edits precede the first queued save's microtask.
+      a.store.set((d) => { d.dashboard.cardRadius = 12; });
+      a.store.set((d) => { d.dashboard.cardRadius = 8; });
+      b.store.set((d) => { d.dashboard.cardRadius = 9; });
+      await b.store.flush(); await a.store.flush();
+      assert.equal(db.data.bcSettings.dashboard.cardRadius, 9);
+      assert.equal(a.store.get().dashboard.cardRadius, 9);
+    } finally { a.close(); b.close(); }
+  });
+}
+
 for (const [control, pathParts, value] of [["enabled", ["enabled"], false], ["dashEnabled", ["dashboard", "enabled"], false], ["darkMode", ["theming", "darkMode"], "on"], ["notifsIn", ["notifications", "inPage"], false]]) {
   test("popup " + control + " changes only its field after an options edit", async () => {
     const db = database(), popup = await surface(db, "popup"), options = await surface(db, "options");

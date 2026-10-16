@@ -67,10 +67,13 @@
     let lastSave = Promise.resolve(), saveError = null, destroyed = false, retryTimer;
     function saveNow() {
       if (destroyed) return lastSave;
-      const snapshot = clone(state), base = clone(baseline), replacing = replacement;
-      pendingEchoes.push(snapshot);
-      if (pendingEchoes.length > 20) pendingEchoes.shift();
-      lastSave = lastSave.catch(() => {}).then(() => adapter.save(snapshot, { base, replace: !!replacing })).then((persisted) => {
+      lastSave = lastSave.catch(() => {}).then(async () => {
+        // Earlier saves may acknowledge a value the user has since reverted.
+        // Compare the current edit with that acknowledgement when this turn runs.
+        const snapshot = clone(state), base = clone(baseline), replacing = replacement;
+        pendingEchoes.push(snapshot);
+        if (pendingEchoes.length > 20) pendingEchoes.shift();
+        const persisted = await adapter.save(snapshot, { base, replace: !!replacing });
         const saved = persisted || snapshot;
         overwrite(state, BC.mergeSettingsEdits(snapshot, state, saved));
         baseline = clone(saved);
