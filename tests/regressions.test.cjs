@@ -23,47 +23,7 @@ function load(context, ...files) {
   }
 }
 
-function storageMock() {
-  const persisted = { bcLocal: { notes: {}, drafts: {}, cache: {} } };
-  const events = [];
-  const reads = [];
-  let holdReads = false;
-
-  function tab() {
-    const handlers = [];
-    const chrome = { runtime: {}, storage: {
-      local: {
-        get(keys, callback) {
-          const result = copy(persisted);
-          const deliver = () => callback(result);
-          if (holdReads) reads.push(deliver);
-          else queueMicrotask(deliver);
-        },
-        set(values, callback) {
-          const changes = {};
-          for (const [key, value] of Object.entries(values)) {
-            const oldValue = persisted[key];
-            persisted[key] = copy(value);
-            if (JSON.stringify(oldValue) !== JSON.stringify(value)) {
-              changes[key] = { oldValue, newValue: copy(value) };
-            }
-          }
-          if (Object.keys(changes).length) events.push(changes);
-          if (callback) queueMicrotask(callback);
-        },
-      },
-      onChanged: { addListener: (handler) => handlers.push(handler) },
-    } };
-    const context = createContext({ chrome });
-    load(context, "src/content/core/storage.js");
-    return {
-      context, chrome, storage: context.BC.storage,
-      deliver: (changes) => handlers.forEach((handler) => handler(changes, "local")),
-    };
-  }
-
-  return { persisted, events, reads, tab, holdReads: (value) => { holdReads = value; } };
-}
+const { database: storageMock } = require("./storage-harness.cjs");
 
 test("settings imports reject prototype keys at every depth, including arrays", () => {
   const context = createContext();
@@ -164,6 +124,7 @@ test("out-of-order storage reads retain the latest external value", async () => 
   await settle();
   mock.reads.pop()();
   mock.reads.pop()();
+  await settle();
   assert.equal(a.storage.local.notes.external, "new");
 });
 
@@ -196,11 +157,7 @@ test("a no-op local save does not hide a later external change", async () => {
 test("storage write failures reject instead of reporting a successful save", async () => {
   const mock = storageMock(), a = mock.tab();
   await a.storage.load();
-  a.chrome.storage.local.set = (values, callback) => queueMicrotask(() => {
-    a.chrome.runtime.lastError = { message: "Quota exceeded" };
-    callback();
-    delete a.chrome.runtime.lastError;
-  });
+  mock.fail("Quota exceeded");
   await assert.rejects(a.storage.updateLocal((data) => { data.notes.failed = "no"; }), /Quota exceeded/);
 });
 
@@ -251,5 +208,5 @@ test("serialized local updates and snapshot saves retain unrelated records and p
   assert.equal(reader.storage.local.notes.imported, "Backup note");
   assert.equal(reader.storage.local.notes.last, "Queued note");
   assert.equal(reader.storage.local.todo.stars.other, true);
-  assert.equal(mock.persisted.bcLocal.notes.old, "Delete this", "legacy data remains readable through record overrides");
+  assert.equal(mock.persisted.bcLocal.notes.old, undefined, "3.3.0 reads current data directly");
 });

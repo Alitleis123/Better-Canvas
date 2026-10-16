@@ -14,7 +14,6 @@
   let local = null;
   let loadPromise = null;
   let localWrites = Promise.resolve();
-  const RECORD_PREFIX = LOCAL_KEY + ":record:";
 
   function area() { return chrome.storage && chrome.storage.local; }
   function emptyLocal() { return { notes: {}, drafts: {}, cache: {} }; }
@@ -30,7 +29,6 @@
   let refreshQueued = false;
 
   function refresh(key) {
-    if (key.startsWith(RECORD_PREFIX)) key = LOCAL_KEY;
     refreshKeys.add(key);
     if (refreshQueued) return;
     refreshQueued = true;
@@ -43,7 +41,7 @@
       const before = { ...revisions };
       const sequence = {};
       for (const k of keys) sequence[k] = ++reads[k];
-      a.get(null, (res) => {
+      readValues(keys).then((res) => {
         if (chrome.runtime && chrome.runtime.lastError) return;
         for (const k of keys) {
           // A local edit after this read started is newer, and a pending write
@@ -61,7 +59,7 @@
             for (const cb of localListeners) BC.util.guard(() => cb(local), "local storage");
           }
         }
-      });
+      }).catch(() => {});
     });
   }
 
@@ -83,7 +81,7 @@
     return new Promise((resolve, reject) => {
       const a = area();
       if (!a) return resolve();
-      const keys = [...new Set(Object.keys(values).map((key) => key.startsWith(RECORD_PREFIX) ? LOCAL_KEY : key))];
+      const keys = Object.keys(values);
       for (const key of keys) writing[key]++;
       let finished = false;
       const done = (error) => {
@@ -102,55 +100,64 @@
 
   function write(key, value) { return writeValues({ [key]: value }); }
 
-  // Store changed leaves independently. A read-modify-write of all bcLocal still
-  // loses unrelated edits when two tabs read before either writes. Arrays are
-  // single records. Tombstones suppress deleted values in the legacy bcLocal seed.
-  function flatten(value, path = [], out = new Map()) {
-    if (value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length) {
-      for (const key of Object.keys(value)) flatten(value[key], path.concat(key), out);
-    } else if (path.length) out.set(JSON.stringify(path), value);
-    return out;
-  }
-  function diff(before, after) {
-    const patch = {};
-    for (const path of new Set([...before.keys(), ...after.keys()])) {
-      if (before.has(path) === after.has(path) && JSON.stringify(before.get(path)) === JSON.stringify(after.get(path))) continue;
-      patch[RECORD_PREFIX + path] = after.has(path) ? { value: after.get(path) } : { deleted: true };
-    }
-    return patch;
-  }
   function readLocal(values = {}) {
-    const data = BC.cleanLocalData(values[LOCAL_KEY] || emptyLocal());
-    const records = [];
-    for (const [key, record] of Object.entries(values)) {
-      if (!key.startsWith(RECORD_PREFIX) || !record || typeof record !== "object") continue;
-      let path;
-      try { path = JSON.parse(key.slice(RECORD_PREFIX.length)); } catch (_) { continue; }
-      if (!Array.isArray(path) || !path.length || path.some((key) => typeof key !== "string" || ["__proto__", "constructor", "prototype"].includes(key))) continue;
-      records.push({ path, record });
-    }
-    records.sort((a, b) => Number(!a.record.deleted) - Number(!b.record.deleted) || a.path.length - b.path.length);
-    for (const { path, record } of records) {
-      let target = data;
-      for (const part of path.slice(0, -1)) {
-        if (!target[part] || typeof target[part] !== "object" || Array.isArray(target[part])) target[part] = {};
-        target = target[part];
-      }
-      if (record.deleted) delete target[path.at(-1)];
-      else if (Object.hasOwn(record, "value")) target[path.at(-1)] = BC.cleanData(record.value);
-    }
-    return BC.cleanLocalData(Object.assign(emptyLocal(), data));
+    return BC.cleanLocalData(Object.assign(emptyLocal(), values[LOCAL_KEY] || {}));
+  }
+  function reportFailure(error) {
+    BC.util.warn("local storage", error);
+    if (BC.toast) BC.toast.error("Changes could not be saved: " + error.message);
   }
   function queueLocal(operation) {
     const result = localWrites.then(operation);
-    localWrites = result.catch(() => {});
+    localWrites = result.catch(reportFailure);
     return result;
   }
-  async function commitLocal(patch) {
-    revisions[LOCAL_KEY]++;
-    if (Object.keys(patch).length) await writeValues(patch);
-    local = readLocal(await readValues(null));
-    for (const cb of localListeners) BC.util.guard(() => cb(local), "local storage");
+  function request(message) {
+    return new Promise((resolve, reject) => {
+      let finished = false;
+      const done = (response) => {
+        if (finished) return;
+        finished = true;
+        const error = chrome.runtime.lastError;
+        if (error) reject(new Error(error.message));
+        else if (!response || (!response.ok && !response.conflict)) reject(new Error(response?.error || "Storage writer unavailable. Refresh this page and try again."));
+        else resolve(response);
+      };
+      try {
+        const promise = chrome.runtime.sendMessage(message, done);
+        if (promise?.then) promise.then(done, reject);
+      } catch (error) { reject(error); }
+    });
+  }
+  async function transact(mutator, migrate = false) {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const snapshot = await request({ type: "bc:localRead", migrate });
+      const fresh = snapshot.values;
+      const draft = readLocal(fresh);
+      const message = { type: "bc:localCommit", base: snapshot.base };
+      if (migrate) {
+        const carry = {};
+        message.settings = BC.mergeDefaults(fresh[KEY], carry);
+        message.settingsBase = snapshot.settingsBase;
+        for (const [key, value] of Object.entries(carry.local || {})) if (draft[key] === undefined) draft[key] = value;
+        if (carry.gradeHistory) draft.gradeHistory = Object.assign({}, carry.gradeHistory, draft.gradeHistory || {});
+      }
+      // Replacement results and small edits both run against the committed state.
+      message.value = BC.cleanLocalData(mutator(draft) || draft);
+      if (!migrate && JSON.stringify(message.value) === JSON.stringify(fresh[LOCAL_KEY])) { local = message.value; return local; }
+      revisions[LOCAL_KEY]++;
+      writing[LOCAL_KEY]++;
+      let response;
+      try { response = await request(message); }
+      finally { writing[LOCAL_KEY]--; }
+      if (response.conflict) continue;
+      local = message.value;
+      if (migrate) { current = message.settings; savedSettings = JSON.stringify(current); }
+      for (const cb of localListeners) BC.util.guard(() => cb(local), "local storage");
+      refresh(LOCAL_KEY);
+      return local;
+    }
+    throw new Error("Other tabs kept changing this data. Try saving again.");
   }
 
   const storage = (BC.storage = {
@@ -160,21 +167,12 @@
     load() {
       if (loadPromise) return loadPromise;
       loadPromise = (async () => {
-        const res = await readValues(null);
-        const stored = res[KEY], carry = {};
-        current = BC.mergeDefaults(stored, carry);
+        const res = await readValues([KEY, LOCAL_KEY]);
+        const stored = res[KEY];
+        current = BC.mergeDefaults(stored);
         savedSettings = JSON.stringify(current);
         local = readLocal(res);
-        if (carry.gradeHistory) local.gradeHistory = Object.assign({}, carry.gradeHistory, local.gradeHistory || {});
-        if (carry.local) {
-          for (const k of Object.keys(carry.local)) if (local[k] === undefined) local[k] = carry.local[k];
-        }
-        if (stored && (stored.version || 1) < BC.SETTINGS_VERSION) {
-          revisions[KEY]++; revisions[LOCAL_KEY]++;
-          // Keep the legacy seed readable. Record overrides remain separate and
-          // win even if another context migrates this seed concurrently.
-          await writeValues({ [KEY]: current, [LOCAL_KEY]: local });
-        }
+        if (stored && (stored.version || 1) < BC.SETTINGS_VERSION) await transact((draft) => draft, true);
         return current;
       })().catch((error) => { loadPromise = null; throw error; });
       return loadPromise;
@@ -205,16 +203,14 @@
       return write(KEY, settings);
     },
 
+    // Only imports/restores use full replacement. Snapshot its input now, but
+    // apply it inside the queue so two queued restores finish with the last one.
     saveLocal(data) {
-      const before = flatten(local || emptyLocal());
-      const after = flatten(BC.cleanLocalData(data));
-      const patch = diff(before, after);
-      return queueLocal(async () => {
-        await storage.load();
-        await commitLocal(patch);
-        return local;
-      });
+      const replacement = BC.cleanLocalData(data);
+      return queueLocal(async () => { await storage.load(); return transact(() => replacement); });
     },
+
+    request, // Locker uses the same background writer and error handling.
 
     async update(mutator) {
       const s = current || (await storage.load());
@@ -227,15 +223,9 @@
       return draft;
     },
 
+    // Mutators may run again after a conflict. Keep side effects outside them.
     updateLocal(mutator) {
-      return queueLocal(async () => {
-        await storage.load();
-        const fresh = readLocal(await readValues(null));
-        const draft = JSON.parse(JSON.stringify(fresh));
-        mutator(draft);
-        await commitLocal(diff(flatten(fresh), flatten(BC.cleanLocalData(draft))));
-        return local;
-      });
+      return queueLocal(async () => { await storage.load(); return transact(mutator); });
     },
 
     subscribe(cb) { listeners.add(cb); return () => listeners.delete(cb); },
@@ -278,7 +268,7 @@
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== "local") return;
       if (changes[KEY]) refresh(KEY);
-      if (changes[LOCAL_KEY] || Object.keys(changes).some((key) => key.startsWith(RECORD_PREFIX))) refresh(LOCAL_KEY);
+      if (changes[LOCAL_KEY]) refresh(LOCAL_KEY);
     });
   }
 })();

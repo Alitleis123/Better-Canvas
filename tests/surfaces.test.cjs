@@ -5,22 +5,22 @@ const test = require("node:test");
 const { root, load, domContext, copy, settle } = require("./audit-helpers.cjs");
 
 async function surface(name, fail = false) {
-  const data = { bcSettings: { version: 2, grades: { gradeHistory: { 7: [{ score: 93 }] } }, todo: { local: { stars: { a: true } } } } };
-  const writes = [], runtime = {}, chrome = { runtime, tabs: { query: async () => [] }, storage: { local: {
-    get: (_keys, cb) => queueMicrotask(() => cb(copy(data))),
-    set: (values, cb) => { writes.push(copy(values)); queueMicrotask(() => {
-      if (fail) runtime.lastError = { message: "Quota exceeded" }; else Object.assign(data, copy(values));
-      cb(); delete runtime.lastError;
-    }); },
-  }, onChanged: { addListener() {} } } };
+  const db = require("./storage-harness.cjs").database({ bcSettings: { version: 2, grades: { gradeHistory: { 7: [{ score: 93 }] } }, todo: { local: { stars: { a: true } } } } });
+  const data = db.data, writes = [], chrome = db.client().chrome;
+  chrome.tabs = { query: async () => [] };
+  const set = db.api.set;
+  db.api.set = (values, cb) => { writes.push(copy(values)); return set(values, cb); };
+  chrome.storage.local.set = db.api.set;
+  db.fail(fail ? "Quota exceeded" : null);
   const html = fs.readFileSync(path.join(root, "src", name, name + ".html"), "utf8");
   const { dom, context } = domContext(html, { chrome });
   let adapter;
   load(context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/storage.js");
   context.BC.SettingsUI = { render(_root, value) { adapter = value; } };
   load(context, "src/" + name + "/" + name + ".js");
+  await context.BC.storage.load().catch(() => {});
   await settle(); await settle();
-  return { data, writes, dom, context, adapter, fail: (value) => { fail = value; } };
+  return { data, writes, dom, context, adapter, fail: (value) => db.fail(value ? "Quota exceeded" : null) };
 }
 
 for (const name of ["options", "popup"]) {

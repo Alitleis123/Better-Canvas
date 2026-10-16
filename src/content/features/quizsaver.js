@@ -170,7 +170,7 @@
     const cutoff = Date.now() - MAX_AGE_MS;
     const stale = Object.keys(q).filter((k) => !q[k] || (q[k].savedAt || 0) < cutoff);
     if (stale.length) BC.storage.updateLocal((d) => {
-      for (const k of stale) if (d.quizDrafts) delete d.quizDrafts[k];
+      for (const k of stale) if (d.quizDrafts?.[k] && (d.quizDrafts[k].savedAt || 0) < cutoff) delete d.quizDrafts[k];
     });
   }
 

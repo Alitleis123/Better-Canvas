@@ -184,9 +184,61 @@ async function searchThemeImages(msg) {
   try { return await request; } finally { themeSearchPending.delete(key); }
 }
 
+// One writer per extension. Every request rereads persisted state; worker restarts
+// need no in-memory revision or tombstone recovery. Failures do not stall the queue.
+let storageWrites = Promise.resolve();
+function storageCall(method, value) {
+  return new Promise((resolve, reject) => {
+    let finished = false;
+    const done = (result) => {
+      if (finished) return;
+      finished = true;
+      const error = chrome.runtime.lastError;
+      if (error) reject(new Error(error.message)); else resolve(result);
+    };
+    try {
+      const promise = chrome.storage.local[method](value, done);
+      if (promise?.then) promise.then(done, reject);
+    } catch (error) { reject(error); }
+  });
+}
+async function storageHash(value) {
+  const bytes = new TextEncoder().encode(JSON.stringify(value ?? null));
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+// Compute tokens in the extension origin, where Web Crypto is available even
+// when a content script runs on a school's HTTP development instance.
+async function readLocalSnapshot(msg) {
+  const values = await storageCall("get", msg.migrate ? ["bcLocal", "bcSettings"] : ["bcLocal"]);
+  return { ok: true, values, base: await storageHash(values.bcLocal),
+    ...(msg.migrate ? { settingsBase: await storageHash(values.bcSettings) } : {}) };
+}
+async function commitLocal(msg) {
+  if (!msg.value || typeof msg.value !== "object" || Array.isArray(msg.value)) throw new Error("Invalid local data");
+  const migrating = Object.hasOwn(msg, "settings");
+  const stored = await storageCall("get", migrating ? ["bcLocal", "bcSettings"] : ["bcLocal"]);
+  if (msg.base !== await storageHash(stored.bcLocal) ||
+      (migrating && msg.settingsBase !== await storageHash(stored.bcSettings))) return { ok: false, conflict: true };
+  const values = { bcLocal: msg.value };
+  if (migrating) values.bcSettings = msg.settings;
+  await storageCall("set", values);
+  return { ok: true };
+}
+
 // Popup-triggered re-sync.
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || !msg.type) return;
+  if (msg.type === "bc:localRead") {
+    readLocalSnapshot(msg).then(sendResponse, (error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (msg.type === "bc:localCommit") {
+    const result = storageWrites.then(() => commitLocal(msg));
+    storageWrites = result.catch(() => {});
+    result.then(sendResponse, (error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
   if (msg.type === "bc:themeSearch") {
     searchThemeImages(msg).then(sendResponse, (e) => sendResponse({ ok: false, error:
       e.name === "AbortError" ? "The image library took too long. Try again." : e.message }));

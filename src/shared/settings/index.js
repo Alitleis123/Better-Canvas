@@ -1608,14 +1608,15 @@
         const hasLifted = Object.keys(lifted).length > 0 || !!carry.gradeHistory;
         try { await store.flush(); } catch (error) { BC.toast && BC.toast.error("Settings could not be imported: " + error.message); return; }
         if (!adapter.saveLocal || (!localPart && !hasLifted)) { BC.toast && BC.toast.success("Settings imported"); return; }
-        Promise.resolve(localPart || (adapter.getLocal ? adapter.getLocal() : null))
-          .then((base) => {
-            const out = Object.assign({}, base || {});
-            // Same precedence as storage.load(): what's already in bcLocal wins.
-            for (const k of Object.keys(lifted)) if (out[k] === undefined) out[k] = lifted[k];
-            if (carry.gradeHistory) out.gradeHistory = Object.assign({}, carry.gradeHistory, out.gradeHistory || {});
-            return adapter.saveLocal(out);
-          })
+        const restore = (base) => {
+          const out = Object.assign({}, base || {});
+          for (const k of Object.keys(lifted)) if (out[k] === undefined) out[k] = lifted[k];
+          if (carry.gradeHistory) out.gradeHistory = Object.assign({}, carry.gradeHistory, out.gradeHistory || {});
+          return out;
+        };
+        // A backup with local data replaces it. Legacy settings-only carry-over
+        // merges with fresh data inside the storage transaction.
+        Promise.resolve(localPart ? adapter.saveLocal(restore(localPart)) : adapter.updateLocal(restore))
           .then(() => BC.toast && BC.toast.success("Settings and planner data imported"))
           .catch(() => BC.toast && BC.toast.error("Planner data could not be restored"));
       });

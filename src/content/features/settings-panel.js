@@ -17,6 +17,7 @@
       // there rather than inside settings.
       getLocal() { return BC.storage.loadLocal().then(() => BC.storage.local); },
       saveLocal(obj) { return BC.storage.saveLocal(obj); },
+      updateLocal(mutator) { return BC.storage.updateLocal(mutator); },
       openOptions() { try { chrome.runtime.sendMessage({ type: "bc:openOptions" }, () => void chrome.runtime.lastError); } catch (_) {} },
       getCourses: () => BC.api.dashboardCards().then((cards) => cards.map((c) => ({ id: String(c.id), name: c.shortName || c.originalName || c.courseCode || ("Course " + c.id), code: c.courseCode || "", color: c.color || "" }))),
       getGpaData: () => BC.api.coursesWithScores().then((courses) => courses.map((c) => {

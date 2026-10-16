@@ -63,6 +63,7 @@
     subscribe(cb) { return BC.storage.subscribe((s) => { current = s; cb(s); }); },
     getLocal() { return BC.storage.loadLocal(); },
     saveLocal(obj) { return BC.storage.saveLocal(obj); },
+    updateLocal(mutator) { return BC.storage.updateLocal(mutator); },
     getCourses() { return fromTab("bc:getCourses"); },
     getGpaData() { return fromTab("bc:gpaData"); },
   };

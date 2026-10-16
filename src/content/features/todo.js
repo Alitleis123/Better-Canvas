@@ -1604,7 +1604,7 @@
       kids.push(b);
       // Persist a new personal best, but only when it actually increases.
       const best = ((BC.storage.local && BC.storage.local.streak && BC.storage.local.streak.best) | 0);
-      if (ss.current > best) BC.storage.updateLocal((d) => { (d.streak = d.streak || {}).best = ss.current; });
+      if (ss.current > best) BC.storage.updateLocal((d) => { const streak = (d.streak = d.streak || {}); streak.best = Math.max(streak.best || 0, ss.current); });
     }
     if (t.pomodoro && t.pomodoro.enabled) {
       const f = el("button", { class: "pl-foot__btn pl-focus", type: "button", style: "margin-left:auto" }, [icon("timer"), el("span", { text: "Focus" })]);

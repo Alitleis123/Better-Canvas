@@ -94,7 +94,11 @@
     if (prev === sig || (!g.length && !c.length)) return;
     BC.storage.updateLocal((d) => {
       if (g.length) d.navItems = g;
-      if (c.length) d.courseNavItems = merged.slice(0, 60);
+      if (c.length) {
+        const latest = (d.courseNavItems || []).slice();
+        for (const t of c) if (!latest.some((x) => x.toLowerCase() === t.toLowerCase())) latest.push(t);
+        d.courseNavItems = latest.slice(0, 60);
+      }
     });
   }
 
