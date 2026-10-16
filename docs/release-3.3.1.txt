@@ -7,19 +7,24 @@ Visible changes
 - Serialize local study-data writes in the background with content-hash conflict checks and bounded retries. Store current data in the original bcLocal shape so 3.3.0 can read it. Read only required keys during ordinary edits.
 - Edit sticky notes and planner steps by stable ids. Apply step and tag operations to fresh data so separate details sheets retain both edits. Legacy steps receive deterministic ids on read.
 - Rebase studio and options edits onto current settings and update popup fields independently. Merge list membership and id-keyed records. Give custom navigation links stable ids.
+- Preserve reversals queued behind an in-flight settings save. Theme actions explicitly replace their visual fields, including empty artwork, while retaining unrelated settings and rotation.
+- Read current time estimates when scheduling tasks through retained day-plan menus.
 - Save only edited rubric criteria and recheck snooze expiry against current data before cleanup.
 - Dispose locker editors on navigation and flush pending edits. Explicit creates and background updates prevent a stale autosave in another window from recreating a deleted item.
 - Apply Canvas assignment-group drop-lowest, drop-highest and never-drop rules to totals and predictions. Cache unchanged groups, stop the drop solver when its ratio stabilizes and batch rubric slider updates per animation frame.
 - Refresh dashboard data at its cache TTL, retry failures with backoff and invalidate planner data after successful writes.
 - Keep unsaved settings and the error visible after a failed write. Retry the edited value. Apply, settings import and theme import wait for persistence before reporting success.
 - Export locker items from current storage after flushing edited local editors. Include creates and deletes from other windows.
+- Keep failed locker edits dirty per item through switching and export. Keep failed deletion editors open.
+- Retain failed planner notes, steps, tags and rubric edits for retry. Confirm quiz draft writes before showing saved status or dismissing drafts. Preserve unsaved sticky text during page updates.
+- Record grade history, navigation snapshots and theme rotation only after their writes succeed. Select rotation themes from current settings. Prevent older announcement scans from lowering the stored timestamp.
 - Reject background messages whose sender id differs from the extension id. Storage messages only write fixed keys.
 - Remove quiz-draft listeners and cancel pending saves when saving is disabled.
 - Your settings and local study data stay on this device. Image searches send your query to api.openverse.org. Photo themes and previews load images from third-party hosts. No telemetry.
 - Shorten both manifest descriptions and remove unused alarms and notifications permissions.
 
 Verification
-- 81 automated regression tests passed in each of three consecutive runs of node --test "tests/*.test.cjs". All 65 earlier tests remain, with 16 added regression tests.
+- 106 automated regression tests passed in each of three consecutive runs of node --test "tests/*.test.cjs". All 81 earlier tests remain, with 25 added regression tests and additional failure-recovery coverage in existing tests.
 - All 57 extension JavaScript files passed node --check.
 - Both Chromium and Firefox packages built with versioned zip archives. Each archive passed integrity and root-manifest checks and contains no tests, package files or node_modules.
 - Grade rules matched 2,000 fixed-seed exhaustive subset comparisons and 500 eligibility cases. The performance check measures seven uncached runs for four groups of 100 assignments and requires a median below 100 ms. It also checks cache invalidation.
