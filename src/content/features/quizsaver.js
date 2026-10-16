@@ -92,12 +92,12 @@
         keys.sort((a, b) => ((q[a] && q[a].savedAt) || 0) - ((q[b] && q[b].savedAt) || 0));
         for (const k of keys.slice(0, keys.length - MAX_DRAFTS)) delete q[k];
       }
-    });
-    flashSaved();
+    }).then(() => { if (saverEnabled && draftKey() === key) flashSaved(); }).catch(() => {});
   }
 
   function deleteDraft(key) {
-    BC.storage.updateLocal((d) => {
+    clearTimeout(saveTimer); saveTimer = null;
+    return BC.storage.updateLocal((d) => {
       if (d.quizDrafts) delete d.quizDrafts[key];
     });
   }
@@ -154,7 +154,7 @@
     yes.addEventListener("click", () => { restore(draft); BC.injector.removeNode("bc-quiz-banner"); });
     const no = document.createElement("button");
     no.className = "bc-btn"; no.textContent = "Discard draft";
-    no.addEventListener("click", () => { deleteDraft(draftKey()); BC.injector.removeNode("bc-quiz-banner"); });
+    no.addEventListener("click", () => { deleteDraft(draftKey()).then(() => BC.injector.removeNode("bc-quiz-banner")).catch(() => {}); });
     banner.appendChild(msg); banner.appendChild(yes); banner.appendChild(no);
   }
 
@@ -201,7 +201,7 @@
       bag.listen(document, "input", (e) => { if (inQuestions(e.target)) debouncedSave(); }, true);
       // Submitting the quiz makes the draft obsolete.
       bag.listen(document, "click", (e) => {
-        if (e.target && e.target.closest && e.target.closest("#submit_quiz_button")) deleteDraft(draftKey());
+        if (e.target && e.target.closest && e.target.closest("#submit_quiz_button")) deleteDraft(draftKey()).catch(() => {});
       }, true);
     });
 
