@@ -1481,7 +1481,6 @@
     const ymd = BC.dt.ymd(day);
     const L = tlocal();
     const sched = L.scheduled || {};
-    const estimates = L.estimates || {};
     const pool = model.windowItems.concat(model.overdue);
     const slotOf = (it) => { const s = sched[keyForItem(it)]; return s && s.ymd === ymd ? s : null; };
     // The tray is what's worth planning for THIS day: overdue work, things due in
@@ -1493,7 +1492,7 @@
 
     const save = (it, h) => writeTodoLocal((Lx) => {
       const key = keyForItem(it);
-      (Lx.scheduled = Lx.scheduled || {})[key] = { ymd, start: String(h).padStart(2, "0") + ":00", dur: estimates[key] || 60 };
+      (Lx.scheduled = Lx.scheduled || {})[key] = { ymd, start: String(h).padStart(2, "0") + ":00", dur: Lx.estimates?.[key] || 60 };
     }).then(() => rerender(true));
 
     // The header already names the day.

@@ -13,7 +13,7 @@ async function view(db) {
   await BC.storage.load(); BC.api = { plannerItemDone: () => false };
   BC.ui.sheet = (opts) => ({ open() { for (const node of opts.body) page.dom.window.document.body.append(node); }, close() {} });
   const source = fs.readFileSync(path.join(root, "src/content/features/todo.js"), "utf8")
-    .replace("  BC.registry.register({", "  BC.testOpenDetails = openDetails; BC.testPruneSnoozes = pruneSnoozes;\n  BC.registry.register({");
+    .replace("  BC.registry.register({", "  BC.testOpenDetails = openDetails; BC.testPruneSnoozes = pruneSnoozes; BC.testRenderDay = renderDay;\n  BC.registry.register({");
   vm.runInContext(source, page.context);
   BC.testOpenDetails({ plannable_type: "assignment", plannable: { id: 1, title: "Assignment" } });
   const doc = page.dom.window.document;
@@ -24,6 +24,25 @@ async function view(db) {
   };
 }
 function seed() { return database({ bcLocal: { todo: { subtasks: { [key]: [{ text: "Read", done: false }, { text: "Write", done: false }] }, tagsByItem: { [key]: ["base"] } } } }); }
+
+test("retained scheduling menu reads the latest estimate and preserves other time blocks", async () => {
+  const db = database({ bcLocal: { todo: { estimates: { [key]: 30 }, scheduled: { other: { start: "10:00", dur: 60 } } } } });
+  const a = await view(db), b = await view(db);
+  try {
+    const task = { plannable_type: "assignment", plannable: { id: 1, title: "Assignment" }, plannable_date: new Date().toISOString() };
+    const body = a.doc.createElement("div"); let menu;
+    a.BC.ui.menu = (_anchor, entries) => { menu = entries; };
+    a.BC.testRenderDay(body, { range: { start: new Date() }, windowItems: [task], overdue: [] }, a.BC.storage.current, {});
+    a.doc.body.append(body); body.querySelector(".pl-chip").click();
+    await b.BC.storage.updateLocal((d) => { d.todo.estimates[key] = 120; });
+    a.client.deliver(db.events.at(-1)); await settle(); await settle();
+    assert.equal(a.BC.storage.local.todo.estimates[key], 120);
+    await menu.find((entry) => entry.label === "9 AM").onClick(); await a.drain();
+    assert.equal(db.data.bcLocal.todo.scheduled[key].dur, 120);
+    assert.equal(db.data.bcLocal.todo.scheduled[key].start, "09:00");
+    assert.deepEqual(db.data.bcLocal.todo.scheduled.other, { start: "10:00", dur: 60 });
+  } finally { a.dom.window.close(); b.dom.window.close(); }
+});
 
 test("independent details sheets complete different legacy step ids without losing either edit", async () => {
   const db = seed(), a = await view(db), b = await view(db);
