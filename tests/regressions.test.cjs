@@ -198,8 +198,10 @@ test("serialized local updates and snapshot saves retain unrelated records and p
   mock.persisted.bcLocal.notes.old = "Delete this";
   await Promise.all([a.storage.load(), b.storage.load()]);
   const imported = copy(a.storage.local); imported.notes.imported = "Backup note";
+  // Restore deliberately replaces all local data. Finish it before incremental
+  // edits so assertions do not depend on which context wins the restore race.
+  await a.storage.saveLocal(imported);
   await Promise.all([
-    a.storage.saveLocal(imported),
     b.storage.updateLocal((data) => { data.todo = { stars: { other: true } }; }),
     b.storage.updateLocal((data) => { delete data.notes.old; }),
     b.storage.updateLocal((data) => { data.notes.last = "Queued note"; }),

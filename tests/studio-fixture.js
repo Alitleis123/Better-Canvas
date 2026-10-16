@@ -24,7 +24,7 @@
   window.sceneState=s;
   window.applyScene=(id)=>{BC.applyTheme(s,BC.PRESET_THEMES.find(p=>p.id===id));BC.features.theming.apply(s,{});BC.features.cosmetics.apply(s,{});BC.features.dashboard.apply(s,{page:'dashboard'});};
   s.todo.mode = 'custom';
-  applyScene('anime-reverie'); BC.storage.adopt(s);
+  applyScene('anime-reverie'); await BC.storage.save(s, undefined, { replace: true });
   BC.applyNow = () => { const x = BC.storage.current; BC.features.theming.apply(x,{});BC.features.cosmetics.apply(x,{});BC.features.dashboard.apply(x,{page:'dashboard'}); };
   document.querySelector('#right-side section').classList.add('Sidebar__TodoListContainer');
   BC.features.settingsPanel.apply(); BC.features.settingsPanel.open('themes');
