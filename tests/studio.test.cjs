@@ -6,15 +6,15 @@ const vm = require('node:vm');
 const { randomUUID } = require('node:crypto');
 const root = path.resolve(__dirname, '..');
 function context(data = {}) {
-  const chrome = { runtime: { getURL: (s) => 'chrome-extension://test/' + s }, storage: { local: {
-    get: (_keys, cb) => queueMicrotask(() => cb(structuredClone(data))),
-    set: (value, cb) => { Object.assign(data, structuredClone(value)); queueMicrotask(cb); },
-    remove: (key, cb) => { delete data[key]; queueMicrotask(cb); },
-  } } };
+  const db = data.__testDatabase || require('./storage-harness.cjs').database(data);
+  if (!data.__testDatabase) {
+    Object.defineProperty(db.data, '__testDatabase', { value: db }); data = db.data;
+  }
+  const chrome = db.client().chrome;
   const ctx = vm.createContext({ URL, navigator: { platform: "MacIntel" }, chrome, crypto: { randomUUID }, setTimeout, clearTimeout, structuredClone });
-  for (const file of ['shared/defaults', 'shared/themes', 'shared/theme-library', 'shared/theme-scenes', 'shared/theme-artwork', 'shared/theme-media', 'content/core/util', 'shared/settings/locker'])
+  for (const file of ['shared/defaults', 'shared/themes', 'shared/theme-library', 'shared/theme-scenes', 'shared/theme-artwork', 'shared/theme-media', 'content/core/util', 'content/core/storage', 'shared/settings/locker'])
     vm.runInContext(fs.readFileSync(path.join(root, 'src/' + file + '.js'), 'utf8'), ctx);
-  return { BC: ctx.BC, chrome, data };
+  return { BC: ctx.BC, chrome, data, db };
 }
 test('bundled anime artwork is portable, distinct per course and present in both browser packages', () => {
   const { BC } = context();
@@ -52,12 +52,12 @@ test('asset references cannot escape the bundled artwork allowlist', () => {
 });
 test('locker items persist across contexts and separate item writes preserve unrelated notes and planner data', async () => {
   const data = { bcLocal: { todo: { keep: true } } };
-  const a = context(data), b = context(data);
+  const a = context(data), b = context(a.data);
   await Promise.all([
-    a.BC.Locker.save({ id: 'note-a', type: 'note', title: 'Biology', body: 'Study photosynthesis' }),
-    b.BC.Locker.save({ id: 'set-b', type: 'set', title: 'Cells', cards: [{ front: 'Powerhouse?', back: 'Mitochondria' }] }),
+    a.BC.Locker.create({ id: 'note-a', type: 'note', title: 'Biology', body: 'Study photosynthesis' }),
+    b.BC.Locker.create({ id: 'set-b', type: 'set', title: 'Cells', cards: [{ front: 'Powerhouse?', back: 'Mitochondria' }] }),
   ]);
-  const restored = await context(data).BC.Locker.list();
+  const restored = await context(a.data).BC.Locker.list();
   assert.equal(restored.length, 2);
   assert.equal(restored.find((i) => i.id === 'set-b').cards[0].back, 'Mitochondria');
   await a.BC.Locker.remove('note-a');
@@ -65,16 +65,16 @@ test('locker items persist across contexts and separate item writes preserve unr
   assert.deepEqual(data.bcLocal, { todo: { keep: true } });
 });
 test('locker rejects malformed items and unsafe bookmark URLs and reports storage failures', async () => {
-  const { BC, chrome } = context();
+  const { BC, db } = context();
   assert.equal(BC.Locker.normalize({ type: 'script' }), null);
   const note = BC.Locker.normalize({ type: 'link', url: 'javascript:alert(1)', body: 'x'.repeat(110000), cards: [null, { front: '<img src=x onerror=alert(1)>', back: 'plain text' }] });
   assert.equal(note.url, ''); assert.equal(note.body.length, 100000); assert.equal(note.cards.length, 1);
-  chrome.storage.local.set = (_value, cb) => { chrome.runtime.lastError = { message: 'Quota exceeded' }; cb(); delete chrome.runtime.lastError; };
-  await assert.rejects(BC.Locker.save({ id: 'test', type: 'note', title: 'Keep this draft' }), /Quota exceeded/);
+  db.fail('Quota exceeded');
+  await assert.rejects(BC.Locker.create({ id: 'test', type: 'note', title: 'Keep this draft' }), /Quota exceeded/);
 });
 test('locker import validates the whole batch before writing and never overwrites existing IDs', async () => {
   const { BC, data } = context();
-  await BC.Locker.save({ id: 'original', type: 'note', title: 'Keep me' });
+  await BC.Locker.create({ id: 'original', type: 'note', title: 'Keep me' });
   await assert.rejects(BC.Locker.importBatch([{ type: 'note', title: 'Valid' }, { type: 'invalid' }]));
   assert.equal((await BC.Locker.list()).length, 1);
   const imported = await BC.Locker.importBatch([{ id: 'original', type: 'note', title: 'Imported copy' }]);

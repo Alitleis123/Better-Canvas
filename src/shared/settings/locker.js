@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   const BC = globalThis.BC = globalThis.BC || {};
-  const PREFIX = "bcLocker:item:", el = (t, a, c) => BC.ui.el(t, a, c);
+  const el = (t, a, c) => BC.ui.el(t, a, c);
   const renderers = new Set();
   const plain = (v, n) => typeof v === "string" ? v.slice(0, n) : "";
   function normalize(value) {
@@ -12,28 +12,31 @@
       folder: plain(value.folder, 100), pinned: !!value.pinned, updated: Number(value.updated) || Date.now(),
       cards: (Array.isArray(value.cards) ? value.cards : []).slice(0, 500).filter((c) => c && typeof c === "object").map((c) => ({ front: plain(c.front, 5000), back: plain(c.back, 5000) })) };
   }
-  const call = (method, value) => new Promise((resolve, reject) => chrome.storage.local[method](value, (result) => {
-    if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message)); else resolve(result);
-  }));
-  const save = (value) => { const item = normalize(value); if (!item) return Promise.reject(new Error("Invalid locker item")); return call("set", { [PREFIX + item.id]: item }); };
-  const list = async () => Object.entries(await call("get", null) || {}).filter(([k]) => k.startsWith(PREFIX)).map(([, v]) => normalize(v)).filter(Boolean);
+  const call = (action, fields = {}) => BC.storage.request({ type: "bc:locker", action, ...fields });
+  const writeItem = (action, value) => {
+    const item = normalize(value);
+    if (!item) return Promise.reject(new Error("Invalid locker item"));
+    return call(action, { item });
+  };
+  const save = (value) => writeItem("update", value);
+  const createItem = (value) => writeItem("create", value);
+  const list = async () => (await call("list")).items.map(normalize).filter(Boolean);
   async function importBatch(values) {
     if (!Array.isArray(values) || values.length > 1000) throw new Error("Invalid locker export");
     const incoming = values.map(normalize);
     if (incoming.some((item) => !item)) throw new Error("The file contains invalid items");
-    const writes = {};
-    for (const item of incoming) { item.id = crypto.randomUUID(); writes[PREFIX + item.id] = item; }
+    for (const item of incoming) item.id = crypto.randomUUID();
     // Submit the batch together. Do not report/append partially imported entries if storage rejects it.
-    await call("set", writes);
+    await call("createBatch", { items: incoming });
     return incoming;
   }
   async function remove(id) {
     if (!/^[a-zA-Z0-9-]{1,80}$/.test(id)) throw new Error("Invalid item");
     // A hidden or recently disposed editor may still have a queued snapshot.
     await Promise.all([...renderers].map((renderer) => renderer.cancelItem(id)));
-    await call("remove", PREFIX + id);
+    await call("remove", { id });
   }
-  BC.Locker = { normalize, save, list, importBatch, remove };
+  BC.Locker = { normalize, save, create: createItem, list, importBatch, remove };
   BC.renderLocker = function () {
     const root = el("div", { class: "bcs-locker" }), listPane = el("div", { class: "bcs-locker-list" }), editor = el("div", { class: "bcs-locker-editor" });
     const status = el("span", { class: "bc-caption", role: "status", text: "Saved on this device" });
@@ -136,8 +139,11 @@
     }
     async function create(type) {
       if (active) await persist().catch(() => {});
-      active = normalize({ type, title: "", cards: type === "set" ? [{ front: "", back: "" }] : [] }); items.push(active);
-      paintList(); paintEditor(); editor.querySelector('input[aria-label="Title"]')?.focus(); persist().catch(() => {});
+      const item = normalize({ type, title: "", cards: type === "set" ? [{ front: "", back: "" }] : [] });
+      try { await createItem(item); } catch (error) { report(error); return; }
+      if (disposed) return;
+      active = item; items.push(active);
+      paintList(); paintEditor(); editor.querySelector('input[aria-label="Title"]')?.focus();
     }
     function exportItems() {
       const url = URL.createObjectURL(new Blob([JSON.stringify({ format: "better-canvas-locker", version: 1, items }, null, 2)], { type: "application/json" }));

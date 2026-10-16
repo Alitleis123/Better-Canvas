@@ -18,7 +18,7 @@ function database(seed = {}) {
       const result = copy(selected);
       queueMicrotask(() => callback(result));
     },
-    getKeys(_unused, callback) { queueMicrotask(() => callback(Object.keys(data))); },
+    getKeys(callback) { queueMicrotask(() => callback(Object.keys(data))); },
     set(values, callback) {
       queueMicrotask(() => {
         if (failure) { runtime.lastError = { message: failure }; callback(); delete runtime.lastError; return; }
