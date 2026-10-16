@@ -655,7 +655,7 @@
         control: BC.ui.button("Restore Canvas images", { size: "sm", onClick: () => store.set((x) => {
           x.dashboard.themeImages = [];
           for (const c of Object.values(x.dashboard.courses || {})) if (c && typeof c === "object") delete c.bgImage;
-        }) }) }),
+        }, { replacePaths: [["dashboard", "themeImages"], ["dashboard", "courses", "*", "bgImage"]] }) }) }),
       live(() => {
         const custom = store.get().customThemes || [];
         const name = BC.ui.input({ size: "sm", placeholder: "Name this look", ariaLabel: "Theme name" });

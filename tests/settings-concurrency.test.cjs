@@ -69,7 +69,7 @@ for (const name of ["studio", "options"]) {
   });
 }
 
-for (const kind of ["built-in", "custom", "online", "undo", "redo", "reset"]) {
+for (const kind of ["built-in", "custom", "undo", "redo", "reset"]) {
   test(kind + " theme action replaces unchanged artwork and theme fields from a stale editor", async () => {
     const db = database(), a = await surface(db, "studio"), b = await surface(db, "options");
     try {
@@ -99,6 +99,43 @@ for (const kind of ["built-in", "custom", "online", "undo", "redo", "reset"]) {
         assert.equal(db.data.bcSettings.theming.cursor, "large");
         assert.deepEqual(db.data.bcSettings.todo.tags, ["external"]);
       }
+    } finally { a.close(); b.close(); }
+  });
+}
+
+for (const action of ["built-in", "custom", "online", "import", "restore"]) {
+  test("theme " + action + " DOM action replaces external artwork through the production handler", async () => {
+    const db = database(), a = await surface(db, "studio"), b = await surface(db, "options");
+    try {
+      load(a.context, "src/shared/themes.js", "src/shared/theme-library.js", "src/shared/theme-scenes.js", "src/shared/theme-artwork.js", "src/shared/theme-media.js", "src/content/core/color.js");
+      const theme = { id: "custom", name: "Custom", settings: { theming: { accentColor: "#ff0000" } } };
+      a.store.set((d) => { d.customThemes.push(theme); }); await a.store.flush();
+      vm.runInContext(fs.readFileSync(path.join(root, "src/shared/settings/index.js"), "utf8")
+        .replace("  BC.SettingsUI = {", "  BC.testRenderThemes = renderThemes;\n  BC.SettingsUI = {"), a.context);
+      a.doc.body.append(...a.BC.testRenderThemes(a.store));
+      const button = (text) => [...a.doc.querySelectorAll("button")].find((node) => node.textContent.trim() === text);
+      const external = "https://external.test/art";
+      b.store.set((d) => { d.dashboard.themeImages = [{ url: external }]; d.dashboard.courses[42] = { nickname: "Keep", bgImage: external }; }); await b.store.flush();
+      if (action === "restore") button("Restore Canvas images").click();
+      else if (action === "custom") a.doc.querySelector('[aria-label="Preview theme Custom"]').click();
+      else if (action === "built-in") {
+        button("Classic palettes").click(); a.doc.querySelector('[aria-label="Preview theme ' + a.BC.PRESET_THEMES[0].name + '"]').click();
+      } else if (action === "online") {
+        a.BC.themeLibrary.search = async () => ({ images: [{ url: "https://chosen.test/a", title: "Chosen" }], page: 1, pages: 1 });
+        button("Explore online").click(); await settle();
+        a.doc.querySelector(".bcs-themes .bcs-theme__apply").click(); await settle();
+      } else {
+        let input; const create = a.doc.createElement.bind(a.doc);
+        a.doc.createElement = (tag, ...args) => { const node = create(tag, ...args); if (tag === "input") { input = node; node.click = () => {}; } return node; };
+        button("Import").click();
+        Object.defineProperty(input, "files", { value: [{ text: async () => JSON.stringify(theme) }] }); input.onchange(); await settle();
+      }
+      await a.store.flush();
+      assert.equal(db.data.bcSettings.dashboard.themeImages.some((image) => image.url === external), false);
+      assert.equal(db.data.bcSettings.dashboard.courses[42].bgImage, undefined);
+      assert.equal(db.data.bcSettings.dashboard.courses[42].nickname, "Keep");
+      if (action === "online") assert.equal(db.data.bcSettings.dashboard.themeImages.length, 48);
+      else assert.deepEqual(db.data.bcSettings.dashboard.themeImages, []);
     } finally { a.close(); b.close(); }
   });
 }
