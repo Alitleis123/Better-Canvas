@@ -25,6 +25,30 @@ async function view(db) {
 }
 function seed() { return database({ bcLocal: { todo: { subtasks: { [key]: [{ text: "Read", done: false }, { text: "Write", done: false }] }, tagsByItem: { [key]: ["base"] } } } }); }
 
+for (const initial of ["old", ""]) {
+  test("planner note returns to " + (initial ? "its old text" : "empty") + " while another save is pending", async () => {
+    const db = database({ bcLocal: { todo: { notes: { [key]: initial } } } }), a = await view(db);
+    let release;
+    try {
+      const send = a.client.chrome.runtime.sendMessage;
+      let held = false;
+      a.client.chrome.runtime.sendMessage = (message, callback) => {
+        if (message.type === "bc:localCommit" && !held) { held = true; release = () => send(message, callback); return; }
+        return send(message, callback);
+      };
+      const note = a.doc.querySelector('[aria-label="Note"]');
+      note.value = "new"; note.dispatchEvent(new a.dom.window.Event("input"));
+      for (let i = 0; i < 100 && !release; i++) await new Promise((resolve) => setTimeout(resolve, 5));
+      assert.ok(release);
+      note.value = initial; note.dispatchEvent(new a.dom.window.Event("input")); note.dispatchEvent(new a.dom.window.Event("change"));
+      await new Promise((resolve) => setTimeout(resolve, 460));
+      release(); await a.drain();
+      assert.equal(db.data.bcLocal.todo.notes[key] || "", note.value);
+      if (!initial) assert.equal(Object.hasOwn(db.data.bcLocal.todo.notes, key), false);
+    } finally { a.dom.window.close(); }
+  });
+}
+
 test("failed recurring completion keeps its prior state and releases the pending guard for retry", async () => {
   const db = seed(), a = await view(db);
   a.BC.util.warn = () => {}; a.BC.toast = { success() {}, error() {} };

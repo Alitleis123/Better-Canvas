@@ -1807,12 +1807,13 @@
     note.value = (L.notes || {})[key] || "";
     // Saved as you type: "change" only fires on blur, and closing the sheet with Esc
     // mid-sentence lost the note.
-    let noteSaved = note.value;
+    let noteSent = note.value;
     const saveNote = () => {
-      if (note.value === noteSaved) return;
+      if (note.value === noteSent) return;
       const value = note.value;
+      noteSent = value;
       save((x) => { const m = (x.notes = x.notes || {}); if (value.trim()) m[key] = value; else delete m[key]; })
-        .then(() => { noteSaved = value; }).catch(() => {});
+        .catch(() => { if (noteSent === value) noteSent = null; });
     };
     note.addEventListener("input", BC.util.debounce(saveNote, 400));
     note.addEventListener("change", saveNote);
