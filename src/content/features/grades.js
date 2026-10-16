@@ -43,39 +43,57 @@
   }
   const points = (a) => Math.max(0, Number(a.points_possible) || 0);
   const score = (a) => Number(a.submission.score);
+  const idCollator = new Intl.Collator("en", { numeric: true });
   function selectRatio(eligible, fixed, keep, maximize) {
-    const all = fixed.concat(eligible), positive = all.map(points).filter((n) => n > 0);
-    const tie = (a, b) => String(a.id).localeCompare(String(b.id), "en", { numeric: true });
-    if (!positive.length) return eligible.slice().sort((a, b) => (maximize ? score(b) - score(a) : score(a) - score(b)) || tie(a, b)).slice(0, keep);
-    // For a proposed ratio q, ranking score - q * possible selects the best
-    // fixed-size subset. Binary search its zero instead of enumerating subsets.
-    const bound = all.reduce((sum, a) => sum + Math.abs(score(a)), 0) / Math.min(...positive) + 1;
-    let lo = -bound, hi = bound, best = null, bestRatio = maximize ? -Infinity : Infinity;
+    const candidates = eligible.map((a) => ({ assignment: a, earned: score(a), possible: points(a), id: String(a.id) }));
+    const fixedEarned = fixed.reduce((sum, a) => sum + score(a), 0);
+    const fixedPossible = fixed.reduce((sum, a) => sum + points(a), 0);
+    const tie = (a, b) => idCollator.compare(a.id, b.id);
+    const totalPossible = fixedPossible + candidates.reduce((sum, a) => sum + a.possible, 0);
+    if (!totalPossible) return candidates.sort((a, b) => (maximize ? b.earned - a.earned : a.earned - b.earned) || tie(a, b)).slice(0, keep).map((a) => a.assignment);
+    // Fractional programming: rank score - q * possible, then try the selected
+    // subset's exact ratio. Its zero residual proves the subset is optimal.
+    // Usually this takes two or three sorts instead of 80 binary-search sorts.
+    let q = (fixedEarned + candidates.reduce((sum, a) => sum + a.earned, 0)) / totalPossible;
+    let best = null, bestRatio = maximize ? -Infinity : Infinity;
     for (let iteration = 0; iteration < 80; iteration++) {
-      const q = (lo + hi) / 2, residual = (a) => score(a) - q * points(a);
-      const ranked = eligible.slice().sort((a, b) => (maximize ? residual(b) - residual(a) : residual(a) - residual(b)) || tie(a, b));
+      for (const a of candidates) a.residual = a.earned - q * a.possible;
+      const ranked = candidates.slice().sort((a, b) => (maximize ? b.residual - a.residual : a.residual - b.residual) || tie(a, b));
       const chosen = ranked.slice(0, keep);
-      if (!fixed.concat(chosen).some((a) => points(a) > 0)) {
-        const pointed = ranked.find((a) => points(a) > 0);
+      if (!fixedPossible && !chosen.some((a) => a.possible > 0)) {
+        const pointed = ranked.find((a) => a.possible > 0);
         if (pointed) chosen[chosen.length - 1] = pointed;
       }
-      const selected = fixed.concat(chosen);
-      const possible = selected.reduce((sum, a) => sum + points(a), 0);
-      const earned = selected.reduce((sum, a) => sum + score(a), 0);
+      const possible = fixedPossible + chosen.reduce((sum, a) => sum + a.possible, 0);
+      const earned = fixedEarned + chosen.reduce((sum, a) => sum + a.earned, 0);
       const ratio = earned / possible;
       if (best === null || (maximize ? ratio > bestRatio : ratio < bestRatio)) { best = chosen; bestRatio = ratio; }
-      if (earned - q * possible > 0) lo = q; else hi = q;
+      if (Math.abs(ratio - q) <= 1e-12 * Math.max(1, Math.abs(ratio))) break;
+      q = ratio;
     }
-    return best;
+    return best.map((a) => a.assignment);
+  }
+
+  const groupTotals = new WeakMap();
+  function groupTotal(group) {
+    // Include the fields that affect eligibility and drops. In-place API updates
+    // invalidate this entry too; object identity alone would keep stale grades.
+    const signature = JSON.stringify([group.rules, (group.assignments || []).map((a) => [a.id, a.points_possible,
+      a.omit_from_final_grade, a.workflow_state, a.submission_types, a.submission?.score,
+      a.submission?.excused, a.submission?.workflow_state])]);
+    const cached = groupTotals.get(group);
+    if (cached?.signature === signature) return cached;
+    const kept = keptAssignments(group);
+    const result = { signature, pts: kept.reduce((sum, a) => sum + score(a), 0), poss: kept.reduce((sum, a) => sum + points(a), 0) };
+    groupTotals.set(group, result);
+    return result;
   }
 
   BC.grades.computeTotal = function (groups) {
     const weighted = groups.some((g) => g.group_weight);
     let earned = 0, possible = 0;
     for (const group of groups) {
-      const kept = keptAssignments(group);
-      const pts = kept.reduce((sum, a) => sum + score(a), 0);
-      const poss = kept.reduce((sum, a) => sum + points(a), 0);
+      const { pts, poss } = groupTotal(group);
       if (weighted) {
         if (poss > 0) { earned += pts / poss * (group.group_weight || 0); possible += group.group_weight || 0; }
       } else { earned += pts; possible += poss; }
@@ -275,7 +293,7 @@
   // ---- Rubric predictor (assignment pages) ----
 
   function computeTotalWith(groups, assignmentId, score) {
-    const cloned = groups.map((g) => Object.assign({}, g, {
+    const cloned = groups.map((g) => !(g.assignments || []).some((a) => String(a.id) === String(assignmentId)) ? g : Object.assign({}, g, {
       assignments: (g.assignments || []).map((a) =>
         String(a.id) === String(assignmentId) ? Object.assign({}, a, { submission: { score } }) : a),
     }));
@@ -317,6 +335,7 @@
 
     const totalEl = panel.querySelector("[data-total]");
     const impactEl = panel.querySelector("[data-impact]");
+    const current = groups ? BC.grades.computeTotal(groups) : null;
     function refresh() {
       const values = {};
       let sum = 0;
@@ -331,7 +350,6 @@
       if (groups) {
         const points = asn.points_possible || maxTotal;
         const scaled = maxTotal > 0 ? (sum / maxTotal) * points : 0;
-        const current = BC.grades.computeTotal(groups);
         const projected = computeTotalWith(groups, aid, scaled);
         if (projected != null) {
           impactEl.textContent = `Course grade if scored: ${projected.toFixed(2)}%` +
@@ -340,8 +358,10 @@
       }
       saveDraft(values);
     }
+    let frame = null;
     panel.addEventListener("input", (e) => {
-      if (e.target && e.target.type === "range") refresh();
+      if (e.target?.type !== "range" || frame !== null) return;
+      frame = requestAnimationFrame(() => { frame = null; if (panel.isConnected) refresh(); });
     });
     refresh();
   }

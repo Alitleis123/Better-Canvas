@@ -42,7 +42,15 @@ test("grade and rubric renderers validate stored values, avoid injected elements
     await settle();
     assert.equal(dom.window.document.querySelector('input[type="range"]').value, "10");
     const slider = dom.window.document.querySelector('input[type="range"]');
-    slider.value = "5"; slider.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    let computations = 0; const compute = BC.grades.computeTotal;
+    BC.grades.computeTotal = (...args) => { computations++; return compute(...args); };
+    for (let i = 0; i < 25; i++) {
+      slider.value = String(i % 10); slider.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    }
+    slider.value = "5";
+    assert.equal(computations, 0, "slider bursts wait for one animation frame");
+    await new Promise((resolve) => dom.window.requestAnimationFrame(resolve));
+    assert.equal(computations, 1, "only the projected total recomputes once per frame");
     assert.match(dom.window.document.querySelector("[data-impact]").textContent, /50.00%.*100.00%/);
     assert.equal(dom.window.document.querySelector("img"), null);
     assert.equal(dom.window.document.querySelector("[onerror]"), null);
