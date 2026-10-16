@@ -12,6 +12,7 @@
   const DAY = 864e5;
 
   let rotating = false;
+  let failedPeriod = null;
 
   function apply(settings) {
     const r = settings.theming && settings.theming.rotation;
@@ -28,10 +29,10 @@
     const idx = r.mode === "weekly" ? Math.floor(localDay / 7) : localDay;
     const period = (r.mode || "daily") + ":" + idx;
     const last = BC.storage.local.lastRotation;
-    if (last && last.period === period) return;
+    if (last?.period === period || failedPeriod === period) return;
 
     // The in-flight guard blocks re-entry until the theme and period both save.
-    // Record the period only after the theme succeeds so failed writes can retry.
+    // Record successful rotations in storage. Failed attempts wait for the next period.
     rotating = true;
     let applied;
     BC.storage.update((d) => {
@@ -49,7 +50,7 @@
         return BC.storage.updateLocal((d) => { d.lastRotation = { period: applied.period, themeId: applied.themeId }; })
           .then(() => BC.toast.info("Theme rotated: " + applied.name));
       })
-      .catch((e) => BC.diag.push("rotation", e))
+      .catch((e) => { failedPeriod = applied?.period || period; BC.diag.push("rotation", e); })
       .then(() => { rotating = false; });
   }
 
