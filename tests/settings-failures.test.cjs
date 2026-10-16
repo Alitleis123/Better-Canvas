@@ -84,7 +84,8 @@ test("quota rejection keeps the settings edit, error and automatic retry value",
       subscribe: (fn) => BC.storage.subscribe(fn), preview: (s) => BC.storage.adopt(s),
     });
     store.set((d) => { d.enabled = false; });
-    await settle(); await settle(); await settle();
+    await assert.rejects(store.flush(), /Quota exceeded/);
+    await settle();
     assert.equal(store.get().enabled, false);
     assert.equal(BC.storage.current.enabled, false);
     assert.match(store.saveError.message, /Quota exceeded/);

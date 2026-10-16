@@ -226,6 +226,18 @@ async function commitLocal(msg) {
   return { ok: true };
 }
 
+async function readSettingsSnapshot() {
+  const values = await storageCall("get", ["bcSettings"]);
+  return { ok: true, value: values.bcSettings, base: await storageHash(values.bcSettings) };
+}
+async function commitSettings(msg) {
+  if (!msg.value || typeof msg.value !== "object" || Array.isArray(msg.value)) throw new Error("Invalid settings");
+  const stored = await storageCall("get", ["bcSettings"]);
+  if (msg.base !== await storageHash(stored.bcSettings)) return { ok: false, conflict: true };
+  await storageCall("set", { bcSettings: msg.value });
+  return { ok: true };
+}
+
 const LOCKER_PREFIX = "bcLocker:item:", LOCKER_INDEX = "bcLocker:index";
 async function lockerIndex() {
   const stored = await storageCall("get", [LOCKER_INDEX]);
@@ -274,12 +286,12 @@ async function commitLocker(msg) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (sender?.id !== chrome.runtime.id) { sendResponse({ ok: false, error: "Untrusted message sender" }); return; }
   if (!msg || !msg.type) return;
-  if (msg.type === "bc:localRead") {
-    readLocalSnapshot(msg).then(sendResponse, (error) => sendResponse({ ok: false, error: error.message }));
+  if (msg.type === "bc:localRead" || msg.type === "bc:settingsRead") {
+    (msg.type === "bc:settingsRead" ? readSettingsSnapshot() : readLocalSnapshot(msg)).then(sendResponse, (error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
-  if (msg.type === "bc:localCommit" || msg.type === "bc:locker") {
-    const result = storageWrites.then(() => msg.type === "bc:locker" ? commitLocker(msg) : commitLocal(msg));
+  if (["bc:localCommit", "bc:settingsCommit", "bc:locker"].includes(msg.type)) {
+    const result = storageWrites.then(() => msg.type === "bc:locker" ? commitLocker(msg) : msg.type === "bc:settingsCommit" ? commitSettings(msg) : commitLocal(msg));
     storageWrites = result.catch(() => {});
     result.then(sendResponse, (error) => sendResponse({ ok: false, error: error.message }));
     return true;

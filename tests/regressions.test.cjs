@@ -63,7 +63,7 @@ test("applying a shared theme cannot pollute prototypes", () => {
   assert.equal(Object.hasOwn(store.get(), "__proto__"), false);
 });
 
-test("an acknowledged settings echo does not suppress a later foreign edit", () => {
+test("an acknowledged settings echo does not suppress a later foreign edit", async () => {
   const context = createContext();
   context.BC.util.throttle = (fn) => fn;
   load(context, "src/shared/settings/state.js");
@@ -76,6 +76,7 @@ test("an acknowledged settings echo does not suppress a later foreign edit", () 
   const previous = copy(store.get());
   incoming(previous);
   store.set((settings) => { settings.dashboard.layout = "grid"; });
+  await store.flush();
   incoming(previous);
   assert.equal(store.get().dashboard.layout, "list");
 });

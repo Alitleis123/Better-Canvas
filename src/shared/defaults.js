@@ -395,7 +395,49 @@
         else settings.grades.goals[id] = { target, notify: !!goal.notify };
       }
     }
+    for (const scope of ["global", "course"]) {
+      const links = settings.navigation[scope].customLinks || [];
+      const used = new Set(links.map((link) => link.id).filter(Boolean));
+      links.forEach((link, index) => {
+        if (link.id) return;
+        let id = "legacy-link-" + index;
+        while (used.has(id)) id += "-";
+        link.id = id; used.add(id);
+      });
+    }
     return settings;
+  };
+
+  // Rebase only the editor's changes onto the latest committed settings.
+  // Membership lists and id-keyed records retain independent additions/removals.
+  // Ordering and artwork arrays are deliberate replacements.
+  BC.mergeSettingsEdits = function merge(before, edited, fresh, key) {
+    const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    if (equal(before, edited)) return BC.cleanData(fresh);
+    if (Array.isArray(before) && Array.isArray(edited) && Array.isArray(fresh)) {
+      if (!["order", "courseOrder"].includes(key) && [...before, ...edited].every((v) => typeof v === "string" || typeof v === "number")) {
+        return fresh.filter((v) => !before.includes(v) || edited.includes(v))
+          .concat(edited.filter((v) => !before.includes(v) && !fresh.includes(v)));
+      }
+      if ([...before, ...edited].every((v) => v && typeof v === "object" && v.id)) {
+        const old = new Map(before.map((v) => [v.id, v])), next = new Map(edited.map((v) => [v.id, v]));
+        const out = fresh.filter((v) => !old.has(v.id) || next.has(v.id)).map((v) =>
+          old.has(v.id) && next.has(v.id) ? merge(old.get(v.id), next.get(v.id), v) : BC.cleanData(v));
+        for (const v of edited) if (!old.has(v.id) && !out.some((x) => x.id === v.id)) out.push(BC.cleanData(v));
+        return out;
+      }
+      return BC.cleanData(edited);
+    }
+    if ((before === undefined || before && typeof before === "object" && !Array.isArray(before)) && edited && typeof edited === "object" && !Array.isArray(edited)) {
+      const out = fresh && typeof fresh === "object" && !Array.isArray(fresh) ? BC.cleanData(fresh) : {};
+      for (const k of new Set([...Object.keys(before || {}), ...Object.keys(edited)])) {
+        if (equal(before?.[k], edited[k])) continue;
+        if (!Object.hasOwn(edited, k)) delete out[k];
+        else out[k] = merge(before?.[k], edited[k], out[k], k);
+      }
+      return out;
+    }
+    return BC.cleanData(edited);
   };
 
   BC.SETTINGS_VERSION = 5;

@@ -20,7 +20,7 @@ async function surface(name, fail = false) {
   load(context, "src/" + name + "/" + name + ".js");
   await context.BC.storage.load().catch(() => {});
   await settle(); await settle();
-  return { data, writes, dom, context, adapter, fail: (value) => db.fail(value ? "Quota exceeded" : null) };
+  return { db, data, writes, dom, context, adapter, fail: (value) => db.fail(value ? "Quota exceeded" : null) };
 }
 
 for (const name of ["options", "popup"]) {
@@ -54,11 +54,11 @@ test("options adapters reject callback failures and promise rejections; popup re
     options.fail(true);
     await assert.rejects(options.adapter.save(options.context.BC.cloneDefaults()), /Quota exceeded/);
     await assert.rejects(options.adapter.saveLocal({ notes: {} }), /Quota exceeded/);
-    options.context.chrome.storage.local.set = () => Promise.reject(new Error("Disk unavailable"));
+    options.db.api.set = () => Promise.reject(new Error("Disk unavailable"));
     await assert.rejects(options.adapter.save(options.context.BC.cloneDefaults()), /Disk unavailable/);
     popup.fail(true);
     popup.dom.window.document.getElementById("enabled").dispatchEvent(new popup.dom.window.Event("change"));
-    await settle();
+    for (let i = 0; i < 100 && !popup.dom.window.document.getElementById("save-error"); i++) await new Promise((resolve) => setTimeout(resolve, 5));
     assert.match(popup.dom.window.document.getElementById("save-error").textContent, /Quota exceeded/);
   } finally { options.dom.window.close(); popup.dom.window.close(); }
 });

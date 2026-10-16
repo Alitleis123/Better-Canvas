@@ -401,16 +401,17 @@
     const wrap = el("div", { class: "bcs-links" });
     function render() {
       wrap.dataset.bcSig = String((get() || []).length);
-      const rows = (get() || []).map((lnk, i) => {
+      const rows = (get() || []).map((lnk) => {
+        const patch = (values) => set((get() || []).map((link) => link.id === lnk.id ? { ...link, ...values } : link));
         const label = BC.ui.input({ size: "sm", placeholder: "Label", ariaLabel: "Link label", value: lnk.label || "" });
-        label.addEventListener("input", () => { const arr = (get() || []).slice(); arr[i] = { ...arr[i], label: label.value }; set(arr); });
+        label.addEventListener("input", () => { patch({ label: label.value }); });
         const url = BC.ui.input({ size: "sm", type: "url", placeholder: "https://…", ariaLabel: "Link URL", value: lnk.url || "" });
-        url.addEventListener("input", () => { const arr = (get() || []).slice(); arr[i] = { ...arr[i], url: url.value }; set(arr); });
-        const tab = BC.ui.checkbox({ checked: !!lnk.newTab, label: "New tab", onChange: (v) => { const arr = (get() || []).slice(); arr[i] = { ...arr[i], newTab: v }; set(arr); } });
-        const del = BC.ui.iconButton("trash", { label: "Remove link", size: "sm", onClick: () => { const arr = (get() || []).slice(); arr.splice(i, 1); set(arr); render(); } });
+        url.addEventListener("input", () => { patch({ url: url.value }); });
+        const tab = BC.ui.checkbox({ checked: !!lnk.newTab, label: "New tab", onChange: (v) => { patch({ newTab: v }); } });
+        const del = BC.ui.iconButton("trash", { label: "Remove link", size: "sm", onClick: () => { set((get() || []).filter((link) => link.id !== lnk.id)); render(); } });
         return el("div", { class: "bcs-links__row" }, [label, url, tab, del]);
       });
-      const add = BC.ui.button("Add link", { icon: "plus", size: "sm", onClick: () => { set([...(get() || []), { label: "", url: "", newTab: true }]); render(); } });
+      const add = BC.ui.button("Add link", { icon: "plus", size: "sm", onClick: () => { set([...(get() || []), { id: BC.util.uuid(), label: "", url: "", newTab: true }]); render(); } });
       wrap.replaceChildren(...rows, el("div", null, [add]));
     }
     render();

@@ -14,6 +14,7 @@
   let local = null;
   let loadPromise = null;
   let localWrites = Promise.resolve();
+  let settingsWrites = Promise.resolve();
 
   function area() { return chrome.storage && chrome.storage.local; }
   function emptyLocal() { return { notes: {}, drafts: {}, cache: {} }; }
@@ -77,29 +78,6 @@
     });
   }
 
-  function writeValues(values) {
-    return new Promise((resolve, reject) => {
-      const a = area();
-      if (!a) return resolve();
-      const keys = Object.keys(values);
-      for (const key of keys) writing[key]++;
-      let finished = false;
-      const done = (error) => {
-        if (finished) return;
-        finished = true;
-        for (const key of keys) { writing[key]--; refresh(key); }
-        if (error) reject(new Error(error.message || String(error)));
-        else resolve();
-      };
-      try {
-        const promise = a.set(values, () => done(chrome.runtime && chrome.runtime.lastError));
-        if (promise && promise.then) promise.then(() => done(), done);
-      } catch (e) { done(e); }
-    });
-  }
-
-  function write(key, value) { return writeValues({ [key]: value }); }
-
   function readLocal(values = {}) {
     return BC.cleanLocalData(Object.assign(emptyLocal(), values[LOCAL_KEY] || {}));
   }
@@ -160,6 +138,32 @@
     throw new Error("Other tabs kept changing this data. Try saving again.");
   }
 
+  function queueSettings(operation) {
+    const result = settingsWrites.then(operation);
+    settingsWrites = result.catch(() => {});
+    return result;
+  }
+  async function transactSettings(mutator) {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const snapshot = await request({ type: "bc:settingsRead" });
+      const draft = BC.mergeDefaults(snapshot.value);
+      const value = BC.mergeDefaults(mutator(draft) || draft);
+      revisions[KEY]++; writing[KEY]++;
+      let response;
+      try { response = await request({ type: "bc:settingsCommit", base: snapshot.base, value }); }
+      finally { writing[KEY]--; }
+      if (response.conflict) continue;
+      return value;
+    }
+    throw new Error("Other tabs kept changing settings. Try saving again.");
+  }
+  function acceptSettings(value, before, edited) {
+    savedSettings = JSON.stringify(value);
+    current = BC.mergeSettingsEdits(before, edited, value);
+    refresh(KEY);
+    return value;
+  }
+
   const storage = (BC.storage = {
     get current() { return current; },
     get local() { return local; },
@@ -194,13 +198,16 @@
     // `current` is a getter, so assigning BC.storage.current throws in strict mode.
     adopt(settings) { if (settings) { current = settings; revisions[KEY]++; } },
 
-    // `json` is an optional pre-serialized copy, so update() doesn't stringify the
-    // same object twice.
-    save(settings, json) {
-      current = settings;
-      const snapshot = json || JSON.stringify(settings);
-      revisions[KEY]++;
-      return write(KEY, settings).then(() => { savedSettings = snapshot; });
+    // UI snapshots carry their baseline so unchanged fields cannot erase edits
+    // from another context. Import/reset explicitly request full replacement.
+    save(settings, json, options = {}) {
+      const edited = JSON.parse(json || JSON.stringify(settings));
+      const base = options.base || JSON.parse(savedSettings || JSON.stringify(BC.cloneDefaults()));
+      current = settings; revisions[KEY]++;
+      return queueSettings(async () => {
+        const value = await transactSettings((fresh) => options.replace ? edited : BC.mergeSettingsEdits(base, edited, fresh));
+        return acceptSettings(value, edited, current);
+      });
     },
 
     // Only imports/restores use full replacement. Snapshot its input now, but
@@ -212,15 +219,13 @@
 
     request, // Locker uses the same background writer and error handling.
 
-    async update(mutator) {
-      const s = current || (await storage.load());
-      const before = JSON.stringify(s);
-      const draft = JSON.parse(before);
-      mutator(draft);
-      const after = JSON.stringify(draft);
-      if (after === before) return s;
-      await storage.save(draft, after);
-      return draft;
+    update(mutator) {
+      return queueSettings(async () => {
+        await storage.load();
+        const before = JSON.parse(savedSettings);
+        const value = await transactSettings(mutator);
+        return acceptSettings(value, before, current);
+      });
     },
 
     // Mutators may run again after a conflict. Keep side effects outside them.

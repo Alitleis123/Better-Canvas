@@ -19,9 +19,10 @@
       for (const id of ["enabled", "dashEnabled", "darkMode", "notifsIn"]) $(id).disabled = false;
     }).catch(showError);
   }
-  function save() {
+  function save(mutator) {
     if (!ready) return;
-    BC.storage.save(structuredClone(settings)).then(() => {
+    BC.storage.update(mutator).then((saved) => {
+      settings = saved;
       if ($("save-error")) $("save-error").textContent = "";
       paintTokens();
     }).catch(showError);
@@ -53,10 +54,10 @@
     const v = document.querySelector(".bc-ver"); if (v) v.textContent = "v" + (BC.VERSION || "");
   }
 
-  $("enabled").addEventListener("change", (e) => { settings.enabled = e.target.checked; save(); });
-  $("dashEnabled").addEventListener("change", (e) => { settings.dashboard.enabled = e.target.checked; save(); });
-  $("darkMode").addEventListener("change", (e) => { settings.theming.darkMode = e.target.value; save(); });
-  $("notifsIn").addEventListener("change", (e) => { settings.notifications.inPage = e.target.checked; save(); });
+  $("enabled").addEventListener("change", (e) => { const value = e.target.checked; save((d) => { d.enabled = value; }); });
+  $("dashEnabled").addEventListener("change", (e) => { const value = e.target.checked; save((d) => { d.dashboard.enabled = value; }); });
+  $("darkMode").addEventListener("change", (e) => { const value = e.target.value; save((d) => { d.theming.darkMode = value; }); });
+  $("notifsIn").addEventListener("change", (e) => { const value = e.target.checked; save((d) => { d.notifications.inPage = value; }); });
 
   $("open-options").addEventListener("click", async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

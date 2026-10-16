@@ -42,6 +42,7 @@
     const future = [];
     const HISTORY = 30;
     let dirty = false;
+    let baseline = clone(state), replacement = 0;
     let retry = 0;
     let unsubAdapter = null;
     // Snapshots handed to adapter.save() whose storage echo hasn't come back yet.
@@ -66,11 +67,15 @@
     let lastSave = Promise.resolve(), saveError = null, destroyed = false, retryTimer;
     function saveNow() {
       if (destroyed) return lastSave;
-      const snapshot = clone(state);
+      const snapshot = clone(state), base = clone(baseline), replacing = replacement;
       pendingEchoes.push(snapshot);
       if (pendingEchoes.length > 20) pendingEchoes.shift();
-      lastSave = lastSave.catch(() => {}).then(() => adapter.save(snapshot)).then(() => {
-        if (BC.util.deepEqual(snapshot, state)) dirty = false;
+      lastSave = lastSave.catch(() => {}).then(() => adapter.save(snapshot, { base, replace: !!replacing })).then((persisted) => {
+        const saved = persisted || snapshot;
+        overwrite(state, BC.mergeSettingsEdits(snapshot, state, saved));
+        baseline = clone(saved);
+        dirty = !BC.util.deepEqual(saved, state);
+        if (replacement === replacing) replacement = 0;
         retry = 0; saveError = null; notify("saved");
       }).catch((error) => {
         saveError = error; notify("save-error");
@@ -102,6 +107,7 @@
     // Wholesale content replacement (reset / import). "structural" tells the UI
     // that a targeted sync isn't enough and the tab needs rebuilding.
     function swap(next) {
+      replacement++;
       past.push(clone(state));
       if (past.length > HISTORY) past.shift();
       future.length = 0;
@@ -139,7 +145,9 @@
         // Echoes arrive in save order, so everything queued before this one is done.
         if (own !== -1) { pendingEchoes.splice(0, own + 1); return; }
         if (BC.util.deepEqual(incoming, state)) return;
+        if (dirty) return;
         overwrite(state, incoming);
+        baseline = clone(incoming);
         notify("structural");
       });
     }

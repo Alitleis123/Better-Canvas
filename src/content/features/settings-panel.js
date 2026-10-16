@@ -8,7 +8,7 @@
   function makeAdapter() {
     return {
       getState() { return BC.storage.current || BC.cloneDefaults(); },
-      save(s) { return BC.storage.save(s); },
+      save(s, options) { return BC.storage.save(s, undefined, options); },
       // Same JS realm as applyAll, so a change can be reflected on the page in the
       // same frame rather than after the save debounce plus a storage round-trip.
       preview(s) { BC.storage.adopt(s); if (BC.applyNow) BC.applyNow(); },

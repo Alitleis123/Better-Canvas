@@ -58,7 +58,7 @@
   let current = BC.cloneDefaults();
   const adapter = {
     getState() { return current; },
-    save(s) { return BC.storage.save(s).then(() => { current = s; }); },
+    save(s, options) { return BC.storage.save(s, undefined, options).then((saved) => { current = saved; return saved; }); },
     preview(s) { paintTokens(s); },
     subscribe(cb) { return BC.storage.subscribe((s) => { current = s; cb(s); }); },
     getLocal() { return BC.storage.loadLocal(); },
