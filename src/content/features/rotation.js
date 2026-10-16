@@ -30,19 +30,24 @@
     const last = BC.storage.local.lastRotation;
     if (last && last.period === period) return;
 
-    const pool = (settings.customThemes || []).concat(BC.PRESET_THEMES || []);
-    const id = r.themeIds[idx % r.themeIds.length];
-    const theme = pool.find((t) => t && t.id === id);
-
-    // Await the period record before writing settings: the settings write re-enters
-    // apply(), and this used to work only because saveLocal happens to assign
-    // `local` before its first await.
+    // The in-flight guard blocks re-entry until the theme and period both save.
+    // Record the period only after the theme succeeds so failed writes can retry.
     rotating = true;
-    BC.storage.updateLocal((d) => { d.lastRotation = { period, themeId: id }; })
-      .then(() => {
-        if (!theme || !theme.settings) return;
-        return BC.storage.update((d) => { BC.applyTheme(d, theme); })
-          .then(() => BC.toast.info("Theme rotated: " + (theme.name || id)));
+    let applied;
+    BC.storage.update((d) => {
+      applied = null;
+      const rotation = d.theming.rotation;
+      if (!rotation.enabled || !rotation.themeIds?.length) return;
+      const index = rotation.mode === "weekly" ? Math.floor(localDay / 7) : localDay;
+      const id = rotation.themeIds[index % rotation.themeIds.length];
+      const theme = (d.customThemes || []).concat(BC.PRESET_THEMES || []).find((t) => t && t.id === id);
+      if (!theme?.settings) return;
+      BC.applyTheme(d, theme);
+      applied = { period: (rotation.mode || "daily") + ":" + index, themeId: id, name: theme.name || id };
+    }).then(() => {
+        if (!applied) return;
+        return BC.storage.updateLocal((d) => { d.lastRotation = { period: applied.period, themeId: applied.themeId }; })
+          .then(() => BC.toast.info("Theme rotated: " + applied.name));
       })
       .catch((e) => BC.diag.push("rotation", e))
       .then(() => { rotating = false; });

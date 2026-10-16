@@ -6,6 +6,23 @@ const test = require("node:test");
 const { root, load } = require("./audit-helpers.cjs");
 const { database } = require("./storage-harness.cjs");
 
+test("rotation retries failed themes and selects current settings inside its write", async () => {
+  const db = database({ bcSettings: { version: 5, theming: { rotation: { enabled: true, mode: "daily", themeIds: ["chosen"] } },
+    customThemes: [{ id: "chosen", name: "Chosen", settings: { theming: { accentColor: "#ff0000" } } }] } });
+  const a = await feature(db, "rotation", "apply"), b = db.tab(); await b.storage.load();
+  const BC = a.context.BC; load(a.context, "src/shared/themes.js");
+  const errors = []; BC.diag = { push(_source, error) { errors.push(error); } }; BC.toast = { info() {} };
+  db.fail("quota"); BC.testAction(BC.storage.current); await assert.rejects(a.storage.update(() => {}), /quota/);
+  await a.storage.updateLocal(() => {});
+  assert.equal(errors.length, 1); assert.equal(db.data.bcLocal.lastRotation, undefined);
+  db.fail(null);
+  await b.storage.update((d) => { d.customThemes[0].settings.theming.accentColor = "#00ff00"; d.dashboard.themeImages = [{ url: "https://external.test/art" }]; });
+  BC.testAction(BC.storage.current); await a.storage.update(() => {}); await a.storage.updateLocal(() => {});
+  assert.equal(db.data.bcSettings.theming.accentColor, "#00ff00");
+  assert.deepEqual(db.data.bcSettings.dashboard.themeImages, []);
+  assert.equal(db.data.bcLocal.lastRotation.themeId, "chosen");
+});
+
 async function feature(db, name, expose) {
   const tab = db.tab(); await tab.storage.load();
   tab.context.BC.registry = { register() {} }; tab.context.BC.util.warn = () => {};
