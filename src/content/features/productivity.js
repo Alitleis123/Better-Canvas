@@ -189,8 +189,9 @@
   function loadNotes() {
     return (BC.storage.local && BC.storage.local.notes && BC.storage.local.notes[pageKey()]) || [];
   }
-  function saveNotes(arr) {
-    return BC.storage.updateLocal((d) => { d.notes = d.notes || {}; d.notes[pageKey()] = arr; });
+  function editNotes(mutator) {
+    const key = pageKey();
+    return BC.storage.updateLocal((d) => { d.notes = d.notes || {}; d.notes[key] = mutator(d.notes[key] || []); });
   }
 
   // ONE delegated drag, installed once — not a pair of document-level listeners
@@ -223,7 +224,8 @@
         if (!dragEl) return;
         const el = dragEl, id = el.dataset.noteId;
         dragEl = null;
-        saveNotes(loadNotes().map((n) => (n.id === id ? { ...n, x: el.offsetLeft, y: el.offsetTop } : n)));
+        const x = el.offsetLeft, y = el.offsetTop;
+        editNotes((notes) => notes.map((n) => n.id === id ? { ...n, x, y } : n));
       });
     });
   }
@@ -268,17 +270,18 @@
     document.body.appendChild(el);
     el.querySelector(".bc-note-x").addEventListener("click", () => {
       el.remove();
-      saveNotes(loadNotes().filter((n) => n.id !== note.id));
+      editNotes((notes) => notes.filter((n) => n.id !== note.id));
     });
     ta.addEventListener("input", BC.util.debounce(() => {
-      saveNotes(loadNotes().map((n) => (n.id === note.id ? { ...n, text: ta.value } : n)));
+      const text = ta.value;
+      editNotes((notes) => notes.map((n) => n.id === note.id ? { ...n, text } : n));
     }, 400));
   }
 
   BC.quickNote = function () {
     const id = BC.util.uuid();
     const note = { id, text: "", x: 120 + Math.random() * 80, y: 120 + Math.random() * 80 };
-    saveNotes(loadNotes().concat(note));
+    editNotes((notes) => notes.concat(note));
     buildNote(note);
   };
 
