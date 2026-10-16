@@ -69,6 +69,54 @@ for (const name of ["studio", "options"]) {
   });
 }
 
+for (const kind of ["built-in", "custom", "online", "undo", "redo", "reset"]) {
+  test(kind + " theme action replaces unchanged artwork and theme fields from a stale editor", async () => {
+    const db = database(), a = await surface(db, "studio"), b = await surface(db, "options");
+    try {
+      load(a.context, "src/shared/themes.js");
+      const preset = kind === "built-in" ? a.BC.PRESET_THEMES[0] : { settings: { theming: { accentColor: "#ff0000" }, dashboard: { themeImages: [] } } };
+      if (kind === "undo" || kind === "redo") {
+        a.store.applyPreset(preset); await a.store.flush();
+        if (kind === "redo") { a.store.undo(); await a.store.flush(); }
+      }
+      b.store.set((d) => {
+        d.dashboard.themeImages = [{ url: "https://external.test/art" }];
+        d.dashboard.courses[42] = { nickname: "Keep me", bgImage: "https://external.test/course" };
+        d.theming.accentColor = "#abcdef"; d.theming.rotation.enabled = true;
+        d.theming.cursor = "large"; d.todo.tags.push("external");
+      }); await b.store.flush();
+      if (kind === "undo") a.store.undo();
+      else if (kind === "redo") a.store.redo();
+      else if (kind === "reset") a.store.reset();
+      else a.store.applyPreset(preset);
+      await a.store.flush();
+      assert.deepEqual(db.data.bcSettings.dashboard.themeImages, []);
+      assert.notEqual(db.data.bcSettings.theming.accentColor, "#abcdef");
+      if (kind !== "reset") {
+        assert.equal(db.data.bcSettings.dashboard.courses[42].bgImage, undefined);
+        assert.equal(db.data.bcSettings.dashboard.courses[42].nickname, "Keep me");
+        assert.equal(db.data.bcSettings.theming.rotation.enabled, true);
+        assert.equal(db.data.bcSettings.theming.cursor, "large");
+        assert.deepEqual(db.data.bcSettings.todo.tags, ["external"]);
+      }
+    } finally { a.close(); b.close(); }
+  });
+}
+
+test("reapplying an unchanged theme carries replacement intent and retains a failed attempt", async () => {
+  const db = database(), a = await surface(db, "studio"), b = await surface(db, "options");
+  try {
+    load(a.context, "src/shared/themes.js");
+    const preset = { settings: { theming: { accentColor: "#ff0000" } } };
+    a.store.applyPreset(preset); await a.store.flush();
+    b.store.set((d) => { d.dashboard.themeImages = [{ url: "https://external.test/art" }]; }); await b.store.flush();
+    db.fail("quota"); a.BC.util.warn = () => {};
+    a.store.applyPreset(preset); await assert.rejects(a.store.flush(), /quota/);
+    db.fail(null); await a.store.flush();
+    assert.deepEqual(db.data.bcSettings.dashboard.themeImages, []);
+  } finally { a.close(); b.close(); }
+});
+
 for (const [control, pathParts, value] of [["enabled", ["enabled"], false], ["dashEnabled", ["dashboard", "enabled"], false], ["darkMode", ["theming", "darkMode"], "on"], ["notifsIn", ["notifications", "inPage"], false]]) {
   test("popup " + control + " changes only its field after an options edit", async () => {
     const db = database(), popup = await surface(db, "popup"), options = await surface(db, "options");

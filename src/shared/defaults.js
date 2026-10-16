@@ -440,6 +440,24 @@
     return BC.cleanData(edited);
   };
 
+  // Explicit actions can replace fields even when they equal the editor baseline.
+  BC.replaceSettingsPaths = function (target, source, paths) {
+    const replace = (to, from, path) => {
+      const [key, ...rest] = path;
+      if (key === "*") {
+        for (const id of new Set([...Object.keys(to), ...Object.keys(from || {})])) {
+          if (to[id]) replace(to[id], from?.[id], rest);
+        }
+      } else if (rest.length) {
+        if (!to[key]) to[key] = {};
+        replace(to[key], from?.[key], rest);
+      } else if (from && Object.hasOwn(from, key)) to[key] = BC.cleanData(from[key]);
+      else delete to[key];
+    };
+    for (const path of paths) replace(target, source, path);
+    return target;
+  };
+
   BC.SETTINGS_VERSION = 5;
 
   // Each entry upgrades settings from (v-1) to v. `carry` collects data that

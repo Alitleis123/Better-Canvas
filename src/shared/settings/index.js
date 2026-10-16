@@ -540,8 +540,8 @@
       store.set((x) => {
         const saved = x.customThemes || [];
         x.customThemes = saved.filter((p) => p.id !== theme.id).concat([theme]);
-        BC.applyTheme(x, theme);
       });
+      store.applyPreset(theme);
 
     }
     function paintOnline() {

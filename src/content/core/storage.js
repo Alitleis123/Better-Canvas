@@ -205,7 +205,8 @@
       const base = options.base || JSON.parse(savedSettings || JSON.stringify(BC.cloneDefaults()));
       current = settings; revisions[KEY]++;
       return queueSettings(async () => {
-        const value = await transactSettings((fresh) => options.replace ? edited : BC.mergeSettingsEdits(base, edited, fresh));
+        const value = await transactSettings((fresh) => options.replace ? edited :
+          BC.replaceSettingsPaths(BC.mergeSettingsEdits(base, edited, fresh), edited, options.replacePaths || []));
         return acceptSettings(value, edited, current);
       });
     },

@@ -43,6 +43,9 @@
     const HISTORY = 30;
     let dirty = false;
     let baseline = clone(state), replacement = 0;
+    const replacePaths = new Map();
+    let editRevision = 0;
+    function markPaths(paths) { for (const path of paths || []) replacePaths.set(JSON.stringify(path), ++editRevision); }
     let retry = 0;
     let unsubAdapter = null;
     // Snapshots handed to adapter.save() whose storage echo hasn't come back yet.
@@ -71,14 +74,16 @@
         // Earlier saves may acknowledge a value the user has since reverted.
         // Compare the current edit with that acknowledgement when this turn runs.
         const snapshot = clone(state), base = clone(baseline), replacing = replacement;
+        const paths = new Map(replacePaths);
         pendingEchoes.push(snapshot);
         if (pendingEchoes.length > 20) pendingEchoes.shift();
-        const persisted = await adapter.save(snapshot, { base, replace: !!replacing });
+        const persisted = await adapter.save(snapshot, { base, replace: !!replacing, replacePaths: [...paths.keys()].map(JSON.parse) });
         const saved = persisted || snapshot;
         overwrite(state, BC.mergeSettingsEdits(snapshot, state, saved));
         baseline = clone(saved);
-        dirty = !BC.util.deepEqual(saved, state);
         if (replacement === replacing) replacement = 0;
+        for (const [path, revision] of paths) if (replacePaths.get(path) === revision) replacePaths.delete(path);
+        dirty = !BC.util.deepEqual(saved, state) || !!replacement || !!replacePaths.size;
         retry = 0; saveError = null; notify("saved");
       }).catch((error) => {
         saveError = error; notify("save-error");
@@ -97,9 +102,10 @@
     function set(mutator, opts) {
       const before = clone(state);      // ONE clone, was 3 clones + 4 stringifies
       mutator(state);                   // in place, so captured sub-objects stay live
-      if (BC.util.deepEqual(before, state)) return;
+      if (BC.util.deepEqual(before, state) && !opts?.replacePaths?.length) return;
+      markPaths(opts?.replacePaths);
       if (!(opts && opts.replay)) {
-        past.push(before);              // reuses the clone we already had to make
+        past.push({ state: before, replacePaths: opts?.replacePaths });
         if (past.length > HISTORY) past.shift();
         future.length = 0;
       }
@@ -111,7 +117,7 @@
     // that a targeted sync isn't enough and the tab needs rebuilding.
     function swap(next) {
       replacement++;
-      past.push(clone(state));
+      past.push({ state: clone(state), replace: true });
       if (past.length > HISTORY) past.shift();
       future.length = 0;
       overwrite(state, next);
@@ -121,8 +127,11 @@
 
     function undo() {
       if (!past.length) return false;
-      future.push(clone(state));
-      overwrite(state, past.pop());
+      const entry = past.pop();
+      future.push({ ...entry, state: clone(state) });
+      overwrite(state, entry.state);
+      if (entry.replace) replacement++;
+      markPaths(entry.replacePaths);
       notify("structural");
       scheduleSave();
       return true;
@@ -130,8 +139,11 @@
 
     function redo() {
       if (!future.length) return false;
-      past.push(clone(state));
-      overwrite(state, future.pop());
+      const entry = future.pop();
+      past.push({ ...entry, state: clone(state) });
+      overwrite(state, entry.state);
+      if (entry.replace) replacement++;
+      markPaths(entry.replacePaths);
       notify("structural");
       scheduleSave();
       return true;
@@ -188,6 +200,11 @@
       },
       reset() { swap(BC.cloneDefaults()); },
       applyPreset(preset) {
+        const src = preset.settings || preset;
+        const preserved = ["colorBlind", "reducedMotion", "fontSizeScale", "cursor"];
+        const paths = Object.keys(BC.defaults.theming).filter((key) => key !== "rotation" &&
+          (!preserved.includes(key) || Object.hasOwn(src.theming || {}, key))).map((key) => ["theming", key]);
+        paths.push(["cosmetics"], ["dashboard", "themeImages"], ["dashboard", "courses", "*", "bgImage"], ["dashboard", "courses", "*", "bgGradient"]);
         set((d) => {
           if (BC.applyTheme) { BC.applyTheme(d, preset); return; }
           const src = BC.cleanData(preset.settings || preset);
@@ -200,7 +217,7 @@
             }
           };
           deep(d, src);
-        });
+        }, { replacePaths: paths });
       },
     };
   };
