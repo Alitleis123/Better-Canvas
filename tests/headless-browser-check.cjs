@@ -49,6 +49,33 @@ if (!scratch) throw Error("Set BC_BROWSER_SCRATCH to an approved temporary direc
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files });
     }, manifest.content_scripts.find((s) => s.all_frames).js);
     assert.deepEqual(await inspect(), first); results.extension.push("Repeated all-frames bundle preserves top-page state");
+    const secondPage = await browser.newPage();
+    await secondPage.goto("http://bc-test.instructure.com:8076/extension-check?second=1");
+    const storageChecks = await worker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({ url: "http://bc-test.instructure.com:8076/*" });
+      if (tabs.length !== 2) throw Error("Expected two independent extension contexts");
+      await Promise.all(tabs.map((tab, index) => chrome.scripting.executeScript({ target: { tabId: tab.id },
+        func: async (id) => { await BC.storage.load(); await BC.storage.updateLocal((d) => { (d.notes.extensionCheck ||= {})[id] = "saved"; }); }, args: [String(index)] })));
+      const { bcLocal } = await chrome.storage.local.get(["bcLocal"]);
+      if (bcLocal.notes.extensionCheck[0] !== "saved" || bcLocal.notes.extensionCheck[1] !== "saved") throw Error("Concurrent tab edits were lost");
+      const [stale] = await chrome.scripting.executeScript({ target: { tabId: tabs[0].id }, func: async () => {
+        const snapshot = await BC.storage.request({ type: "bc:localRead" });
+        await BC.storage.updateLocal((d) => { d.notes.newer = true; });
+        return BC.storage.request({ type: "bc:localCommit", base: snapshot.base, value: snapshot.values.bcLocal });
+      } });
+      if (!stale.result.conflict) throw Error("Stale background commit was accepted");
+      await chrome.scripting.executeScript({ target: { tabId: tabs[0].id }, func: async () => BC.Locker.create({ id: "browser-check", type: "note", title: "Original" }) });
+      await chrome.scripting.executeScript({ target: { tabId: tabs[1].id }, func: async () => BC.Locker.remove("browser-check") });
+      const [deleted] = await chrome.scripting.executeScript({ target: { tabId: tabs[0].id }, func: async () => {
+        try { await BC.Locker.save({ id: "browser-check", type: "note", title: "Stale" }); return false; }
+        catch (error) { return error.message.includes("deleted in another window"); }
+      } });
+      if (!deleted.result || (await chrome.storage.local.get(["bcLocker:item:browser-check"]))["bcLocker:item:browser-check"]) throw Error("Locker delete was undone");
+      return ["Concurrent extension tab edits survive", "Raw bcLocal contains current downgrade-compatible data",
+        "Background rejects stale content hashes", "Deleted locker item rejects a stale cross-context save"];
+    });
+    results.extension.push(...storageChecks);
+    await secondPage.close();
     await page.goto("http://127.0.0.1:8076/");
     await page.waitForFunction(() => document.querySelector("#bc-drawer")?.shadowRoot?.querySelector(".bcs-app, .bc-app"));
     results.studio = await page.evaluate(fs.readFileSync(path.join(__dirname, "studio-browser-checks.js"), "utf8"));

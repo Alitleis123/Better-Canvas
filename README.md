@@ -136,10 +136,11 @@ Three modes:
 
 1. Build the unpacked extensions:
    ```powershell
-   node.exe --test tests/regressions.test.cjs tests/themes.test.cjs
+   npm ci
+   npm test
    powershell -ExecutionPolicy Bypass -File build.ps1
    ```
-   This populates `dist/chrome` and `dist/firefox` after syntax-checking every JS file.
+   This populates `dist/chrome` and `dist/firefox` after syntax-checking every JS file. Release archives use `Better-Canvas-3.3.1-Chromium.zip` and `Better-Canvas-3.3.1-Firefox.zip`.
 
 2. Load it:
    - **Chrome**: `chrome://extensions` → Developer mode → **Load unpacked** → select `dist/chrome`.
@@ -246,6 +247,8 @@ src/
 
 - After editing source, run `build.ps1` and reload the unpacked extension, then refresh Canvas.
 - `build.ps1` runs `node --check` on every `.js` file before copying.
-- Run `node --test tests/regressions.test.cjs tests/themes.test.cjs tests/studio.test.cjs` for storage, import, artwork, library, and locker regression tests.
-- Run `node tests/studio-fixture.cjs` and open `http://localhost:18766` for a synthetic 32-course dashboard. It uses mocked extension storage and Canvas requests, with no school login or account data. Evaluate `tests/studio-browser-checks.js` in that page for the interactive checks. The fixture cannot verify an installed extension's permissions or a school's specific Canvas layout.
+- Install test dependencies with `npm ci`, then run `npm test` to run every `tests/*.test.cjs` suite.
+- Suites cover storage concurrency and targeted reads, sticky notes, locker lifecycle, grade rules and brute-force equivalence, grade input validation and slider batching, settings failures, popup/options migrations, frame bundles, quiz toggles, dashboard loaders, privacy/manifests, themes and studio artwork.
+- Run `node tests/headless-browser-check.cjs` after building. It requires a Playwright Chromium installation, `PLAYWRIGHT_BROWSERS_PATH` for its location and `BC_BROWSER_SCRATCH` for temporary browser files. It loads the unpacked Chromium extension and runs the studio browser checks against local synthetic pages.
+- Run `node tests/studio-fixture.cjs` and open `http://light-vm.tailde9e5d.ts.net:8076` for a synthetic 32-course dashboard. It uses mocked extension storage and Canvas requests, with no school login or account data. Evaluate `tests/studio-browser-checks.js` in that page for the interactive checks. The fixture cannot verify an installed extension's permissions or a school's specific Canvas layout.
 - Check the editor at 1440×900, 1280×800, and 390×844, including all tabs, scrolling, keyboard focus, and the Apply/Cancel bar.

@@ -36,7 +36,8 @@ function Build-Target($name, $manifestSource) {
     Copy-Item (Join-Path $root "icons") (Join-Path $out "icons") -Recurse
     Copy-Item (Join-Path $root $manifestSource) (Join-Path $out "manifest.json") -Force
     $version = (Get-Content -LiteralPath (Join-Path $out "manifest.json") -Raw | ConvertFrom-Json).version
-    $archive = Join-Path $root "dist\better-canvas-$version-$name.zip"
+    $browser = if ($name -eq "chrome") { "Chromium" } else { "Firefox" }
+    $archive = Join-Path $root "dist\Better-Canvas-$version-$browser.zip"
     Compress-Archive -Path (Join-Path $out "*") -DestinationPath $archive -Force
     Write-Host "Built $name -> $out" -ForegroundColor Cyan
     Write-Host "Archive -> $archive" -ForegroundColor Cyan

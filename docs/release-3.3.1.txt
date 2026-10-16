@@ -4,9 +4,10 @@ Visible changes
 - Keep all 34 bundled themes when the all-frames content scripts run in the top document.
 - Validate imported and stored grade goals and rubric drafts. Label the goal, target and final-weight inputs.
 - Preserve legacy grade history and planner metadata when popup or options opens first after an upgrade.
-- Save local changes as independent records so tabs cannot overwrite unrelated notes or planner edits. Read existing bcLocal data through the same adapter.
-- Dispose locker editors on navigation, flush pending edits and wait for queued saves before deleting an item.
-- Apply Canvas assignment-group drop-lowest, drop-highest and never-drop rules to totals and predictions.
+- Serialize local study-data writes in the background with content-hash conflict checks and bounded retries. Store current data in the original bcLocal shape so 3.3.0 can read it. Read only required keys during ordinary edits.
+- Edit sticky notes by note id so two tabs editing different notes on the same page retain both changes.
+- Dispose locker editors on navigation and flush pending edits. Explicit creates and background updates prevent a stale autosave in another window from recreating a deleted item.
+- Apply Canvas assignment-group drop-lowest, drop-highest and never-drop rules to totals and predictions. Cache unchanged groups, stop the drop solver when its ratio stabilizes and batch rubric slider updates per animation frame.
 - Refresh dashboard data at its cache TTL, retry failures with backoff and invalidate planner data after successful writes.
 - Report storage failures in popup and settings. Apply, settings import and theme import wait for persistence before reporting success.
 - Remove quiz-draft listeners and cancel pending saves when saving is disabled.
@@ -14,21 +15,24 @@ Visible changes
 - Shorten both manifest descriptions and remove unused alarms and notifications permissions.
 
 Verification
-- 55 automated regression tests passed with node --test "tests/*.test.cjs".
+- 65 automated regression tests passed with node --test "tests/*.test.cjs".
 - All 57 extension JavaScript files passed node --check.
-- Both Chromium and Firefox packages built with versioned zip archives.
-- 6 unpacked-extension checks passed in headless Chrome for Testing 156.0.8078.4. The top document retained 34 themes and 6 anime themes on version 3.3.1, including after repeated frame injection.
+- Both Chromium and Firefox packages built with versioned zip archives. Each archive passed integrity and root-manifest checks and contains no tests, package files or node_modules.
+- Grade rules matched 2,000 fixed-seed exhaustive subset comparisons and 500 eligibility cases. Four groups of 100 assignments took 2.4 to 5.9 ms per uncached total in an isolated run.
+- Fifteen planner toggles used 45 targeted bcLocal reads, zero full-storage reads and zero theme or locker reads. One hundred quiz create/delete cycles added zero keys and zero tombstones.
+- 10 unpacked-extension checks passed in headless Chrome for Testing 156.0.8078.4. The top document retained 34 themes and 6 anime themes on version 3.3.1, including after repeated frame injection.
 - All 45 existing studio browser checks passed on the local synthetic 32-course dashboard, with no browser runtime errors.
 - Browser profiles and retained browser downloads are in the approved scratch area. The browser and fixture server stopped after the checks.
 
 Scope of verification
 The browser used local synthetic pages and a separate temporary profile. No school login, real Canvas instance or Openverse search was used.
 The Firefox manifest and package passed source checks and build verification. A Firefox browser run was not performed.
-Independent local records preserve unrelated concurrent edits. Concurrent edits to the same value use the last completed write.
+Background conflict checks rerun mutators against fresh local data. Different sticky-note ids retain concurrent edits. Concurrent edits to the same field or existing locker item use the last accepted write. Locker deletion rejects stale updates.
+Old browsers without storage.getKeys use one initial full-storage scan to index existing locker items. Later locker reads and edits use targeted keys.
 Locker data stays on the current browser and device. Use My locker > Export for a separate backup.
 
 Build/install
 Run powershell -ExecutionPolicy Bypass -File build.ps1.
 Load dist/chrome as an unpacked Chromium extension, or dist/firefox/manifest.json in Firefox's temporary add-on loader.
-The build also creates dist/better-canvas-3.3.1-chrome.zip and dist/better-canvas-3.3.1-firefox.zip.
+The build also creates dist/Better-Canvas-3.3.1-Chromium.zip and dist/Better-Canvas-3.3.1-Firefox.zip.
 For an already loaded unpacked extension, reload the extension itself, then refresh the Canvas page.
