@@ -25,7 +25,7 @@ test("grade and rubric renderers validate stored values, avoid injected elements
     BC.injector = { setStyle() {}, removeNode() {}, ensureNode(id, host, factory) { if (!nodes.has(id)) nodes.set(id, factory()); return nodes.get(id); } };
     BC.registry = { register(feature) { BC.feature = feature; } };
     BC.api = { assignmentGroups: async () => [{ rules: { drop_lowest: 1 }, assignments: [{ id: 1, points_possible: 10, submission: { score: 0 } }, { id: 2, points_possible: 10, submission: { score: 10 } }] }], assignment: async () => ({ id: 2, points_possible: 10, rubric: [{ id: "c", points: 10, description: "Criterion" }] }) };
-    BC.storage = { local: { rubricDrafts: { 2: { c: payload } } }, updateLocal() {}, update() {} };
+    BC.storage = { local: { rubricDrafts: { 2: { c: payload } } }, updateLocal: async () => {}, update: async () => {} };
     load(context, "src/content/features/grades.js");
     const settings = BC.cloneDefaults(); settings.grades.autoRefresh = false; settings.grades.goals = { 7: { target: payload } };
     BC.feature.apply(settings, { page: "grades", courseId: "7", path: "/courses/7/grades" });
@@ -88,5 +88,25 @@ test("independent rubric editors save only changed criteria against fresh drafts
     assert.deepEqual(db.data.bcLocal.rubricDrafts[1], { a: 4, b: 7 });
     await a.edit(0, "5");
     assert.deepEqual(db.data.bcLocal.rubricDrafts[1], { a: 5, b: 7 });
+    a.BC.util.warn = () => {}; db.fail("quota");
+    await a.edit(0, "2");
+    assert.deepEqual(db.data.bcLocal.rubricDrafts[1], { a: 5, b: 7 });
+    db.fail(null);
+    await a.edit(1, "8");
+    assert.deepEqual(db.data.bcLocal.rubricDrafts[1], { a: 2, b: 8 }, "a failed criterion remains dirty when another criterion is edited");
   } finally { a.dom.window.close(); b.dom.window.close(); }
+});
+
+test("failed grade history writes can retry on the next score observation", async () => {
+  const db = require("./storage-harness.cjs").database(), tab = db.tab();
+  await tab.storage.load();
+  load(tab.context, "src/content/core/datetime.js");
+  const BC = tab.context.BC; BC.registry = { register() {} }; BC.util.warn = () => {};
+  load(tab.context, "src/content/features/grades.js");
+  db.fail("quota"); await BC.grades.recordScore("7", 90);
+  assert.equal(db.data.bcLocal.gradeHistory, undefined);
+  db.fail(null); await BC.grades.recordScore("7", 90);
+  assert.equal(db.data.bcLocal.gradeHistory[7][0].score, 90);
+  await BC.grades.recordScore("7", 91);
+  assert.equal(db.data.bcLocal.gradeHistory[7].length, 1);
 });

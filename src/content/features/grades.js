@@ -328,11 +328,13 @@
 
     let edits = {};
     const saveDraft = BC.util.debounce(() => {
-      const patch = edits; edits = {};
+      const patch = { ...edits };
       BC.storage.updateLocal((d) => {
         const rd = (d.rubricDrafts = d.rubricDrafts || {});
         Object.assign((rd[aid] = rd[aid] || {}), patch);
-      });
+      }).then(() => {
+        for (const key of Object.keys(patch)) if (edits[key] === patch[key]) delete edits[key];
+      }).catch(() => {});
     }, 500);
 
     const totalEl = panel.querySelector("[data-total]");
@@ -402,20 +404,19 @@
   // course, not just ones whose grades page happens to get visited. That single
   // caller is what makes the trend chart, dashboard sparklines and the Insights tab
   // actually accumulate data.
-  BC.grades.recordScore = function (courseId, total) { recordHistory(String(courseId), total); };
+  BC.grades.recordScore = function (courseId, total) { return recordHistory(String(courseId), total); };
   // Days are LOCAL calendar days. toISOString() is UTC, so in the Americas the "day"
   // rolled over in the late afternoon and an evening visit was filed under tomorrow.
   function recordHistory(courseId, total) {
     const today = BC.dt.ymd(new Date());
     const key = courseId + ":" + today;
     if (total == null || historyRecorded.has(key)) return;
-    historyRecorded.add(key);
-    BC.storage.updateLocal((d) => {
+    return BC.storage.updateLocal((d) => {
       const gh = (d.gradeHistory = d.gradeHistory || {});
       const arr = gh[courseId] || [];
       if (!arr.some((e) => e.date === today)) arr.push({ date: today, score: +total.toFixed(3) });
       gh[courseId] = arr.slice(-90);
-    });
+    }).then(() => { historyRecorded.add(key); }).catch(() => {});
   }
 
   function apply(settings, ctx) {
