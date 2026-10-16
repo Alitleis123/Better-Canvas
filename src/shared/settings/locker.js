@@ -33,19 +33,21 @@
   async function remove(id) {
     if (!/^[a-zA-Z0-9-]{1,80}$/.test(id)) throw new Error("Invalid item");
     // A hidden or recently disposed editor may still have a queued snapshot.
-    await Promise.all([...renderers].map((renderer) => renderer.cancelItem(id)));
     await call("remove", { id });
+    await Promise.all([...renderers].map((renderer) => renderer.cancelItem(id)));
   }
   BC.Locker = { normalize, save, create: createItem, list, importBatch, remove };
   BC.renderLocker = function () {
     const root = el("div", { class: "bcs-locker" }), listPane = el("div", { class: "bcs-locker-list" }), editor = el("div", { class: "bcs-locker-editor" });
     const status = el("span", { class: "bc-caption", role: "status", text: "Saved on this device" });
     const search = el("input", { class: "bc-input", type: "search", placeholder: "Search your locker…", "aria-label": "Search your locker" });
-    let items = [], active = null, query = "", filter = "all", timer, pending = Promise.resolve(), disposed = false, dirty = false;
+    let items = [], active = null, query = "", filter = "all", timer, pending = Promise.resolve(), disposed = false;
+    const dirty = new Set(), failed = new Set();
     const renderer = {
       flush: () => persist(),
       cancelItem(id) {
-        if (active?.id === id) { clearTimeout(timer); active = null; dirty = false; }
+        if (active?.id === id) { clearTimeout(timer); active = null; }
+        dirty.delete(id); failed.delete(id);
         items = items.filter((item) => item.id !== id);
         if (!disposed) { paintEditor(); paintList(); }
         return pending.catch(() => {});
@@ -60,20 +62,27 @@
       result.catch(() => {}).then(() => renderers.delete(renderer));
       return result;
     };
-    const report = (e) => { status.textContent = "Could not save. Your changes are still open; try Save again."; BC.toast && BC.toast.error("Locker could not save: " + e.message); };
+    const failureText = "Could not save. Your changes are still open; try Save again.";
+    const showStatus = () => { status.textContent = failed.size ? failureText : dirty.size ? "Saving..." : "Saved on this device"; };
+    const report = (e) => { status.textContent = failureText; BC.toast && BC.toast.error("Locker could not save: " + e.message); };
     function persist() {
       clearTimeout(timer);
-      if (disposed || !active || !dirty) return pending;
-      const snapshot = normalize(active);
-      pending = pending.catch(() => {}).then(() => save(snapshot)).then(() => {
-        if (active?.id === snapshot.id && JSON.stringify(normalize(active)) === JSON.stringify(snapshot)) dirty = false;
-        status.textContent = "Saved on this device";
-      }).catch((e) => { report(e); throw e; });
+      if (disposed || !dirty.size) return pending;
+      const snapshots = items.filter((item) => dirty.has(item.id)).map(normalize);
+      pending = pending.catch(() => {}).then(async () => {
+        for (const snapshot of snapshots) {
+          try { await save(snapshot); }
+          catch (e) { failed.add(snapshot.id); report(e); throw e; }
+          const item = items.find((item) => item.id === snapshot.id);
+          if (JSON.stringify(normalize(item)) === JSON.stringify(snapshot)) dirty.delete(snapshot.id);
+          failed.delete(snapshot.id); showStatus();
+        }
+      });
       pending.catch(() => {}); return pending;
     }
     function change(fn) {
       if (disposed || !active) return;
-      fn(active); dirty = true; active.updated = Date.now(); status.textContent = "Saving…";
+      fn(active); dirty.add(active.id); active.updated = Date.now(); showStatus();
       clearTimeout(timer); timer = setTimeout(persist, 350); paintList();
     }
     function paintList() {
@@ -84,7 +93,7 @@
           BC.ui.icon(item.type === "set" ? "layers" : item.type === "link" ? "link" : "file"),
           el("div", null, [el("strong", { text: (item.pinned ? "★ " : "") + (item.title || "Untitled") }), el("span", { text: [item.folder, item.type === "set" ? item.cards.length + " cards" : item.type === "link" ? "Bookmark" : "Note"].filter(Boolean).join(" · ") })]),
         ]);
-        b.onclick = () => { if (active) persist().catch(() => {}); active = item; dirty = false; paintEditor(); paintList(); }; return b;
+        b.onclick = () => { if (active) persist().catch(() => {}); active = item; paintEditor(); paintList(); }; return b;
       }));
       if (!found.length) listPane.append(el("p", { class: "bc-caption", text: items.length ? "No items match your search." : "Your ideas belong here. Create a note, bookmark or study set to begin." }));
     }

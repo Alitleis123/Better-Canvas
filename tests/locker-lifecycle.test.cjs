@@ -2,6 +2,61 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { load, domContext, settle, copy } = require("./audit-helpers.cjs");
 
+test("failed locker edits stay dirty across item switches and export retries inactive edits", async () => {
+  const db = require("./storage-harness.cjs").database({
+    "bcLocker:item:a": { id: "a", type: "note", title: "A", body: "old A" },
+    "bcLocker:item:b": { id: "b", type: "note", title: "B", body: "old B" },
+  });
+  const page = domContext("", { chrome: db.client().chrome, Blob });
+  let exported;
+  page.context.URL.createObjectURL = (blob) => { exported = blob; return "blob:test"; };
+  page.context.URL.revokeObjectURL = () => {};
+  page.dom.window.HTMLAnchorElement.prototype.click = () => {};
+  load(page.context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/icons.js", "src/content/core/ui.js", "src/content/core/storage.js", "src/shared/settings/locker.js");
+  page.context.BC.toast = { error() {} };
+  const root = page.context.BC.renderLocker(); page.dom.window.document.body.append(root);
+  const select = (name) => [...root.querySelectorAll(".bcs-locker-item")].find((b) => b.textContent.startsWith(name)).click();
+  const button = (text) => [...root.querySelectorAll("button")].find((b) => b.textContent === text);
+  const edit = (text) => { const ta = root.querySelector("textarea"); ta.value = text; ta.dispatchEvent(new page.dom.window.Event("input")); };
+  try {
+    await settle(); await settle(); select("A"); edit("unsaved important edit");
+    db.fail("quota"); button("Save").click(); await settle(); await settle();
+    select("B"); await settle(); await settle();
+    assert.match(root.querySelector('[role="status"]').textContent, /Could not save/);
+    db.fail(null); select("A"); button("Save").click(); await settle(); await settle();
+    assert.equal(db.data["bcLocker:item:a"].body, "unsaved important edit");
+    assert.equal(root.querySelector("textarea").value, "unsaved important edit");
+    assert.equal(root.querySelector('[role="status"]').textContent, "Saved on this device");
+    edit("second unsaved edit"); db.fail("quota"); select("B"); await settle(); await settle();
+    db.fail(null); button("Export").click();
+    for (let i = 0; i < 100 && !exported; i++) await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.ok(exported);
+    assert.equal(JSON.parse(await exported.text()).items.find((item) => item.id === "a").body, "second unsaved edit");
+  } finally { db.fail(null); await root.dispose(); page.dom.window.close(); }
+});
+
+test("failed locker deletion keeps the dirty editor available for retry", async () => {
+  const db = require("./storage-harness.cjs").database({ "bcLocker:item:a": { id: "a", type: "note", title: "A", body: "old" } });
+  const remove = db.api.remove;
+  db.api.remove = (_keys, callback) => {
+    queueMicrotask(() => { db.runtime.lastError = { message: "Delete failed" }; callback(); delete db.runtime.lastError; });
+  };
+  const page = domContext("", { chrome: db.client().chrome, confirm: () => true });
+  load(page.context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/icons.js", "src/content/core/ui.js", "src/content/core/storage.js", "src/shared/settings/locker.js");
+  page.context.BC.toast = { error() {} };
+  const root = page.context.BC.renderLocker(); page.dom.window.document.body.append(root);
+  const button = (text) => [...root.querySelectorAll("button")].find((b) => b.textContent === text);
+  try {
+    await settle(); await settle(); root.querySelector(".bcs-locker-item").click();
+    const ta = root.querySelector("textarea"); ta.value = "keep this edit"; ta.dispatchEvent(new page.dom.window.Event("input"));
+    db.fail("quota"); button("Delete").click(); await settle(); await settle();
+    assert.equal(root.querySelector("textarea").value, "keep this edit");
+    assert.match(root.querySelector('[role="status"]').textContent, /Could not save/);
+    db.api.remove = remove; db.fail(null); button("Save").click(); await settle(); await settle();
+    assert.equal(db.data["bcLocker:item:a"].body, "keep this edit");
+  } finally { db.fail(null); await root.dispose(); page.dom.window.close(); }
+});
+
 test("disposing a locker with pending autosave then deleting in another renderer stays deleted", async () => {
   const data = { "bcLocker:item:test": { id: "test", type: "note", title: "Original", body: "old" } };
   const timers = new Map(); let next = 0;
