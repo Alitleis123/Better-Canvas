@@ -79,7 +79,10 @@
         if (pendingEchoes.length > 20) pendingEchoes.shift();
         const persisted = await adapter.save(snapshot, { base, replace: !!replacing, replacePaths: [...paths.keys()].map(JSON.parse) });
         const saved = persisted || snapshot;
-        overwrite(state, BC.mergeSettingsEdits(snapshot, state, saved));
+        if (replacement === replacing) {
+          const newerPaths = [...replacePaths].filter(([path, revision]) => paths.get(path) !== revision).map(([path]) => JSON.parse(path));
+          overwrite(state, BC.replaceSettingsPaths(BC.mergeSettingsEdits(snapshot, state, saved), state, newerPaths));
+        }
         baseline = clone(saved);
         if (replacement === replacing) replacement = 0;
         for (const [path, revision] of paths) if (replacePaths.get(path) === revision) replacePaths.delete(path);

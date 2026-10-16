@@ -30,6 +30,57 @@ async function surface(db, name) {
 }
 
 for (const name of ["studio", "options"]) {
+  for (const action of ["theme", "reset", "import", "theme undo", "theme redo", "reset undo", "reset redo"]) {
+    test(name + " preserves " + action + " contents when an older save is acknowledged", async () => {
+      const db = database(), a = await surface(db, name), b = await surface(db, name === "studio" ? "options" : "studio");
+      let release;
+      try {
+        load(a.context, "src/shared/themes.js");
+        const send = a.client.chrome.runtime.sendMessage;
+        let held = false;
+        a.client.chrome.runtime.sendMessage = (message, callback) => {
+          if (message.type === "bc:settingsRead" && !held) { held = true; release = () => send(message, callback); return; }
+          return send(message, callback);
+        };
+        a.store.set((d) => { d.dashboard.cardRadius = 13; });
+        for (let i = 0; i < 100 && !release; i++) await settle();
+        assert.ok(release);
+        b.store.set((d) => {
+          d.dashboard.themeImages = [{ url: "https://external.test/art" }];
+          d.dashboard.courses[42] = { nickname: "Keep me", bgImage: "https://external.test/course", bgGradient: "external" };
+          d.customThemes.push({ id: "external", name: "External", settings: { theming: { accentColor: "#abcdef" } } });
+          d.navigation.global.customLinks.push({ id: "external-link", label: "External", url: "https://external.test" });
+          d.theming.rotation.enabled = true; d.todo.tags.push("external");
+        }); await b.store.flush();
+        if (action === "import") a.store.importJSON('{"version":5,"enabled":false}');
+        else if (action.startsWith("reset")) a.store.reset();
+        else a.store.applyPreset({ settings: { theming: { accentColor: "#ff0000" } } });
+        if (action.endsWith("undo") || action.endsWith("redo")) a.store.undo();
+        if (action.endsWith("redo")) a.store.redo();
+        await new Promise((resolve) => setTimeout(resolve, 260));
+        release(); await a.store.flush();
+        assert.deepEqual(db.data.bcSettings.dashboard.themeImages, []);
+        if (action.startsWith("theme")) {
+          assert.equal(db.data.bcSettings.dashboard.courses[42].bgImage, undefined);
+          assert.equal(db.data.bcSettings.dashboard.courses[42].bgGradient, undefined);
+          assert.equal(db.data.bcSettings.dashboard.courses[42].nickname, "Keep me");
+          assert.equal(db.data.bcSettings.theming.rotation.enabled, true);
+          assert.deepEqual(db.data.bcSettings.todo.tags, ["external"]);
+          assert.deepEqual(db.data.bcSettings.customThemes.map((t) => t.id), ["external"]);
+          assert.equal(db.data.bcSettings.theming.accentColor, action === "theme undo" ? a.BC.defaults.theming.accentColor : "#ff0000");
+        } else {
+          assert.deepEqual(db.data.bcSettings.customThemes, []);
+          assert.deepEqual(db.data.bcSettings.navigation.global.customLinks, []);
+          assert.deepEqual(db.data.bcSettings.dashboard.courses, {});
+          assert.equal(db.data.bcSettings.enabled, action !== "import");
+        }
+        assert.deepEqual(copy(a.store.get()), copy(db.data.bcSettings));
+      } finally { a.close(); b.close(); }
+    });
+  }
+}
+
+for (const name of ["studio", "options"]) {
   test(name + " real throttle persists a reversal queued behind an in-flight save", async () => {
     const db = database(), a = await surface(db, name);
     let release;
