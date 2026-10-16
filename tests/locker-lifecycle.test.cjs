@@ -76,3 +76,42 @@ test("locker creates are explicit and old-browser indexing scans only once", asy
   await assert.rejects(a.context.BC.Locker.save(item), /deleted in another window/);
   assert.equal(db.requests.filter((keys) => keys === null).length, 1);
 });
+
+
+test("locker export flushes local editors and reads creates and deletes from another context", async () => {
+  const db = require("./storage-harness.cjs").database({
+    "bcLocker:item:edit": { id: "edit", type: "note", title: "Editing", body: "old" },
+    "bcLocker:item:gone": { id: "gone", type: "note", title: "Deleted elsewhere" },
+    "bcLocker:item:untouched": { id: "untouched", type: "note", title: "Old cached title" },
+  });
+  const page = domContext("", { chrome: db.client().chrome, Blob });
+  let exported;
+  page.context.URL.createObjectURL = (blob) => { exported = blob; return "blob:test"; };
+  page.context.URL.revokeObjectURL = () => {};
+  page.dom.window.HTMLAnchorElement.prototype.click = () => {};
+  load(page.context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/icons.js", "src/content/core/ui.js", "src/content/core/storage.js", "src/shared/settings/locker.js");
+  const BC = page.context.BC, roots = [BC.renderLocker(), BC.renderLocker()];
+  for (const root of roots) page.dom.window.document.body.append(root);
+  const other = db.tab(); load(other.context, "src/shared/settings/locker.js");
+  try {
+    await settle(); await settle();
+    for (const [index, root] of roots.entries()) {
+      [...root.querySelectorAll(".bcs-locker-item")].find((button) => button.textContent.includes(index ? "Old cached title" : "Editing")).click();
+    }
+    const title = roots[0].querySelector('[aria-label="Title"]'); title.value = "Unsaved local edit";
+    title.dispatchEvent(new page.dom.window.Event("input"));
+    await other.context.BC.Locker.create({ id: "new", type: "note", title: "Created elsewhere" });
+    await other.context.BC.Locker.remove("gone");
+    await other.context.BC.Locker.save({ id: "untouched", type: "note", title: "Current stored title" });
+    [...roots[0].querySelectorAll("button")].find((button) => button.textContent === "Export").click();
+    for (let i = 0; i < 100 && !exported; i++) await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.ok(exported);
+    const data = JSON.parse(await exported.text());
+    assert.deepEqual(data.items, copy(await BC.Locker.list()));
+    assert.equal(data.items.find((item) => item.id === "edit").title, "Unsaved local edit");
+    assert.equal(data.items.find((item) => item.id === "untouched").title, "Current stored title");
+    assert.equal(data.items.some((item) => item.id === "new"), true);
+    assert.equal(data.items.some((item) => item.id === "gone"), false);
+    assert.equal(db.data["bcLocker:item:edit"].title, "Unsaved local edit");
+  } finally { await Promise.all(roots.map((root) => root.dispose())); page.dom.window.close(); }
+});

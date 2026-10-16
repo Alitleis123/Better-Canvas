@@ -41,10 +41,11 @@
     const root = el("div", { class: "bcs-locker" }), listPane = el("div", { class: "bcs-locker-list" }), editor = el("div", { class: "bcs-locker-editor" });
     const status = el("span", { class: "bc-caption", role: "status", text: "Saved on this device" });
     const search = el("input", { class: "bc-input", type: "search", placeholder: "Search your locker…", "aria-label": "Search your locker" });
-    let items = [], active = null, query = "", filter = "all", timer, pending = Promise.resolve(), disposed = false;
+    let items = [], active = null, query = "", filter = "all", timer, pending = Promise.resolve(), disposed = false, dirty = false;
     const renderer = {
+      flush: () => persist(),
       cancelItem(id) {
-        if (active?.id === id) { clearTimeout(timer); active = null; }
+        if (active?.id === id) { clearTimeout(timer); active = null; dirty = false; }
         items = items.filter((item) => item.id !== id);
         if (!disposed) { paintEditor(); paintList(); }
         return pending.catch(() => {});
@@ -62,14 +63,17 @@
     const report = (e) => { status.textContent = "Could not save. Your changes are still open; try Save again."; BC.toast && BC.toast.error("Locker could not save: " + e.message); };
     function persist() {
       clearTimeout(timer);
-      if (disposed || !active) return pending;
+      if (disposed || !active || !dirty) return pending;
       const snapshot = normalize(active);
-      pending = pending.catch(() => {}).then(() => save(snapshot)).then(() => { status.textContent = "Saved on this device"; }).catch((e) => { report(e); throw e; });
+      pending = pending.catch(() => {}).then(() => save(snapshot)).then(() => {
+        if (active?.id === snapshot.id && JSON.stringify(normalize(active)) === JSON.stringify(snapshot)) dirty = false;
+        status.textContent = "Saved on this device";
+      }).catch((e) => { report(e); throw e; });
       pending.catch(() => {}); return pending;
     }
     function change(fn) {
       if (disposed || !active) return;
-      fn(active); active.updated = Date.now(); status.textContent = "Saving…";
+      fn(active); dirty = true; active.updated = Date.now(); status.textContent = "Saving…";
       clearTimeout(timer); timer = setTimeout(persist, 350); paintList();
     }
     function paintList() {
@@ -80,7 +84,7 @@
           BC.ui.icon(item.type === "set" ? "layers" : item.type === "link" ? "link" : "file"),
           el("div", null, [el("strong", { text: (item.pinned ? "★ " : "") + (item.title || "Untitled") }), el("span", { text: [item.folder, item.type === "set" ? item.cards.length + " cards" : item.type === "link" ? "Bookmark" : "Note"].filter(Boolean).join(" · ") })]),
         ]);
-        b.onclick = () => { if (active) persist().catch(() => {}); active = item; paintEditor(); paintList(); }; return b;
+        b.onclick = () => { if (active) persist().catch(() => {}); active = item; dirty = false; paintEditor(); paintList(); }; return b;
       }));
       if (!found.length) listPane.append(el("p", { class: "bc-caption", text: items.length ? "No items match your search." : "Your ideas belong here. Create a note, bookmark or study set to begin." }));
     }
@@ -145,9 +149,13 @@
       active = item; items.push(active);
       paintList(); paintEditor(); editor.querySelector('input[aria-label="Title"]')?.focus();
     }
-    function exportItems() {
-      const url = URL.createObjectURL(new Blob([JSON.stringify({ format: "better-canvas-locker", version: 1, items }, null, 2)], { type: "application/json" }));
-      const a = el("a", { href: url, download: "better-canvas-locker.json" }); a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    async function exportItems() {
+      try {
+        await Promise.all([...renderers].map((renderer) => renderer.flush()));
+        const current = await list();
+        const url = URL.createObjectURL(new Blob([JSON.stringify({ format: "better-canvas-locker", version: 1, items: current }, null, 2)], { type: "application/json" }));
+        const a = el("a", { href: url, download: "better-canvas-locker.json" }); a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (error) { report(error); }
     }
     function importItems() {
       const input = el("input", { type: "file", accept: ".json,application/json" });
