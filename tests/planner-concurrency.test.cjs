@@ -44,6 +44,28 @@ test("retained scheduling menu reads the latest estimate and preserves other tim
   } finally { a.dom.window.close(); b.dom.window.close(); }
 });
 
+test("failed planner note, step and tag saves retain editor input for retry", async () => {
+  const db = seed(), a = await view(db);
+  a.BC.util.warn = () => {};
+  try {
+    const note = a.doc.querySelector('[aria-label="Note"]');
+    note.value = "unsaved note"; db.fail("quota");
+    note.dispatchEvent(new a.dom.window.Event("change"));
+    a.enter("Add a step", "keep step"); a.enter("Add a tag", "keep tag");
+    await assert.rejects(a.drain(), /quota/);
+    assert.equal(a.doc.querySelector('[aria-label="Add a step"]').value, "keep step");
+    assert.equal(a.doc.querySelector('[aria-label="Add a tag"]').value, "keep tag");
+    assert.equal(note.value, "unsaved note");
+    db.fail(null); note.dispatchEvent(new a.dom.window.Event("change"));
+    a.enter("Add a step", "keep step"); a.enter("Add a tag", "keep tag"); await a.drain();
+    assert.equal(db.data.bcLocal.todo.notes[key], "unsaved note");
+    assert.equal(db.data.bcLocal.todo.subtasks[key].at(-1).text, "keep step");
+    assert.deepEqual(db.data.bcLocal.todo.tagsByItem[key], ["base", "keep tag"]);
+    assert.equal(a.doc.querySelector('[aria-label="Add a step"]').value, "");
+    assert.equal(a.doc.querySelector('[aria-label="Add a tag"]').value, "");
+  } finally { a.dom.window.close(); }
+});
+
 test("independent details sheets complete different legacy step ids without losing either edit", async () => {
   const db = seed(), a = await view(db), b = await view(db);
   try {

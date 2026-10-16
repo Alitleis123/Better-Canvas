@@ -1745,11 +1745,11 @@
 
     const subList = el("div", { class: "pld-subs" });
     const subCount = el("span", { class: "pld-count" });
-    const saveSubs = (operation) => save((x) => {
+    const saveSubs = (operation, onSaved) => save((x) => {
       const m = (x.subtasks = x.subtasks || {});
       const steps = operation(m[key] || []);
       if (steps.length) m[key] = steps; else delete m[key];
-    }).then(() => { subs = (tlocal().subtasks || {})[key] || []; drawSubs(); }).catch(() => {});
+    }).then(() => { subs = (tlocal().subtasks || {})[key] || []; drawSubs(); if (onSaved) onSaved(); }).catch(() => {});
     function drawSubs() {
       subList.replaceChildren(...subs.map((sub) => {
         const cb = BC.ui.checkbox({ checked: sub.done, label: sub.text, onChange: (v) => saveSubs((steps) => steps.map((step) => step.id === sub.id ? { ...step, done: v } : step)) });
@@ -1770,16 +1770,16 @@
       const text = subInput.value.trim();
       if (!text) return;
       const step = { id: BC.util.uuid(), text, done: false };
-      subInput.value = "";
-      saveSubs((steps) => steps.concat([step]));
+      const entered = subInput.value;
+      saveSubs((steps) => steps.concat([step]), () => { if (subInput.value === entered) subInput.value = ""; });
     });
 
     const tagWrap = el("div", { class: "pld-chips" });
-    const saveTags = (operation) => save((x) => {
+    const saveTags = (operation, onSaved) => save((x) => {
       const m = (x.tagsByItem = x.tagsByItem || {});
       const next = operation(m[key] || []);
       if (next.length) m[key] = next; else delete m[key];
-    }).then(() => { tags = (tlocal().tagsByItem || {})[key] || []; drawTags(); }).catch(() => {});
+    }).then(() => { tags = (tlocal().tagsByItem || {})[key] || []; drawTags(); if (onSaved) onSaved(); }).catch(() => {});
     function drawTags() {
       tagWrap.replaceChildren(...tags.map((tg) => BC.ui.chip(tg, { onRemove: () => saveTags((fresh) => fresh.filter((tag) => tag !== tg)) })));
     }
@@ -1792,8 +1792,8 @@
       if (e.key !== "Enter" && e.key !== ",") return;
       e.preventDefault();
       const v = tagInput.value.replace(/,/g, "").trim();
-      if (v) saveTags((fresh) => fresh.includes(v) ? fresh : fresh.concat([v]));
-      tagInput.value = "";
+      const entered = tagInput.value;
+      if (v) saveTags((fresh) => fresh.includes(v) ? fresh : fresh.concat([v]), () => { if (tagInput.value === entered) tagInput.value = ""; });
     });
 
     const est = BC.ui.segmented({ ariaLabel: "Time estimate", size: "sm", value: String((L.estimates || {})[key] || ""),
@@ -1808,8 +1808,9 @@
     let noteSaved = note.value;
     const saveNote = () => {
       if (note.value === noteSaved) return;
-      noteSaved = note.value;
-      save((x) => { const m = (x.notes = x.notes || {}); if (note.value.trim()) m[key] = note.value; else delete m[key]; });
+      const value = note.value;
+      save((x) => { const m = (x.notes = x.notes || {}); if (value.trim()) m[key] = value; else delete m[key]; })
+        .then(() => { noteSaved = value; }).catch(() => {});
     };
     note.addEventListener("input", BC.util.debounce(saveNote, 400));
     note.addEventListener("change", saveNote);
