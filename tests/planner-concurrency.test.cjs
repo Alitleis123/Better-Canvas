@@ -13,7 +13,7 @@ async function view(db) {
   await BC.storage.load(); BC.api = { plannerItemDone: () => false };
   BC.ui.sheet = (opts) => ({ open() { for (const node of opts.body) page.dom.window.document.body.append(node); }, close() {} });
   const source = fs.readFileSync(path.join(root, "src/content/features/todo.js"), "utf8")
-    .replace("  BC.registry.register({", "  BC.testOpenDetails = openDetails;\n  BC.registry.register({");
+    .replace("  BC.registry.register({", "  BC.testOpenDetails = openDetails; BC.testPruneSnoozes = pruneSnoozes;\n  BC.registry.register({");
   vm.runInContext(source, page.context);
   BC.testOpenDetails({ plannable_type: "assignment", plannable: { id: 1, title: "Assignment" } });
   const doc = page.dom.window.document;
@@ -71,4 +71,16 @@ test("step add, remove and rename operate by id on fresh steps after another con
     assert.equal(new Set(steps.map((s) => s.id)).size, 3);
     assert.equal(steps[0].done, false);
   } finally { a.dom.window.close(); b.dom.window.close(); }
+});
+
+
+test("expired snooze cleanup rechecks fresh data before deleting a rescheduled item", async () => {
+  const db = seed(), a = await view(db), b = db.tab(); await b.storage.load();
+  try {
+    const expired = new Date(Date.now() - 10000).toISOString(), future = new Date(Date.now() + 86400000).toISOString();
+    await b.storage.updateLocal((d) => { d.todo.snoozed = { task: expired, old: expired }; });
+    await b.storage.updateLocal((d) => { d.todo.snoozed.task = future; });
+    await a.BC.testPruneSnoozes(["task", "old"]);
+    assert.deepEqual(db.data.bcLocal.todo.snoozed, { task: future });
+  } finally { a.dom.window.close(); }
 });

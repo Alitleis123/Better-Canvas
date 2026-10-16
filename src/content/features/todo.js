@@ -443,6 +443,12 @@
     return BC.storage.updateLocal((d) => { mutator((d.todo = d.todo || {})); });
   }
 
+  function pruneSnoozes(keys) {
+    return writeTodoLocal((L) => {
+      for (const key of keys) if (Date.parse(L.snoozed?.[key]) <= Date.now()) delete L.snoozed[key];
+    });
+  }
+
   // Must be stable across fetches: stars, snoozes, tags and schedule slots are all
   // keyed on it.
   function keyForItem(it) {
@@ -806,7 +812,7 @@
 
     // Snoozes that have expired are dropped in one batched write, so the map can't
     // grow without bound.
-    if (model.expired.length) writeTodoLocal((L) => { for (const k of model.expired) delete (L.snoozed || {})[k]; });
+    if (model.expired.length) pruneSnoozes(model.expired);
 
     const view = viewOf(t);
     const enter = state.first && !o.wide;
