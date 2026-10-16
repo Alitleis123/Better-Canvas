@@ -155,7 +155,7 @@ For non-instructure.com Canvas (e.g. `canvas.yourschool.edu`), click the toolbar
 
 ## Privacy
 
-Better Canvas makes **no external network requests**. All Canvas calls go to your own Canvas instance using your existing cookies:
+Your settings and local study data stay on this device. Image searches send your query to api.openverse.org. Photo themes and previews load images from third-party hosts. No telemetry. Canvas calls go to your own Canvas instance using your existing cookies:
 
 - **Reads (GET):** dashboard cards, courses/scores/terms, planner items, assignment groups, rubrics, modules, files, announcements, course people.
 - **Writes (planner only):** mark a task complete, add a personal task (planner widget + syllabus extract). Uses Canvas's CSRF token — same as the Canvas UI. Nothing else is ever written — no grades, no quiz answers.

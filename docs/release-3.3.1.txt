@@ -15,7 +15,7 @@ Visible changes
 - Export locker items from current storage after flushing edited local editors. Include creates and deletes from other windows.
 - Reject background messages whose sender id differs from the extension id. Storage messages only write fixed keys.
 - Remove quiz-draft listeners and cancel pending saves when saving is disabled.
-- Explain that image searches send queries to Openverse and photo themes and previews load from third-party image hosts. No telemetry.
+- Your settings and local study data stay on this device. Image searches send your query to api.openverse.org. Photo themes and previews load images from third-party hosts. No telemetry.
 - Shorten both manifest descriptions and remove unused alarms and notifications permissions.
 
 Verification
