@@ -66,3 +66,40 @@ test("theme import and Save current look report failed persistence", async () =>
     assert.match(s.messages.at(-1).text, /Theme could not be saved.*Quota exceeded/);
   } finally { s.store.destroy(); s.dom.window.close(); }
 });
+
+
+test("quota rejection keeps the settings edit, error and automatic retry value", async () => {
+  const db = require("./storage-harness.cjs").database();
+  const page = domContext('<div id="root"></div>', { chrome: db.client().chrome });
+  let store;
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json")));
+    load(page.context, ...manifest.content_scripts[0].js.filter((file) => file !== "src/content/content.js"));
+    const BC = page.context.BC;
+    BC.util.warn = () => {};
+    await BC.storage.load();
+    db.fail("Quota exceeded");
+    store = BC.SettingsUI.render(page.dom.window.document.getElementById("root"), {
+      getState: () => BC.storage.current, save: (s) => BC.storage.save(s),
+      subscribe: (fn) => BC.storage.subscribe(fn), preview: (s) => BC.storage.adopt(s),
+    });
+    store.set((d) => { d.enabled = false; });
+    await settle(); await settle(); await settle();
+    assert.equal(store.get().enabled, false);
+    assert.equal(BC.storage.current.enabled, false);
+    assert.match(store.saveError.message, /Quota exceeded/);
+    const alert = page.dom.window.document.querySelector('[role="alert"]');
+    assert.equal(alert.hidden, false); assert.match(alert.textContent, /Quota exceeded/);
+    await settle();
+    assert.equal(store.get().enabled, false);
+    assert.equal(alert.hidden, false);
+    db.fail(null);
+    // Exercise the scheduled retry rather than initiating another editor save.
+    for (let i = 0; i < 100 && db.data.bcSettings?.enabled !== false; i++) await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(db.data.bcSettings.enabled, false);
+    assert.equal(store.get().enabled, false);
+    assert.equal(BC.storage.current.enabled, false);
+    assert.equal(store.saveError, null);
+    assert.equal(alert.hidden, true);
+  } finally { store?.destroy(); page.dom.window.close(); }
+});

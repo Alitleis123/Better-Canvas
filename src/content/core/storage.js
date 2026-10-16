@@ -198,9 +198,9 @@
     // same object twice.
     save(settings, json) {
       current = settings;
-      savedSettings = json || JSON.stringify(settings);
+      const snapshot = json || JSON.stringify(settings);
       revisions[KEY]++;
-      return write(KEY, settings);
+      return write(KEY, settings).then(() => { savedSettings = snapshot; });
     },
 
     // Only imports/restores use full replacement. Snapshot its input now, but
