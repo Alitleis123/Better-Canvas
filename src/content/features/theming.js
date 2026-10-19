@@ -17,9 +17,11 @@
   // plus computed-colour tagging, shared with same-origin subframes.
   const staticCSS = `
     /* Accent variable — Canvas reads --ic-brand-primary in many places */
-    :root[data-bc-accent] { --ic-brand-primary: var(--bc-accent) !important; }
+    :root[data-bc-accent] { --ic-brand-primary: var(--bc-accent) !important;
+      --ic-brand-button--primary-bgd: var(--bc-accent) !important; --ic-brand-button--primary-text: var(--bc-accent-contrast, #fff) !important; }
+    /* Canvas keeps white text on primary buttons, unreadable on a light accent. */
     :root[data-bc-accent] .btn-primary, :root[data-bc-accent] .Button--primary {
-      background: var(--bc-accent) !important; border-color: var(--bc-accent) !important;
+      background: var(--bc-accent) !important; border-color: var(--bc-accent) !important; color: var(--bc-accent-contrast, #fff) !important;
     }
 
     /* Density */

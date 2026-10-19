@@ -88,6 +88,8 @@ html.bc-dark { color-scheme: dark; background-color: var(--bc-surface-1) !import
 html.bc-dark body { background-color: var(--bc-surface-1) !important; color: var(--bc-text) !important; }
 html.bc-dark ::placeholder { color: var(--bc-text-subtle, var(--bc-muted)) !important; opacity: 1 !important; }
 html.bc-dark ::selection { background-color: var(--bc-accent); color: var(--bc-accent-contrast, #fff); }
+/* Canvas fills its skip link with the link colour under white text. Dark mode's link colour is light. */
+html.bc-dark #skip_navigation_link { background-color: var(--bc-accent) !important; color: var(--bc-accent-contrast, #fff) !important; }
 /* Canvas renders equations as black ink on a transparent image. */
 html.bc-dark img.equation_image { background-color: #fff !important; border-radius: 2px; padding: 1px 2px; }
 html.bc-dark :is(#content, #right-side, #breadcrumbs, .user_content, .ic-app-main-content, .ToDoSidebar) a[href]:not(.Button, .btn, [role="button"], [class*="baseButton"], .ic-DashboardCard__link, .ic-DashboardCard__action, [data-bc-dfg="k"]) {

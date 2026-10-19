@@ -618,3 +618,14 @@ test("found on real Canvas: a failed module fetch waits instead of repeating on 
   for (let i = 0; i < 5; i++) { feature.apply(settings, ctx); await new Promise((r) => setImmediate(r)); }
   assert.equal(calls, 1, "page updates after a failure don't refetch");
 });
+
+test("found on real Canvas: text on accent fills uses the accent's contrast colour", () => {
+  const theming = fs.readFileSync(path.join(root, "src/content/features/theming.js"), "utf8");
+  assert.match(theming, /\.Button--primary \{[^}]*color: var\(--bc-accent-contrast/);
+  assert.match(theming, /--ic-brand-button--primary-text: var\(--bc-accent-contrast/);
+  const dom = require("./audit-helpers.cjs").domContext("");
+  try {
+    require("./audit-helpers.cjs").load(dom.context, "src/shared/defaults.js", "src/shared/themes.js", "src/content/core/datetime.js", "src/content/core/color.js", "src/shared/tokens.js", "src/content/core/darkengine.js");
+    assert.match(dom.context.BC.darkEngine.baseCss(), /#skip_navigation_link \{ background-color: var\(--bc-accent\) !important; color: var\(--bc-accent-contrast/);
+  } finally { dom.dom.window.close(); }
+});
