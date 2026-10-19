@@ -14,7 +14,7 @@
   BC.features = BC.features || {};
 
   const IDLE_MS = 5 * 60000, TICK_MS = 10000, FLUSH_MS = 60000;
-  let lastInput = Date.now(), lastTick = Date.now(), lastFlush = Date.now(), pendingMs = 0, pendingKey = null;
+  let lastInput = Date.now(), lastTick = Date.now(), lastFlush = Date.now(), pendingMs = 0, pendingKey = null, wasActive = false;
 
   const on = () => { const s = BC.storage.current; return !!(s && s.enabled && s.insights && s.insights.enabled); };
   const courseKey = () => String(BC.detect.context().courseId || "other");
@@ -33,29 +33,36 @@
     pendingMs = 0; lastFlush = Date.now();
   }
 
+  // Each interval counts if the tab was in use when it began. Checking at its end
+  // lost the last stretch before a blur or tab switch.
   function tick() {
     const now = Date.now(), key = courseKey();
     if (key !== pendingKey) { send(); pendingKey = key; }
     // Capped, so a laptop waking from sleep doesn't count the time it was shut.
-    if (active()) pendingMs += Math.min(now - lastTick, TICK_MS * 2);
+    if (wasActive && on()) pendingMs += Math.min(now - lastTick, TICK_MS * 2);
     lastTick = now;
+    wasActive = active();
     if (now - lastFlush >= FLUSH_MS) send();
   }
 
-  const seen = () => { lastInput = Date.now(); };
+  const seen = () => { const idle = !wasActive; lastInput = Date.now(); if (idle) tick(); };
   const leave = () => { tick(); send(); };
 
   function apply(settings) {
-    if (!settings.insights || !settings.insights.enabled) return;
     const bag = BC.lifecycle.bag("insights");
+    if (!settings.insights || !settings.insights.enabled) {
+      // Switched off: stop the clock and drop anything not yet sent.
+      bag.clear(); pendingMs = 0; wasActive = false;
+      return;
+    }
     bag.once("tick", () => {
-      lastTick = Date.now(); pendingKey = courseKey();
+      lastTick = Date.now(); pendingKey = courseKey(); wasActive = active();
       for (const type of ["pointerdown", "keydown", "wheel", "mousemove", "touchstart"]) bag.listen(document, type, seen, { passive: true, capture: true });
       bag.listen(window, "scroll", seen, { passive: true, capture: true });
-      bag.listen(document, "visibilitychange", () => { if (document.visibilityState === "hidden") leave(); else { lastTick = Date.now(); seen(); } });
+      bag.listen(document, "visibilitychange", () => { if (document.visibilityState === "hidden") leave(); else seen(); });
       bag.listen(window, "pagehide", leave);
-      bag.listen(window, "blur", () => tick());
-      bag.listen(window, "focus", () => { lastTick = Date.now(); seen(); });
+      bag.listen(window, "blur", tick);
+      bag.listen(window, "focus", seen);
       bag.interval(tick, TICK_MS);
     });
   }

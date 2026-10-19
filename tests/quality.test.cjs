@@ -352,7 +352,12 @@ test("study time counts active focused seconds and the background adds them", as
     BC.registry = { register(f) { BC.feature = f; } };
     loadDom(context, "src/content/features/insights.js");
     BC.feature.apply(s);
+    // Fifteen seconds of use, then the window loses focus: those seconds count.
     now += 15000;
+    dom.window.document.hasFocus = () => false;
+    dom.window.dispatchEvent(new dom.window.Event("blur"));
+    // Ten unfocused minutes later the page closes. Nothing more is counted.
+    now += 10 * 60000;
     dom.window.dispatchEvent(new dom.window.Event("pagehide"));
     await settle(); await settle(); await settle();
     assert.equal(sent.length, 1);
@@ -360,8 +365,12 @@ test("study time counts active focused seconds and the background adds them", as
     assert.equal(sent[0].minutes, 0.25);
     const ymd = sent[0].ymd;
     assert.equal(db.data.bcLocal.studyTime[ymd]["42"], 0.25);
-    // Ten idle minutes later nothing more is counted.
-    now += 10 * 60000;
+    // Switched off, focused use isn't counted at all.
+    s.insights.enabled = false;
+    BC.feature.apply(s);
+    dom.window.document.hasFocus = () => true;
+    dom.window.dispatchEvent(new dom.window.Event("focus"));
+    now += 20000;
     dom.window.dispatchEvent(new dom.window.Event("pagehide"));
     await settle();
     assert.equal(sent.length, 1);
@@ -387,8 +396,17 @@ test("quiz drafts belong to one attempt and submitting clears every page of the 
     const settings = BC.cloneDefaults(); settings.productivity.quizDraftSaver = true;
     BC.features.quizsaver.apply(settings, { path });
     assert.equal(doc.querySelector(".bc-quiz-banner"), null, "attempt 1's answers aren't offered on attempt 2");
-    doc.getElementById("submit_quiz_form").dispatchEvent(new page.dom.window.Event("submit", { bubbles: true, cancelable: true }));
-    await BC.storage.updateLocal(() => {}); await settle();
+    const form = doc.getElementById("submit_quiz_form");
+    const tick = () => new Promise((r) => page.dom.window.setTimeout(r, 0));
+    // A cancelled "submit anyway?" prompt keeps every draft.
+    const cancel = (e) => e.preventDefault();
+    form.addEventListener("submit", cancel);
+    form.dispatchEvent(new page.dom.window.Event("submit", { bubbles: true, cancelable: true }));
+    await tick(); await BC.storage.updateLocal(() => {}); await settle();
+    assert.equal(Object.keys(db.data.bcLocal.quizDrafts).length, 3);
+    form.removeEventListener("submit", cancel);
+    form.dispatchEvent(new page.dom.window.Event("submit", { bubbles: true, cancelable: true }));
+    await tick(); await BC.storage.updateLocal(() => {}); await settle();
     assert.deepEqual(Object.keys(db.data.bcLocal.quizDrafts), ["/courses/1/quizzes/9/take"]);
   } finally { page.dom.window.close(); }
 });
