@@ -102,7 +102,11 @@
       }).catch((e) => {
         // A network blip shouldn't hide the tools until a reload. Ask again later.
         BC.diag.push("instructor:role", e);
-        setTimeout(() => { if (teaching.get(courseId) === false) teaching.delete(courseId); }, 30000);
+        setTimeout(() => {
+          if (teaching.get(courseId) !== false) return;
+          teaching.delete(courseId);
+          if (BC.requestApply) BC.requestApply();   // a quiet page wouldn't ask again by itself
+        }, 30000);
       });
     }
     return teaching.get(courseId);
