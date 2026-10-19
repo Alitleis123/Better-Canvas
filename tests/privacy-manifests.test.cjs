@@ -14,7 +14,7 @@ test("all manifest descriptions fit Chrome's limit, use plain text and omit unus
   }
 });
 test("README, release notes, onboarding and About disclose image queries and third-party requests with no telemetry", () => {
-  for (const file of ["README.md", "docs/release-3.3.1.txt", "src/content/features/onboarding.js", "src/shared/settings/index.js"]) {
+  for (const file of ["README.md", "docs/release-3.3.1.txt", "docs/release-3.3.2.txt", "src/content/features/onboarding.js", "src/shared/settings/index.js"]) {
     const text = fs.readFileSync(path.join(root, file), "utf8");
     assert.match(text, /Image searches send your query to api\.openverse\.org/);
     assert.match(text, /Photo themes and previews (?:contact|load images from) third-party/);
@@ -24,7 +24,7 @@ test("README, release notes, onboarding and About disclose image queries and thi
 });
 
 test("documentation, manifests and UI omit blanket claims of no external requests", () => {
-  const files = ["README.md", "docs/release-3.3.1.txt", ...fs.readdirSync(root).filter((name) => /^manifest.*\.json$/.test(name))];
+  const files = ["README.md", "docs/release-3.3.1.txt", "docs/release-3.3.2.txt", ...fs.readdirSync(root).filter((name) => /^manifest.*\.json$/.test(name))];
   for (const file of fs.readdirSync(path.join(root, "src"), { recursive: true })) {
     if (/\.(js|html|css)$/.test(file)) files.push(path.join("src", file));
   }

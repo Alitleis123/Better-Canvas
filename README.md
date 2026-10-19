@@ -1,4 +1,4 @@
-# Better Canvas 3.3.1
+# Better Canvas 3.3.2
 
 A customizable study workspace for Instructure Canvas — free forever, settings stored locally, no accounts, no telemetry.
 
@@ -140,7 +140,7 @@ Three modes:
    npm test
    powershell -ExecutionPolicy Bypass -File build.ps1
    ```
-   This populates `dist/chrome` and `dist/firefox` after syntax-checking every JS file. Release archives use `Better-Canvas-3.3.1-Chromium.zip` and `Better-Canvas-3.3.1-Firefox.zip`.
+   This populates `dist/chrome` and `dist/firefox` after syntax-checking every JS file. Release archives use `Better-Canvas-3.3.2-Chromium.zip` and `Better-Canvas-3.3.2-Firefox.zip`.
 
 2. Load it:
    - **Chrome**: `chrome://extensions` → Developer mode → **Load unpacked** → select `dist/chrome`.
@@ -167,6 +167,8 @@ Settings live in `bcSettings`. Everything device-local — sticky notes, drafts,
 ## Architecture
 
 Vanilla JavaScript. No framework. No bundler. Every module attaches to a shared `globalThis.BC` namespace and is loaded as a classic script in dependency order.
+
+The settings workspace and the photo theme data, about 290 KB, are not in the page bundle. When the drawer first opens, or hovering its menu item warms it up, the background injects `theme-artwork.js` and the `src/shared/settings/` files other than `studio.js` into the page's content-script world. The options page loads them directly.
 
 ```
 manifest.json / manifest.firefox.json    per-browser MV3 manifests
@@ -250,5 +252,7 @@ src/
 - Install test dependencies with `npm ci`, then run `npm test` to run every `tests/*.test.cjs` suite.
 - Suites cover storage concurrency and targeted reads, sticky notes, locker lifecycle, grade rules and brute-force equivalence, grade input validation and slider batching, settings failures, popup/options migrations, frame bundles, quiz toggles, dashboard loaders, privacy/manifests, themes and studio artwork.
 - Run `node tests/headless-browser-check.cjs` after building. It requires a Playwright Chromium installation, `PLAYWRIGHT_BROWSERS_PATH` for its location and `BC_BROWSER_SCRATCH` for temporary browser files. It loads the unpacked Chromium extension and runs the studio browser checks against local synthetic pages.
+- Run `node tests/firefox-check.cjs` after building to load `dist/firefox` in a real Firefox through geckodriver. Set `BC_FIREFOX` to `firefox.exe`, `BC_GECKODRIVER` to `geckodriver.exe` and `BC_BROWSER_SCRATCH`. It resolves every host name to this machine, uses the same local synthetic pages, and checks the settings drawer, a theme save, the WebP artwork and quiz drafts.
+- `node tests/real-canvas-check.cjs` is opt-in. Set `BC_CANVAS_PAGES` to comma-separated `*.instructure.com` pages that open without a login, such as a public course syllabus. It only loads those pages, with dark mode off and then on, and reports extension errors, repeated failing requests and text contrast below WCAG AA.
 - Run `node tests/studio-fixture.cjs` and open `http://light-vm.tailde9e5d.ts.net:8076` for a synthetic 32-course dashboard. It uses mocked extension storage and Canvas requests, with no school login or account data. Evaluate `tests/studio-browser-checks.js` in that page for the interactive checks. The fixture cannot verify an installed extension's permissions or a school's specific Canvas layout.
 - Check the editor at 1440×900, 1280×800, and 390×844, including all tabs, scrolling, keyboard focus, and the Apply/Cancel bar.

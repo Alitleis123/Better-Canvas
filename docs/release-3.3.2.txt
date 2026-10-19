@@ -1,0 +1,51 @@
+Better Canvas 3.3.2 quality fixes
+
+Visible changes
+- Instructor tools (roster export, attendance buttons) appear only in courses where you teach. Roster CSV cells that start with a formula character are quoted.
+- Course cards stay hidden when Canvas switches the dashboard to List View or Recent Activity.
+- The grade weights donut draws each arc after the previous one instead of stacking them.
+- The hidden assignment preview no longer blocks clicks on the links under it. Escape and scrolling close it, and it has its own switch.
+- Reset keeps recurring tasks, tags, goals, credits, saved themes, custom links, course order, nicknames and hidden courses.
+- Import checks the file first. Locker and theme files get their own messages, and a backup asks before replacing sticky notes, drafts, planner data and grade history on this device.
+- Tab and Shift+Tab leave the shortcut recorder instead of becoming the shortcut. Backspace or Delete clears a binding.
+- A burst of typing in one settings field is one undo step.
+- Sticky notes are never pruned. Empty lists go, and drafts expire after a week.
+- Two tabs finishing the same Pomodoro phase start the break once, and the log records the minutes actually focused.
+- Weekly recurring tasks need a weekday, monthly days clamp to short months, and a rule starts on the day it was made.
+- The planner keeps keyboard focus through rebuilds, refreshes due labels each minute and fetches the new day after midnight.
+- Toasts wait while hovered or focused and sit above the focus timer. At most one save-failure toast shows per minute.
+- Desktop notification permission is asked when you switch it on. Reminders skip calendar events and announcements.
+- Calendar export keeps real event times, gives each item a unique UID and a link, and ends all-day events on the next day.
+- The syllabus scan matches real month names only, skips fractions, keeps table rows whole and remembers which dates you added.
+- Module progress counts "complete one item" and completed modules the way Canvas does. After a failed request it waits a minute instead of asking again on every page update.
+- Grade Tools shows Canvas's current grade, labels its own estimate, and keeps the final-exam inputs through rebuilds.
+- Scene themes store short references instead of up to 1.2 MB of drawings in settings. Saved data URIs are converted on load.
+- Dark mode no longer fades buttons on rescans, darkens new content before it paints, keeps equation images readable and leaves the rich-content editor light. Dark text stays on mid-tone chips and cells, and pinned links pass 4.5:1.
+- Text on Canvas primary buttons and the skip link uses the accent's contrast colour, so a light accent no longer puts white text on a light fill.
+- Color-blind modes shift confusable colours toward ones you can tell apart instead of simulating color blindness.
+- Study time counts active, focused seconds and is added up in the background, so short visits count and idle tabs don't.
+- Quiz drafts belong to one attempt. Submitting clears every page's draft with one background message, which a fast navigation can't interrupt. A cancelled submit keeps them.
+- Lists in settings reorder by touch from a 24px grip, as well as by mouse and arrow keys.
+- The toolbar count clears once no Canvas tab is left to keep it current.
+- The settings workspace and photo theme data load on first use. Each Canvas page parses 638 KB of script instead of 933 KB.
+- The bundled anime artwork ships as WebP: 2.4 MB instead of 13.5 MB. Each package is 2.7 MB.
+- New installs start with the reading bar and Speak buttons off. Switches stay beside their labels at phone width, and Apply theme stays on screen.
+- Your settings and local study data stay on this device. Image searches send your query to api.openverse.org. Photo themes and previews load images from third-party hosts. No telemetry.
+
+Verification
+- 151 automated tests passed in each of three consecutive runs of node --test "tests/*.test.cjs".
+- All 57 extension JavaScript files passed node --check. Both packages built, passed zip integrity checks, and contain the manifest and four WebP images, with no tests, package files or node_modules.
+- Headless Chrome for Testing 156.0.8078.4 passed 15 unpacked-extension checks and 46 studio checks with no runtime errors. They include lazy loading into the content-script world, a cold settings open, concurrent tab storage, a cancelled and a real quiz submit across navigation, and a touch drag on a real grip.
+- Firefox 158.0 passed 8 checks of the built Firefox package through geckodriver 0.37.1: install, content scripts, the lazily loaded settings drawer, a theme saved through the background surviving a reload in dark mode, the WebP atlas and wallpaper, and quiz drafts through a cancelled and a real submit. No console errors were logged.
+- Four public pages on a real Canvas server (sdsu.instructure.com: a course home, two syllabi and a modules page) loaded with the extension, dark mode off and then on with a light custom accent. There were no extension errors and no repeated failing requests. All 696 measured text elements met WCAG AA, and primary buttons and the skip link reached 5.56:1 or better.
+- The WebP artwork was compared with the PNG originals: PSNR 33.5 to 37 dB, with no visible difference at twice the displayed size.
+
+Scope of verification
+The Chromium and Firefox checks used local synthetic pages and temporary profiles. The real Canvas check viewed public pages without signing in, so the dashboard, planner, grades and notifications ran only against the synthetic pages. Signed-out pages return 401 from the Canvas API; the extension logs these and does not retry them on every page update.
+No school login or Openverse search was used.
+
+Build/install
+Run powershell -ExecutionPolicy Bypass -File build.ps1.
+Load dist/chrome as an unpacked Chromium extension, or dist/firefox/manifest.json in Firefox's temporary add-on loader.
+The build also creates dist/Better-Canvas-3.3.2-Chromium.zip and dist/Better-Canvas-3.3.2-Firefox.zip.
+For an already loaded unpacked extension, reload the extension itself, then refresh the Canvas page.

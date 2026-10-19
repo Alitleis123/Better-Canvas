@@ -61,7 +61,7 @@ if (!scratch) throw Error("Set BC_BROWSER_SCRATCH to an approved temporary direc
     await coldPage.waitForFunction(() => document.querySelector("#bc-drawer")?.shadowRoot?.querySelector(".bcs-app, .bc-app"), null, { timeout: 5000 });
     await coldPage.close(); results.extension.push("Opening settings in a fresh tab loads and shows the workspace");
     const first = await inspect();
-    for (const [key, value] of Object.entries({ count: 34, anime: 6, version: "3.3.1", top: true, buildVersion: "3.3.1" })) {
+    for (const [key, value] of Object.entries({ count: 34, anime: 6, version: "3.3.2", top: true, buildVersion: "3.3.2" })) {
       assert.equal(first[key], value); results.extension.push(key + " = " + value);
     }
     await worker.evaluate(async (files) => {
@@ -146,7 +146,7 @@ if (!scratch) throw Error("Set BC_BROWSER_SCRATCH to an approved temporary direc
     await page.evaluate(async () => {
       await Promise.all(document.getElementById("bc-drawer").getAnimations().map((animation) => animation.finished));
     });
-    await page.screenshot({ path: path.join(scratch, "studio-3.3.1.png") });
+    await page.screenshot({ path: path.join(scratch, "studio-" + first.version + ".png") });
     const report = { browser: browser.browser().version(), profile, ...results };
     fs.writeFileSync(path.join(scratch, "headless-results.json"), JSON.stringify(report, null, 2) + "\n");
     console.log(JSON.stringify(report, null, 2));
