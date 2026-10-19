@@ -447,7 +447,7 @@
       panel.style.borderColor = "transparent";
       panel.querySelector(".bcs-theme__heading").style.background = p.text;
       const count = settings.dashboard.themeImages.length;
-      if (count > 1) box.appendChild(el("span", { class: "bcs-theme__count", text: count + " different images" }));
+      if (count > 1) box.appendChild(el("span", { class: "bcs-theme__count", text: count + " images" }));
     }
     if (t.darkMode === "auto") box.classList.add("bcs-theme__preview--auto");
     return box;
@@ -1898,7 +1898,9 @@
 .bcs-theme__mini-cards i { height: 3px; margin: 8px 5px 6px; }
 .bcs-theme__mini-cards b { height: 3px; width: 16px; margin: 0 5px 8px; }
 .bcs-theme__image-error { position: absolute; top: 12px; left: 20px; right: 5px; font-size: 11px; color: var(--bc-muted); }
-.bcs-theme__count { position: absolute; right: 5px; top: 5px; padding: 2px 5px; border-radius: 4px; font-size: 10px; color: #fff; background: rgba(0,0,0,.65); }
+.bcs-theme__count { position: absolute; right: 5px; top: 5px; padding: 2px 5px; white-space: nowrap; border-radius: 4px; font-size: 10px; color: #fff; background: rgba(0,0,0,.65); }
+/* With a "Live scenery" badge in the top corner, the count moves to the bottom so the two never collide on narrow cards. */
+.bcs-theme__preview:has(.bcs-motion-badge) .bcs-theme__count { top: auto; bottom: 5px; }
 .bcs-theme__credit { display: block; padding: 4px 6px; max-width: 100%; font-size: 10px; }
 .bcs-theme__credits { padding: 0 6px; font-size: 11px; }
 .bcs-theme__credits a { display: block; margin-top: 4px; overflow-wrap: anywhere; }
