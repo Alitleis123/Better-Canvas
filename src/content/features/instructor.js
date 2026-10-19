@@ -33,7 +33,7 @@
   // cells get a quote prefix. The BOM keeps accented names intact in Excel.
   function csvCell(v) {
     const s = String(v == null ? "" : v);
-    return '"' + (/^[=+\-@\t\r]/.test(s) ? "'" + s : s).replace(/"/g, '""') + '"';
+    return '"' + (/^[=+\-@\t\r\n]/.test(s) ? "'" + s : s).replace(/"/g, '""') + '"';
   }
   function downloadCsv(rows, filename) {
     const csv = "\uFEFF" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
@@ -99,7 +99,11 @@
           teaching.set(courseId, true);
           if (BC.requestApply) BC.requestApply();
         }
-      }).catch((e) => BC.diag.push("instructor:role", e));
+      }).catch((e) => {
+        // A network blip shouldn't hide the tools until a reload. Ask again later.
+        BC.diag.push("instructor:role", e);
+        setTimeout(() => { if (teaching.get(courseId) === false) teaching.delete(courseId); }, 30000);
+      });
     }
     return teaching.get(courseId);
   }
