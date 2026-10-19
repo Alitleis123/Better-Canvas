@@ -23,6 +23,22 @@ function Check-Syntax {
     Write-Host "  OK $($files.Count) files" -ForegroundColor Green
 }
 
+# Compress-Archive in Windows PowerShell stores paths as "src\x.js". Zip paths use
+# "/": Firefox's add-on site rejects backslashes and macOS Archive Utility keeps
+# them as part of the file name.
+function Write-Zip($dir, $archive) {
+    Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+    if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+    $base = [System.IO.Path]::GetFullPath($dir).TrimEnd('\') + '\'
+    $zip = [System.IO.Compression.ZipFile]::Open($archive, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($f in Get-ChildItem -LiteralPath $dir -Recurse -File) {
+            $entry = $f.FullName.Substring($base.Length).Replace('\', '/')
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $f.FullName, $entry, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        }
+    } finally { $zip.Dispose() }
+}
+
 function Build-Target($name, $manifestSource) {
     $out = Join-Path $root "dist\$name"
     $resolvedOut = [System.IO.Path]::GetFullPath($out)
@@ -38,7 +54,7 @@ function Build-Target($name, $manifestSource) {
     $version = (Get-Content -LiteralPath (Join-Path $out "manifest.json") -Raw | ConvertFrom-Json).version
     $browser = if ($name -eq "chrome") { "Chromium" } else { "Firefox" }
     $archive = Join-Path $root "dist\Better-Canvas-$version-$browser.zip"
-    Compress-Archive -Path (Join-Path $out "*") -DestinationPath $archive -Force
+    Write-Zip $out $archive
     Write-Host "Built $name -> $out" -ForegroundColor Cyan
     Write-Host "Archive -> $archive" -ForegroundColor Cyan
 }
