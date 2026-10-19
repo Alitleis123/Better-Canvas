@@ -1440,7 +1440,7 @@
       ]),
       sec("Bindings", Object.keys(labels).map((id) => row({ label: labels[id], enabledWhen: (s) => s.shortcuts.enabled,
         control: C.keybind({ ariaLabel: labels[id], get: () => sh.bindings[id], set: (v) => store.set((x) => { x.shortcuts.bindings[id] = v; }) }) })),
-        { description: "Click a shortcut, then press the new keys. Press Escape to cancel. A single letter can start a two-key sequence, like G then D." }),
+        { description: "Click a shortcut, then press the new keys. Escape cancels and Backspace clears it. A single letter can start a two-key sequence, like G then D." }),
     ];
   }
 

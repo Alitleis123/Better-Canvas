@@ -447,7 +447,13 @@
       if (!recording) return;
       // Escape cancels recording only — it must not also close the settings panel.
       if (e.key === "Escape") { e.stopPropagation(); recording = false; refresh(); btn.blur(); return; }
+      // Tab and Shift+Tab still move focus. Recording them bound Tab itself and
+      // broke keyboard navigation on every Canvas page.
+      if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey) { recording = false; chordBuf = ""; clearTimeout(chordTO); refresh(); return; }
       e.preventDefault();
+      const bare = !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
+      if (bare && (e.key === "Backspace" || e.key === "Delete")) { chordBuf = ""; clearTimeout(chordTO); set(""); recording = false; refresh(); btn.blur(); return; }
+      if (bare && (e.key === "Enter" || e.key === " ")) return;
       // A modifier on its own is the START of a combo, not a combo.
       if (MODIFIER_KEYS.has(e.key)) return;
       const parts = [];

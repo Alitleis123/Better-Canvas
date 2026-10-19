@@ -60,3 +60,32 @@ test("settings import recognizes backups and turns away locker and theme files",
   assert.equal(kind({ hello: "world" }), null);
   assert.equal(kind([]), null);
 });
+
+test("shortcut recorder lets Tab move focus, clears on Backspace and ignores bare Enter", () => {
+  const { domContext, load: loadDom } = require("./audit-helpers.cjs");
+  const { dom, context } = domContext('<div id="root"></div>');
+  try {
+    loadDom(context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/icons.js", "src/content/core/ui.js", "src/content/core/shortcuts.js", "src/shared/settings/components.js");
+    let value = "Mod+K";
+    const writes = [];
+    const btn = context.BC.SettingsComponents.keybind({ get: () => value, set: (v) => { writes.push(v); value = v; } });
+    dom.window.document.getElementById("root").append(btn);
+    const press = (init) => {
+      const e = new dom.window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+      btn.dispatchEvent(e); return e;
+    };
+    btn.click();
+    const tab = press({ key: "Tab", code: "Tab" });
+    assert.equal(tab.defaultPrevented, false);
+    assert.deepEqual(writes, []);
+    assert.equal(btn.classList.contains("bcs-key--recording"), false);
+    btn.click();
+    assert.equal(press({ key: "Enter", code: "Enter" }).defaultPrevented, true);
+    assert.deepEqual(writes, []);
+    press({ key: "Backspace", code: "Backspace" });
+    assert.deepEqual(writes, [""]);
+    btn.click();
+    press({ key: "j", code: "KeyJ", ctrlKey: true });
+    assert.deepEqual(writes, ["", "Mod+J"]);
+  } finally { dom.window.close(); }
+});
