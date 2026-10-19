@@ -112,14 +112,20 @@
     return drawerHost;
   }
   function setExpanded(on) { document.getElementById("bc-open-settings")?.setAttribute("aria-expanded", String(on)); }
+  // A close or second toggle while the first load runs cancels the open.
+  let wantOpen = false;
   function open(tab) {
     if (!BC.SettingsUI) {
-      loadUI().then(() => open(tab), (e) => {
+      wantOpen = true;
+      loadUI().then(() => { if (wantOpen) open(tab); }, (e) => {
+        if (!wantOpen) return;
+        wantOpen = false;
         BC.diag.push("settings load", e);
         BC.toast.error("Better Canvas settings couldn't load. Refresh the page and try again.");
       });
       return;
     }
+    wantOpen = false;
     ensureDrawer();
     if (typeof tab === "string") BC.SettingsUI.goto(tab);
     if (isOpen) return;
@@ -131,6 +137,7 @@
     requestAnimationFrame(() => shadow.querySelector('.bcs-nav__item[aria-current="page"]')?.focus());
   }
   function close() {
+    wantOpen = false;
     if (!isOpen) return;
     store?.cancelThemePreview?.(); BC.ui.closePopovers();
     isOpen = false; drawerHost.style.display = "none";
@@ -138,6 +145,6 @@
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
     returnFocus = null;
   }
-  function toggle() { isOpen ? close() : open(); }
+  function toggle() { isOpen || wantOpen ? close() : open(); }
   BC.registry.register({ id: "settingsPanel", styles: [], nodes: [], apply: installNavItem, open, close, toggle, isOpen: () => isOpen });
 })();

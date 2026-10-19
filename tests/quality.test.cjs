@@ -585,9 +585,12 @@ test("the settings workspace loads on first open, and a failed load says so", as
     assert.equal(errors.length, 1); assert.match(errors[0], /couldn't load/);
     assert.equal(BC.features.settingsPanel.isOpen(), false);
     reply = { ok: true };
-    BC.features.settingsPanel.open(); BC.features.settingsPanel.open();
+    BC.features.settingsPanel.open(); BC.features.settingsPanel.open(); BC.features.settingsPanel.toggle();
     await new Promise((r) => setTimeout(r, 20)); await settle();
     assert.equal(sent, 2, "two quick clicks share one load");
+    assert.equal(BC.features.settingsPanel.isOpen(), false, "a toggle while loading cancels the open");
+    assert.notEqual(doc.body.inert, true, "the page stays usable");
+    BC.features.settingsPanel.open();
     assert.equal(BC.features.settingsPanel.isOpen(), true);
     assert.ok(doc.getElementById("bc-drawer").shadowRoot.querySelector(".bcs-app, .bc-app"));
     assert.equal(BC.PRESET_THEMES.length, 34);
