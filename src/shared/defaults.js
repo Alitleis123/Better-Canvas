@@ -269,14 +269,14 @@
       autoSaveDrafts: true,
       quizDraftSaver: true,
       wordCount: true,
-      quickActions: true,          // the round quick-actions button, bottom right
+      quickActions: true,          // "Tools" in Canvas's menu; a round button where the menu is hidden
       printFriendly: true,         // …its "Print this page" item
       copyUrlButton: true,         // …its "Copy link" item
-      readingProgress: true,
+      readingProgress: false,      // a bar over the top of every page; opt-in
     },
 
     accessibility: {
-      tts: true,                   // show TTS buttons on text
+      tts: false,                  // "Speak" buttons on assignment, announcement and discussion text; opt-in
       largeTargets: false,
       dyslexiaFont: false,
     },
