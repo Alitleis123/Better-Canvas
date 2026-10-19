@@ -56,7 +56,10 @@
         // Due work is a 30-minute block from the due time.
         const allDay = it.plannable_type === "calendar_event" && pl.all_day;
         const ymd = (d) => BC.dt.ymd(new Date(d)).replace(/-/g, "");   // the local calendar day
-        const span = allDay ? ["DTSTART;VALUE=DATE:" + ymd(pl.start_at || due), "DTEND;VALUE=DATE:" + ymd(new Date(new Date(pl.end_at || pl.start_at || due).getTime() + 864e5))]
+        // The end date is exclusive: the next calendar day, by date rather than by
+        // adding 24 hours, which lands on the same day when clocks go back.
+        const dayAfter = (d) => { const x = new Date(d); x.setDate(x.getDate() + 1); return x; };
+        const span = allDay ? ["DTSTART;VALUE=DATE:" + ymd(pl.start_at || due), "DTEND;VALUE=DATE:" + ymd(dayAfter(pl.end_at || pl.start_at || due))]
           : ["DTSTART:" + icsDate(pl.start_at || due), "DTEND:" + icsDate(pl.end_at || new Date(new Date(due).getTime() + 30 * 60 * 1000))];
         const url = it.html_url ? new URL(it.html_url, location.origin).href : "";
         lines.push("BEGIN:VEVENT",
