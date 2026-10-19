@@ -26,6 +26,9 @@
     return out.join("\r\n ");
   }
 
+  // Announcements are posts, not things that happen or come due.
+  function isDated(it) { return it.plannable_type !== "announcement"; }
+
   function icsDate(d) {
     const x = new Date(d);
     const pad = (n) => String(n).padStart(2, "0");
@@ -44,15 +47,25 @@
       const local = (BC.storage.local && BC.storage.local.calendarEvents) || [];
       const lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Better Canvas//EN","CALSCALE:GREGORIAN"];
       for (const it of items) {
-        const due = it.plannable_date || (it.plannable && it.plannable.due_at); if (!due) continue;
-        const uid = "bc-" + (it.plannable_id || (it.plannable && it.plannable.id) || Math.random()) + "@better-canvas";
+        if (!isDated(it)) continue;
+        const pl = it.plannable || {};
+        const due = it.plannable_date || pl.due_at; if (!due) continue;
+        // Ids are only unique per type: an assignment and a discussion can share one.
+        const uid = "bc-" + (it.plannable_type || "item") + "-" + (it.plannable_id || pl.id || Math.random()) + "@" + location.host;
+        // Calendar events keep their real span, and all-day events stay all-day.
+        // Due work is a 30-minute block from the due time.
+        const allDay = it.plannable_type === "calendar_event" && pl.all_day;
+        const ymd = (d) => BC.dt.ymd(new Date(d)).replace(/-/g, "");   // the local calendar day
+        const span = allDay ? ["DTSTART;VALUE=DATE:" + ymd(pl.start_at || due), "DTEND;VALUE=DATE:" + ymd(new Date(new Date(pl.end_at || pl.start_at || due).getTime() + 864e5))]
+          : ["DTSTART:" + icsDate(pl.start_at || due), "DTEND:" + icsDate(pl.end_at || new Date(new Date(due).getTime() + 30 * 60 * 1000))];
+        const url = it.html_url ? new URL(it.html_url, location.origin).href : "";
         lines.push("BEGIN:VEVENT",
           "UID:" + uid,
           "DTSTAMP:" + icsDate(new Date()),
-          "DTSTART:" + icsDate(due),
-          "DTEND:" + icsDate(new Date(new Date(due).getTime() + 30 * 60 * 1000)),
-          "SUMMARY:" + icsEscape((it.plannable && it.plannable.title) || "Assignment"),
+          ...span,
+          "SUMMARY:" + icsEscape(pl.title || "Assignment"),
           "DESCRIPTION:" + icsEscape(it.context_name || ""),
+          ...(url ? ["URL:" + url] : []),
           "END:VEVENT");
       }
       for (const ev of local) {
@@ -118,7 +131,7 @@
     const dueByDay = new Set();
     for (const it of items) {
       const d = it.plannable_date || (it.plannable && it.plannable.due_at);
-      if (!d) continue;
+      if (!d || !isDated(it)) continue;
       const when = new Date(d);
       if (when.getMonth() === today.getMonth() && when.getFullYear() === today.getFullYear()) dueByDay.add(when.getDate());
     }

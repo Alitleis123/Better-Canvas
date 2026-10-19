@@ -205,3 +205,32 @@ test("a planner rebuild puts focus back on the same control or the next row", as
     assert.equal(doc.activeElement.getAttribute("aria-label"), "Done c");
   } finally { page.dom.window.close(); }
 });
+
+test("calendar export keeps event spans, skips announcements and gives each type its own UID", async () => {
+  const { domContext, load: loadDom } = require("./audit-helpers.cjs");
+  const { dom, context } = domContext("");
+  try {
+    loadDom(context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/datetime.js");
+    const BC = context.BC;
+    BC.registry = { register() {} }; BC.storage = { local: {} };
+    BC.toast = { success() {}, error(m) { throw Error(m); } };
+    BC.api = { plannerItems: async () => [
+      { plannable_type: "assignment", plannable_id: 5, plannable_date: "2027-03-01T15:00:00Z", plannable: { title: "Essay" }, html_url: "/courses/1/assignments/5" },
+      { plannable_type: "discussion_topic", plannable_id: 5, plannable_date: "2027-03-02T15:00:00Z", plannable: { title: "Forum" } },
+      { plannable_type: "announcement", plannable_id: 9, plannable_date: "2027-03-01T12:00:00Z", plannable: { title: "News" } },
+      { plannable_type: "calendar_event", plannable_id: 7, plannable_date: "2027-03-03T14:00:00Z", plannable: { title: "Lab", start_at: "2027-03-03T14:00:00Z", end_at: "2027-03-03T16:00:00Z" } },
+    ] };
+    let blob;
+    dom.window.URL.createObjectURL = (b) => { blob = b; return "blob:test"; };
+    dom.window.URL.revokeObjectURL = () => {};
+    dom.window.HTMLAnchorElement.prototype.click = () => {};
+    loadDom(context, "src/content/features/calendar.js");
+    await BC.calendar.exportIcs();
+    const ics = await blob.text();
+    assert.equal(ics.includes("News"), false);
+    assert.match(ics, /UID:bc-assignment-5@bc-test\.instructure\.com/);
+    assert.match(ics, /UID:bc-discussion_topic-5@bc-test\.instructure\.com/);
+    assert.match(ics, /DTSTART:20270303T140000Z\r\nDTEND:20270303T160000Z/);
+    assert.match(ics, /URL:http:\/\/bc-test\.instructure\.com\/courses\/1\/assignments\/5/);
+  } finally { dom.window.close(); }
+});
