@@ -135,6 +135,11 @@
       );
     },
 
+    // Past-term courses. enrollment_state=active above leaves them out.
+    completedCourses() {
+      return api.getList("/api/v1/courses?enrollment_state=completed&per_page=100", { maxPages: 5, ttl: TTL.courses });
+    },
+
     assignmentGroups(courseId) {
       return api.getList(
         `/api/v1/courses/${courseId}/assignment_groups?include[]=assignments&include[]=submission&per_page=100`,

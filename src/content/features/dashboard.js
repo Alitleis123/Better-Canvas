@@ -51,12 +51,18 @@
     return c ? "rgb(" + c.r + ", " + c.g + ", " + c.b + ")" : hex;
   }
 
+  let concludedRetryAt = 0;
   function maybeFetchConcluded(auto) {
-    if (!auto || concludedIds || concludedFetching || !BC.api) return;
+    if (!auto || concludedIds || concludedFetching || !BC.api || Date.now() < concludedRetryAt) return;
     concludedFetching = true;
-    BC.api.coursesWithScores().then((list) => {
-      concludedIds = new Set(list.filter((c) => c.concluded || (c.enrollments || []).some((e) => e.enrollment_state === "completed")).map((c) => String(c.id)));
-    }).catch((e) => BC.diag.push("dashboard:concluded", e)).finally(() => { concludedFetching = false; });
+    Promise.all([BC.api.coursesWithScores(), BC.api.completedCourses()]).then(([active, completed]) => {
+      const ended = active.filter((c) => c.concluded || (c.enrollments || []).some((e) => e.enrollment_state === "completed"));
+      concludedIds = new Set(ended.concat(completed).map((c) => String(c.id)));
+      if (BC.requestApply) BC.requestApply();
+    }).catch((e) => {
+      concludedRetryAt = Date.now() + 60000;   // not on every page update
+      BC.diag.push("dashboard:concluded", e);
+    }).finally(() => { concludedFetching = false; });
   }
 
   function widgetsCss(w) {
@@ -397,10 +403,14 @@
   };
   function ensureLoaded(key, loader) {
     const state = loadState[key];
-    if (state.status === "loading" || Date.now() < state.next) return;
+    if (state.status === "loading" || Date.now() < state.next || document.hidden) return;
     const generation = state.generation;
     state.status = "loading";
-    const wake = (delay) => BC.lifecycle.pageBag("dashboard").timeout(() => { if (BC.requestApply) BC.requestApply(); }, delay);
+    // A hidden tab doesn't refetch. It catches up when it's shown again.
+    const wake = (delay) => BC.lifecycle.pageBag("dashboard").timeout(() => { if (!document.hidden && BC.requestApply) BC.requestApply(); }, delay);
+    BC.lifecycle.pageBag("dashboard").once("visible", () => BC.lifecycle.pageBag("dashboard").listen(document, "visibilitychange", () => {
+      if (!document.hidden && BC.requestApply) BC.requestApply();
+    }));
     Promise.resolve().then(loader).then((data) => {
       if (state.generation !== generation) return;
       if (key === "scores") scoresMap = data;
