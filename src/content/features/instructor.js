@@ -29,9 +29,15 @@
     }
   `;
 
+  // A leading = + - @ makes Excel and Sheets run the cell as a formula, so those
+  // cells get a quote prefix. The BOM keeps accented names intact in Excel.
+  function csvCell(v) {
+    const s = String(v == null ? "" : v);
+    return '"' + (/^[=+\-@\t\r]/.test(s) ? "'" + s : s).replace(/"/g, '""') + '"';
+  }
   function downloadCsv(rows, filename) {
-    const csv = rows.map((r) => r.map((v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    const csv = "﻿" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = filename; a.click();
@@ -40,7 +46,7 @@
 
   async function exportRoster(courseId) {
     try {
-      const users = await BC.api.coursePeople(courseId, ["student"]);
+      const users = await BC.api.coursePeople(courseId, ["student"], ["email"]);
       const rows = [["ID", "Name", "Email", "SIS ID"]];
       for (const u of users) rows.push([u.id, u.name || "", u.email || "", u.sis_user_id || ""]);
       downloadCsv(rows, `roster-${courseId}.csv`);
@@ -81,9 +87,30 @@
     });
   }
 
+  // Students can open the People and Assignments pages too. Show these tools only
+  // where the user teaches; until Canvas answers, show nothing.
+  const teaching = new Map();
+  function teaches(courseId) {
+    if (!teaching.has(courseId)) {
+      teaching.set(courseId, false);
+      BC.api.course(courseId).then((c) => {
+        const roles = (c.enrollments || []).map((e) => String(e.type || e.role || "").toLowerCase().replace(/enrollment$/, ""));
+        if (roles.some((r) => r === "teacher" || r === "ta" || r === "designer")) {
+          teaching.set(courseId, true);
+          if (BC.requestApply) BC.requestApply();
+        }
+      }).catch((e) => BC.diag.push("instructor:role", e));
+    }
+    return teaching.get(courseId);
+  }
+
   function installPeopleTools(ctx, settings) {
     const onPeople = ctx.page === "course" && ctx.courseId && /\/users\/?$/.test(location.pathname);
-    if (!onPeople) { BC.injector.removeNode("bc-roster-btn"); return; }
+    if (!onPeople || !teaches(ctx.courseId)) {
+      BC.injector.removeNode("bc-roster-btn");
+      document.querySelectorAll(".bc-att").forEach((n) => n.remove());
+      return;
+    }
 
     const rows = document.querySelectorAll("tr[id^='user_']");
     if (!settings.instructor.rosterExport && !settings.instructor.attendanceQuick) {
@@ -163,7 +190,7 @@
     // The assignments INDEX only. ctx.page is also "assignments" for sub-pages such
     // as /assignments/syllabus, where the pill made no sense.
     const onIndex = ctx.page === "assignments" && /^\/courses\/\d+\/assignments\/?$/.test(ctx.path);
-    if (!onIndex || !ctx.courseId) { removeBadges(); return; }
+    if (!onIndex || !ctx.courseId || !teaches(ctx.courseId)) { removeBadges(); return; }
     BC.api.courseAssignments(ctx.courseId).then((assignments) => {
       let total = 0;
       for (const a of assignments) {

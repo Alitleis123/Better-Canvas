@@ -149,8 +149,9 @@
       );
     },
 
-    coursePeople(courseId, roles) {
-      const q = roles ? roles.map((r) => "enrollment_type[]=" + encodeURIComponent(r)).join("&") : "";
+    coursePeople(courseId, roles, include) {
+      const q = (roles || []).map((r) => "enrollment_type[]=" + encodeURIComponent(r))
+        .concat((include || []).map((x) => "include[]=" + encodeURIComponent(x))).join("&");
       return api.getList(
         `/api/v1/courses/${courseId}/users?per_page=100${q ? "&" + q : ""}`,
         { maxPages: 15, ttl: TTL.people }
