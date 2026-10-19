@@ -1402,10 +1402,16 @@
           control: C.switch({ ariaLabel: "Notifications on the page", get: () => n.inPage, set: put((x, v) => { x.inPage = v; }) }) }),
         row({ label: "Desktop notifications", hint: "Your browser asks for permission the first time.",
           control: C.switch({ ariaLabel: "Desktop notifications", get: () => n.enabled, set: (v) => {
-            store.set((x) => { x.notifications.enabled = v; });
             // Ask from the click itself: Firefox ignores a permission request that
-            // isn't. Only a Canvas page can ask for Canvas's permission.
-            if (!v || !/^https?:$/.test(location.protocol) || !("Notification" in window) || Notification.permission === "granted") return;
+            // isn't. Only a Canvas page can ask for Canvas's permission, so this
+            // page (the options tab) can't turn it on.
+            if (v && !/^https?:$/.test(location.protocol)) {
+              S().bindings.sync(store.get());
+              BC.toast && BC.toast.info("Turn this on from the Better Canvas panel on a Canvas page, so your browser can ask for permission.");
+              return;
+            }
+            store.set((x) => { x.notifications.enabled = v; });
+            if (!v || !("Notification" in window) || Notification.permission === "granted") return;
             Promise.resolve(Notification.requestPermission()).then((p) => {
               if (p === "granted") return;
               store.set((x) => { x.notifications.enabled = false; });
