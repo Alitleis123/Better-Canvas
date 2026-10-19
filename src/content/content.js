@@ -270,7 +270,10 @@
     // word why. Run on defaults for this page and say so.
     Promise.all([BC.storage.load(), BC.storage.loadLocal()]).then(([settings]) => begin(settings), (error) => {
       BC.diag.push("boot", error);
-      begin(BC.cloneDefaults());
+      // Adopted, so observer ticks and shortcuts, which read BC.storage.current, run too.
+      const defaults = BC.cloneDefaults();
+      BC.storage.adopt(defaults);
+      begin(defaults);
       BC.util.whenBody(() => BC.toast && BC.toast.error("Better Canvas couldn't read its settings, so this page uses the defaults. Refresh to try again."));
     });
   }
