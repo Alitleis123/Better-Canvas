@@ -87,6 +87,8 @@ html.bc-dark { color-scheme: dark; background-color: var(--bc-surface-1) !import
 html.bc-dark body { background-color: var(--bc-surface-1) !important; color: var(--bc-text) !important; }
 html.bc-dark ::placeholder { color: var(--bc-text-subtle, var(--bc-muted)) !important; opacity: 1 !important; }
 html.bc-dark ::selection { background-color: var(--bc-accent); color: var(--bc-accent-contrast, #fff); }
+/* Canvas renders equations as black ink on a transparent image. */
+html.bc-dark img.equation_image { background-color: #fff !important; border-radius: 2px; padding: 1px 2px; }
 html.bc-dark :is(#content, #right-side, #breadcrumbs, .user_content, .ic-app-main-content, .ToDoSidebar) a[href]:not(.Button, .btn, [role="button"], [class*="baseButton"], .ic-DashboardCard__link, .ic-DashboardCard__action) {
   color: var(--bc-link) !important;
 }
@@ -313,6 +315,10 @@ html.bc-dark [data-bc-dbd~="x"] { text-shadow: none !important; }
       setAttr(el, "data-bc-dbd", d.dbd);
       if (d.dbg || d.dfg || d.dbd) tagged++;
     }
+    // Resolve the new colours while transitions are still frozen. Unfreezing in
+    // the same task left the light values from step 2 as the "before" state, so
+    // every rescan faded Canvas's animated buttons from light to dark.
+    if (frozen.length) void getComputedStyle(frozen[0]).backgroundColor;
     for (const r of frozen) r.removeAttribute("data-bc-dscan");
     stats.scans++;
     stats.last = els.length;
@@ -326,10 +332,10 @@ html.bc-dark [data-bc-dbd~="x"] { text-shadow: none !important; }
   let running = false;
   let mo = null;
   let queued = new Set();
-  let timer = 0;
+  let timer = 0, frame = 0, lastFlush = 0;
 
   function flush() {
-    timer = 0;
+    timer = 0; frame = 0; lastFlush = performance.now();
     const roots = [...queued].filter((n) => n.isConnected);
     queued = new Set();
     if (!running || !roots.length) return;
@@ -343,7 +349,11 @@ html.bc-dark [data-bc-dbd~="x"] { text-shadow: none !important; }
   function enqueue(n) {
     if (n.nodeType !== 1 || n.closest(OURS)) return;
     queued.add(n);
-    if (!timer) timer = setTimeout(flush, 90);
+    if (timer || frame) return;
+    // The first change after a quiet spell is darkened before the next paint, so
+    // a new panel never shows white. A burst right after a pass waits out 90ms.
+    const wait = 90 - (performance.now() - lastFlush);
+    if (wait > 0) timer = setTimeout(flush, wait); else frame = requestAnimationFrame(flush);
   }
 
   function onMutations(muts) {
@@ -429,6 +439,7 @@ html.bc-dark [data-bc-dbd~="x"] { text-shadow: none !important; }
       if (mo) { mo.disconnect(); mo = null; }
       if (headMo) { headMo.disconnect(); headMo = null; }
       if (timer) { clearTimeout(timer); timer = 0; }
+      if (frame) { cancelAnimationFrame(frame); frame = 0; }
       if (fullTimer) { clearTimeout(fullTimer); fullTimer = 0; }
       queued = new Set();
       document.removeEventListener("mouseover", onOver, { capture: true });
