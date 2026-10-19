@@ -817,7 +817,7 @@
   }
 
   // Enough to find "the same control" after a rebuild: its row and its label.
-  const FOCUSABLE = "button, input, select, a[href], [tabindex]";
+  const FOCUSABLE = "button, input, select, a[href], [tabindex], summary";
   // A control inside the closed Done section, or anything hidden, can't take focus.
   const shown = (n) => !n.closest("[hidden]") && !(n.closest("details:not([open])") && !n.closest("summary"));
   function focusTarget(container, node) {
@@ -825,7 +825,10 @@
     const keys = [...container.querySelectorAll("[data-key]")].filter(shown).map((n) => n.dataset.key);
     // The control's place in its row survives a label change (Star becomes Unstar).
     const index = row ? [...row.querySelectorAll(FOCUSABLE)].indexOf(node) : -1;
-    return { key: row && row.dataset.key, next: row ? keys.slice(keys.indexOf(row.dataset.key) + 1) : [], index,
+    // A Done or Snoozed heading is found again by its section, since its text
+    // carries a count that changes.
+    const section = node.tagName === "SUMMARY" && node.parentElement ? node.parentElement.className : null;
+    return { key: row && row.dataset.key, next: row ? keys.slice(keys.indexOf(row.dataset.key) + 1) : [], index, section,
       label: node.getAttribute("aria-label"), text: node.textContent, tag: node.tagName };
   }
   function restoreFocus(container, had) {
@@ -834,7 +837,8 @@
     const rowOf = (key) => key && [...container.querySelectorAll("[data-key]")].find((n) => n.dataset.key === key && shown(n));
     const row = rowOf(had.key);
     let target = null;
-    if (row) {
+    if (had.section) target = [...container.querySelectorAll("details > summary")].find((s) => s.parentElement.className === had.section && shown(s)) || null;
+    else if (row) {
       const list = controls(row), atIndex = [...row.querySelectorAll(FOCUSABLE)][had.index];
       target = (atIndex && atIndex.tagName === had.tag && shown(atIndex) ? atIndex : null) || list.find(same) || list[0] || null;
     } else if (!had.key) target = controls(container).find(same) || null;

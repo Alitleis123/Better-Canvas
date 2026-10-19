@@ -476,3 +476,29 @@ test("dark mode pins dark text on mid-tone backgrounds it leaves light", () => {
     context.BC.darkEngine.stop();
   } finally { dom.window.close(); }
 });
+
+test("review round 3: section headings keep focus, see-through chips stay unpinned, darkening hovers unpin", async () => {
+  const { BC, page } = await plannerContext();
+  try {
+    const doc = page.dom.window.document;
+    const container = doc.createElement("div"); doc.body.append(container);
+    container.innerHTML = '<details class="pl-snoozed pl-done"><summary>Done · 2</summary></details>';
+    container.querySelector("summary").focus();
+    const had = BC.test.focusTarget(container, doc.activeElement);
+    container.innerHTML = '<details class="pl-snoozed pl-done"><summary>Done · 3</summary></details>';
+    BC.test.restoreFocus(container, had);
+    assert.equal(doc.activeElement.tagName, "SUMMARY");
+  } finally { page.dom.window.close(); }
+
+  const { domContext, load: loadDom } = require("./audit-helpers.cjs");
+  const { dom, context } = domContext('<style>body { color: rgb(230, 230, 235); }</style>' +
+    '<div id="content"><span id="glass" style="background-color: rgba(159, 197, 232, 0.35)">see-through</span></div>');
+  try {
+    loadDom(context, "src/content/core/darkengine.js");
+    dom.window.document.documentElement.classList.add("bc-dark");
+    context.BC.darkEngine.start();
+    assert.equal(dom.window.document.getElementById("glass").getAttribute("data-bc-dfg"), null);
+    assert.match(context.BC.darkEngine.tagCss(), /\[data-bc-dhovdark\]:hover/);
+    context.BC.darkEngine.stop();
+  } finally { dom.window.close(); }
+});
