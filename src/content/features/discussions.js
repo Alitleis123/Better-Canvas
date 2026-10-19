@@ -56,7 +56,11 @@
   function jumpToUnread(kind) {
     const unread = unreadEntries(kind);
     if (!unread.length) {
-      BC.toast.info(document.querySelector('[data-testid="pagination"]') ? "No unread replies on this page" : "No unread replies");
+      // Canvas's counter can still show unread replies inside collapsed threads or
+      // on other pages. Say where they are rather than "none" beside "3 unread".
+      const counted = stats(kind).unread > 0;
+      BC.toast.info(counted ? "The unread replies are in collapsed threads or on another page."
+        : document.querySelector('[data-testid="pagination"]') ? "No unread replies on this page" : "No unread replies");
       return;
     }
     const y = window.scrollY;
