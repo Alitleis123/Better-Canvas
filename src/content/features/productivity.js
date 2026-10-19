@@ -10,8 +10,10 @@
   BC.features = BC.features || {};
 
   const CSS = `
+    /* Canvas's own chrome only. A bare header selector also hid banners inside
+       course pages. */
     .bc-focus #left-side, .bc-focus #right-side, .bc-focus .ic-app-header,
-    .bc-focus .ic-app-crumbs, .bc-focus header { display: none !important; }
+    .bc-focus .ic-app-crumbs { display: none !important; }
     .bc-focus #main, .bc-focus #wrapper { margin: 0 !important; padding: 20px !important; max-width: 900px !important; }
 
     .bc-ruler {
@@ -47,12 +49,18 @@
     .bc-note-x { background: none; border: 0; cursor: pointer; }
 
     .bc-wc {
-      position: absolute; right: 6px; bottom: 6px;
+      display: block; margin: 2px 0 0; text-align: right;
       font-size: var(--bc-text-2xs, 11px); color: var(--bc-muted, #6b7280);
-      /* was rgba(255,255,255,.85) — a white pill floating in dark mode */
-      background: var(--bc-surface-2, #fff);
-      padding: 2px 6px; border-radius: var(--bc-radius-sm, 4px);
       pointer-events: none; font-variant-numeric: tabular-nums;
+    }
+
+    /* Print the page content in black on white: no Canvas menus, none of our
+       overlays, and no dark-mode colours on paper. */
+    @media print {
+      [data-bc-node], .ic-app-header, #left-side, #right-side, .ic-app-crumbs { display: none !important; }
+      html.bc-dark, html.bc-dark body, html.bc-dark #main, html.bc-dark #content { background: #fff !important; }
+      html.bc-dark * { color: #000 !important; background-color: transparent !important; border-color: #ccc !important; }
+      #main, #wrapper, #not_right_side { margin: 0 !important; padding: 0 !important; max-width: none !important; }
     }
   `;
 
@@ -167,7 +175,12 @@
       a.setAttribute("aria-expanded", "false");
       a.innerHTML = '<div class="menu-item-icon-container" aria-hidden="true">' + BC.icons.svg("zap", { size: 26, stroke: 1.75 }) +
         '</div><div class="menu-item__text">Tools</div>';
-      const openIt = (e) => { e.preventDefault(); openQuickMenu(a, { align: "side" }); };
+      // A second click closes the menu instead of reopening it.
+      const openIt = (e) => {
+        e.preventDefault();
+        if (a.getAttribute("aria-expanded") === "true") { BC.ui.closePopovers(); return; }
+        openQuickMenu(a, { align: "side" });
+      };
       a.addEventListener("click", openIt);
       a.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Spacebar") openIt(e); });
       li.appendChild(a);
@@ -180,7 +193,7 @@
     if (!m.fresh) return;
     const btn = BC.ui.el("button", { class: "qa", type: "button", "aria-label": "Quick actions", "aria-haspopup": "menu", title: "Quick actions" },
       [BC.ui.icon("zap")]);
-    btn.addEventListener("click", () => openQuickMenu(btn));
+    btn.addEventListener("click", () => { if (btn.getAttribute("aria-expanded") === "true") BC.ui.closePopovers(); else openQuickMenu(btn); });
     m.body.append(btn);
   }
 
@@ -396,15 +409,17 @@
   // ---- Word count ----
   function installWordCount() {
     for (const ta of document.querySelectorAll("textarea")) {
-      if (ta._bcWc) continue; ta._bcWc = true;
-      if (isOurs(ta)) continue;
-      const wrap = ta.parentNode;
-      if (!wrap) continue;
-      wrap.style.position = wrap.style.position || "relative";
+      if (ta._bcWc) continue;
+      if (isOurs(ta) || !ta.parentNode) continue;
+      // The rich editor keeps a hidden textarea behind its iframe, and typing there
+      // never reaches it. Skip hidden fields; a later tick picks them up if shown.
+      if (!ta.offsetParent && getComputedStyle(ta).position !== "fixed") continue;
+      ta._bcWc = true;
+      // Under the field, not over its last line.
       const wc = document.createElement("div");
       wc.className = "bc-wc";
       wc.setAttribute("data-bc-node", "bc-wc");   // so teardown can actually remove it
-      wrap.appendChild(wc);
+      ta.insertAdjacentElement("afterend", wc);
       const update = () => {
         const t = (ta.value || "").trim();
         const words = t ? t.split(/\s+/).length : 0;
