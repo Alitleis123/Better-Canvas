@@ -56,6 +56,11 @@
         if (!watching) {
           watching = true;
           new MutationObserver(() => apply(lastSettings)).observe(document.body, { attributes: true, attributeFilter: ["contenteditable"] });
+          // designMode is a property, not an attribute, so nothing can observe it.
+          // Check again when someone starts working in the frame.
+          const recheck = () => { if (editing() && document.documentElement.classList.contains("bc-dark")) apply(lastSettings); };
+          document.addEventListener("focusin", recheck, true);
+          document.addEventListener("pointerdown", recheck, true);
         }
         if (editing()) apply(lastSettings); else BC.darkEngine.start();
       });
