@@ -26,8 +26,13 @@ function filesUnder(dir, prefix = "") {
     d.isDirectory() ? filesUnder(path.join(dir, d.name), prefix + d.name + "/") : [prefix + d.name]);
 }
 
+// Only the current version's packages: older zips left in dist won't match the folders.
 const dist = path.join(root, "dist");
-const archives = fs.existsSync(dist) ? fs.readdirSync(dist).filter((f) => /^Better-Canvas-.+-(Chromium|Firefox)\.zip$/.test(f)) : [];
+const version = (file) => JSON.parse(fs.readFileSync(path.join(root, file), "utf8")).version;
+const archives = [
+  "Better-Canvas-" + version("manifest.json") + "-Chromium.zip",
+  "Better-Canvas-" + version("manifest.firefox.json") + "-Firefox.zip",
+].filter((f) => fs.existsSync(path.join(dist, f)));
 
 test("built packages use forward-slash paths and match their unpacked folders", { skip: !archives.length && "run build.ps1 first" }, () => {
   for (const archive of archives) {
