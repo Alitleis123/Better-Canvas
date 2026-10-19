@@ -235,12 +235,16 @@
         for (const tab of TABS) {
           const frag = el("div", null, [].concat(tab.render(store, adapter, { searching: true })));
           const hits = [];
-          for (const sec of frag.querySelectorAll(".bcs-section")) {
-            const rows = [...sec.querySelectorAll(".bcs-row")];
-            const match = rows.filter((r) => (r.textContent || "").toLowerCase().includes(query));
+          const matches = (r) => (r.textContent || "").toLowerCase().includes(query);
+          // A few rows sit outside any section, like Scene motion on Themes.
+          const loose = [...frag.querySelectorAll(".bcs-row")].filter((r) => !r.closest(".bcs-section") && matches(r));
+          if (loose.length) hits.push(sec(tab.label, loose));
+          for (const section of frag.querySelectorAll(".bcs-section")) {
+            const rows = [...section.querySelectorAll(".bcs-row")];
+            const match = rows.filter(matches);
             if (!match.length) continue;
             for (const r of rows) if (!match.includes(r)) r.remove();
-            hits.push(sec);
+            hits.push(section);
           }
           if (!hits.length) continue;
           const go = BC.ui.button("Open " + tab.label, { variant: "ghost", size: "sm", iconRight: "chevron-right",
@@ -250,9 +254,15 @@
             ...hits,
           ]));
         }
-        main.replaceChildren(pageHead("Search", groups.length ? null : "No settings match “" + q.trim() + "”."), ...groups);
+        main.replaceChildren(pageHead("Search", null), ...groups);
         main.scrollTop = 0;
         S().bindings.sync(store.get());
+        // Rows that don't apply right now are hidden by the sync above. A section
+        // with only those left was an empty card.
+        for (const section of main.querySelectorAll(".bcs-section")) if (![...section.querySelectorAll(".bcs-row")].some((r) => !r.hidden)) section.remove();
+        for (const g of main.querySelectorAll(".bcs-results__group")) if (!g.querySelector(".bcs-section")) g.remove();
+        // The page heading is hidden in this layout, so say it where it shows.
+        if (!main.querySelector(".bcs-results__group")) workspaceDesc.textContent = 'No settings match "' + q.trim() + '".';
       }
       const runSearch = BC.util.debounce(() => {
         const q = search.input.value;
