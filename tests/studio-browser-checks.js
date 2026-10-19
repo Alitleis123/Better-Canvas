@@ -40,7 +40,7 @@
   check(root.querySelector(".bcs-study-flip").textContent.includes("Powerhouse"), "Study session shows the question");
   root.querySelector(".bcs-study-flip").click();
   check(root.querySelector(".bcs-study-flip").textContent === "Mitochondria", "Flashcard reveals the answer");
-  click("Study again"); root.querySelector(".bcs-study-flip").click(); click("Got it");
+  click("Show again later"); root.querySelector(".bcs-study-flip").click(); click("Got it");
   check(root.querySelector(".bcs-locker-editor").textContent.includes("Set complete"), "Review-again queue completes after learning the card");
   for (const id of ["themes", "theming", "cosmetics", "dashboard", "widgets", "todo", "navigation", "accessibility", "locker", "grades", "calendar", "files", "announcements", "productivity", "notifications", "shortcuts", "instructor", "insights", "about"]) {
     BC.SettingsUI.goto(id); check(root.querySelector(".bcs-main").childElementCount > 0, id + " section renders");

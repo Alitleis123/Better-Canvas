@@ -163,7 +163,7 @@
         flip.onclick = () => { shown = !shown; paint(); };
         editor.replaceChildren(back, el("p", { class: "bc-caption", text: learned + " / " + total + " learned · " + queue.length + " remaining" }), flip,
           el("p", { class: "bc-caption", text: shown ? "How well did you know this?" : "Click the card or press Enter to reveal the answer." }));
-        if (shown) editor.append(el("div", { class: "bcs-inline" }, [BC.ui.button("Study again", { variant: "ghost", onClick: () => { queue.push(queue.shift()); shown = false; paint(); } }), BC.ui.button("Got it", { onClick: () => { queue.shift(); learned++; shown = false; paint(); } })]));
+        if (shown) editor.append(el("div", { class: "bcs-inline" }, [BC.ui.button("Show again later", { variant: "ghost", onClick: () => { queue.push(queue.shift()); shown = false; paint(); } }), BC.ui.button("Got it", { onClick: () => { queue.shift(); learned++; shown = false; paint(); } })]));
         flip.focus();
       } paint();
     }
