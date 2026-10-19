@@ -482,10 +482,13 @@
       for (let i = 0; i < 62 && cursor < end; i++, cursor.setDate(cursor.getDate() + 1)) {
         if (until && cursor > until) break;
         const kind = r.rule || "daily";
-        if (kind === "weekly" && Array.isArray(r.days) && r.days.length && !r.days.includes(cursor.getDay())) continue;
-        if (kind === "monthly" && cursor.getDate() !== (parseInt(r.day, 10) || 1)) continue;
-        const due = new Date(cursor); due.setHours(hm.h, hm.m, 0, 0);
         const ymd = BC.dt.ymd(cursor);
+        if (r.from && ymd < r.from) continue;
+        if (kind === "weekly" && Array.isArray(r.days) && r.days.length && !r.days.includes(cursor.getDay())) continue;
+        // A rule on the 29th-31st falls on the last day of shorter months.
+        const lastDay = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
+        if (kind === "monthly" && cursor.getDate() !== Math.min(parseInt(r.day, 10) || 1, lastDay)) continue;
+        const due = new Date(cursor); due.setHours(hm.h, hm.m, 0, 0);
         out.push({
           bcVirtual: true, bcRuleId: r.id, bcYmd: ymd,
           bcDone: !!(doneMap[r.id] && doneMap[r.id][ymd]),

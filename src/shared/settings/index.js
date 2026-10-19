@@ -1081,9 +1081,11 @@
     const add = BC.ui.button("Add", { size: "sm", variant: "primary", icon: "plus", onClick: () => {
       const t = title.value.trim();
       if (!t) { title.focus(); BC.toast && BC.toast.warn("Give the task a title first"); return; }
-      const rule = { id: BC.util.uuid(), title: t, rule: freq, at: at.value || "", until: until.value || "" };
+      if (freq === "weekly" && !days.size) { BC.toast && BC.toast.warn("Pick at least one day for a weekly task"); return; }
+      // `from` keeps copies from appearing, unchecked, on days before the task existed.
+      const rule = { id: BC.util.uuid(), title: t, rule: freq, at: at.value || "", until: until.value || "", from: BC.dt.ymd(new Date()) };
       if (freq === "weekly") rule.days = Array.from(days).sort();
-      if (freq === "monthly") rule.day = parseInt(dom.value, 10) || 1;
+      if (freq === "monthly") rule.day = Math.min(31, Math.max(1, parseInt(dom.value, 10) || 1));
       store.set((x) => { x.todo.recurring = (x.todo.recurring || []).concat([rule]); });
     } });
     const form = el("div", { class: "bcs-form" }, [

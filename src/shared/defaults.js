@@ -144,7 +144,7 @@
         longEvery: 4,
         sound: true,
       },
-      recurring: [],               // [{id, title, courseId, rule, at, until}]
+      recurring: [],               // [{id, title, courseId, rule, days, day, at, until, from}]
       tags: [],                    // user-defined tag names
       // Per-task augmentation (stars, snoozes, subtasks, kanban status, …) lives in
       // bcLocal.todo, NOT here. Every one of those is written on a micro-interaction,
