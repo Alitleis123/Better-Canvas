@@ -24,7 +24,7 @@ Visible changes
 - Text on Canvas primary buttons and the skip link uses the accent's contrast colour, so a light accent no longer puts white text on a light fill.
 - Color-blind modes shift confusable colours toward ones you can tell apart instead of simulating color blindness.
 - Study time counts active, focused seconds and is added up in the background, so short visits count and idle tabs don't.
-- Quiz drafts belong to one attempt. Submitting clears every page's draft with one background message, which a fast navigation can't interrupt. A cancelled submit keeps them.
+- Quiz drafts belong to one attempt. Submitting clears every page's draft with one background message, which a fast navigation can't interrupt. A cancelled submit keeps them, and if a submit doesn't go through, saving resumes.
 - Lists in settings reorder by touch from a 24px grip, as well as by mouse and arrow keys.
 - The toolbar count clears once no Canvas tab is left to keep it current.
 - The settings workspace and photo theme data load on first use. Each Canvas page parses 638 KB of script instead of 933 KB.
@@ -33,7 +33,7 @@ Visible changes
 - Your settings and local study data stay on this device. Image searches send your query to api.openverse.org. Photo themes and previews load images from third-party hosts. No telemetry.
 
 Verification
-- 151 automated tests passed in each of three consecutive runs of node --test "tests/*.test.cjs".
+- 152 automated tests passed in each of three consecutive runs of node --test "tests/*.test.cjs".
 - All 57 extension JavaScript files passed node --check. Both packages built, passed zip integrity checks, and contain the manifest and four WebP images, with no tests, package files or node_modules.
 - Headless Chrome for Testing 156.0.8078.4 passed 15 unpacked-extension checks and 46 studio checks with no runtime errors. They include lazy loading into the content-script world, a cold settings open, concurrent tab storage, a cancelled and a real quiz submit across navigation, and a touch drag on a real grip.
 - Firefox 158.0 passed 8 checks of the built Firefox package through geckodriver 0.37.1: install, content scripts, the lazily loaded settings drawer, a theme saved through the background surviving a reload in dark mode, the WebP atlas and wallpaper, and quiz drafts through a cancelled and a real submit. No console errors were logged.
