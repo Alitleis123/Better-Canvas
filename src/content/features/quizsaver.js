@@ -214,12 +214,13 @@
       const inQuestions = (t) => t && t.closest && t.closest("#questions");
       bag.listen(document, "change", (e) => { if (inQuestions(e.target)) debouncedSave(); }, true);
       bag.listen(document, "input", (e) => { if (inQuestions(e.target)) debouncedSave(); }, true);
-      // Submitting the quiz makes every draft of it obsolete, on every page.
-      bag.listen(document, "click", (e) => {
-        if (e.target && e.target.closest && e.target.closest("#submit_quiz_button")) deleteQuizDrafts().catch(() => {});
-      }, true);
+      // Submitting the quiz makes every draft of it obsolete, on every page. Wait
+      // until the event has run: a cancelled "submit anyway?" prompt prevents it,
+      // and the drafts must survive that. A timed auto-submit sends no event, which
+      // is why drafts are keyed by attempt.
       bag.listen(document, "submit", (e) => {
-        if (e.target && e.target.id === "submit_quiz_form") deleteQuizDrafts().catch(() => {});
+        if (!e.target || e.target.id !== "submit_quiz_form") return;
+        setTimeout(() => { if (!e.defaultPrevented) deleteQuizDrafts().catch(() => {}); });
       }, true);
     });
 
