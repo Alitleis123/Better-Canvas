@@ -29,7 +29,8 @@
     dots: `background-image: radial-gradient(var(--bc-pattern-ink, rgba(0,0,0,.08)) 1px, transparent 1px); background-size: 12px 12px;`,
     grid: `background-image: linear-gradient(var(--bc-pattern-ink, rgba(0,0,0,.05)) 1px, transparent 1px), linear-gradient(90deg, var(--bc-pattern-ink, rgba(0,0,0,.05)) 1px, transparent 1px); background-size: 24px 24px;`,
     diagonal: `background: repeating-linear-gradient(45deg, var(--bc-pattern-ink, rgba(0,0,0,.03)) 0 10px, transparent 10px 20px);`,
-    topography: `background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><g fill='none' stroke='%23000' stroke-opacity='.05' stroke-width='1'><path d='M0 60 Q30 30 60 60 T120 60'/><path d='M0 40 Q30 10 60 40 T120 40'/><path d='M0 80 Q30 50 60 80 T120 80'/></g></svg>");`,
+    // A data URI can't read --bc-pattern-ink. Mid-grey shows on light and dark pages.
+    topography: `background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><g fill='none' stroke='%23808080' stroke-opacity='.12' stroke-width='1'><path d='M0 60 Q30 30 60 60 T120 60'/><path d='M0 40 Q30 10 60 40 T120 40'/><path d='M0 80 Q30 50 60 80 T120 80'/></g></svg>");`,
   };
 
   function bgCSS(cfg, settings) {
