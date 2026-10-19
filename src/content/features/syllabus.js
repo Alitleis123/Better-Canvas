@@ -26,7 +26,9 @@
   `;
 
   const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
-  const RE_MONTH = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?\b/i;
+  // Whole month names or their usual abbreviations only. A bare prefix matched
+  // ordinary words: "Decide 3" was Dec 3 and "Marks 10" was Mar 10.
+  const RE_MONTH = /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?\b/i;
   const RE_NUM = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/;
   const RE_ISO = /\b(\d{4})-(\d{2})-(\d{2})\b/;
 
@@ -50,6 +52,8 @@
       return inferYear(d);
     }
     m = text.match(RE_NUM);
+    // "worth 1/2" and "1/3 of the grade" are fractions, not dates.
+    if (m && (/\b(worth|weighted|counts?|is)\s*$/i.test(text.slice(0, m.index)) || /^\s*of\b/i.test(text.slice(m.index + m[0].length)))) m = null;
     if (m) {
       const mo = +m[1], day = +m[2];
       if (mo < 1 || mo > 12 || day < 1 || day > 31) return null;
@@ -69,20 +73,32 @@
     root.querySelectorAll("p, li, td, h1, h2, h3, h4, h5, h6").forEach((el) => {
       if (out.length >= 60) return;
       if (el.querySelector("p, li, td")) return; // only leaf-ish blocks
-      const text = (el.textContent || "").replace(/\s+/g, " ").trim();
-      if (!text || text.length > 240) return;
-      const date = extractDate(text);
-      if (!date) return;
-      const title = text.length > 90 ? text.slice(0, 87) + "…" : text;
-      const key = title + "|" + date.toDateString();
-      if (seen.has(key)) return;
-      seen.add(key);
-      out.push({ title, date });
+      // Lines split by Shift+Enter are separate entries.
+      const lines = [""];
+      for (const node of el.childNodes) {
+        if (node.nodeName === "BR") lines.push(""); else lines[lines.length - 1] += node.textContent || "";
+      }
+      for (const line of lines) {
+        const text = line.replace(/\s+/g, " ").trim();
+        if (!text || text.length > 240) continue;
+        const date = extractDate(text);
+        if (!date) continue;
+        // In a schedule table the date sits in one cell and the topic in the next,
+        // so the whole row is the title.
+        const row = el.tagName === "TD" && el.closest("tr");
+        const full = row ? [...row.children].map((c) => c.textContent.replace(/\s+/g, " ").trim()).filter(Boolean).join(" · ") : text;
+        const title = full.length > 90 ? full.slice(0, 87) + "…" : full;
+        const key = title + "|" + date.toDateString();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ title, date, key });
+      }
     });
     return out;
   }
 
   function buildPanel(panel, found, courseId) {
+    const added = (((BC.storage.local || {}).syllabusAdded) || {})[courseId] || [];
     panel.innerHTML = "";
     const head = document.createElement("div");
     head.className = "bc-syl-head";
@@ -112,6 +128,9 @@
       title.textContent = f.title;
       row.appendChild(cb); row.appendChild(date); row.appendChild(title);
       list.appendChild(row);
+      // Dates already added from this syllabus stay marked, so a second visit
+      // can't create duplicate planner notes.
+      if (added.includes(f.key)) { row.classList.add("added"); cb.disabled = true; }
       return { row, cb, f };
     });
     panel.appendChild(list);
@@ -142,6 +161,11 @@
           ok++;
         } catch (_) {}
       }
+      const keys = rows.filter((r) => r.row.classList.contains("added")).map((r) => r.f.key);
+      BC.storage.updateLocal((d) => {
+        const all = (d.syllabusAdded = d.syllabusAdded || {});
+        all[courseId] = [...new Set([...(all[courseId] || []), ...keys])].slice(-200);
+      }).catch(() => {});
       add.disabled = false;
       if (ok) BC.toast.success("Added " + ok + " task" + (ok === 1 ? "" : "s") + " to your planner");
       else BC.toast.error("Couldn't add tasks");

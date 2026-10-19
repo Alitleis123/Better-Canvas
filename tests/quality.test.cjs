@@ -234,3 +234,21 @@ test("calendar export keeps event spans, skips announcements and gives each type
     assert.match(ics, /URL:http:\/\/bc-test\.instructure\.com\/courses\/1\/assignments\/5/);
   } finally { dom.window.close(); }
 });
+
+test("syllabus scan ignores words that start like months, fractions, and keeps table rows whole", () => {
+  const { domContext, load: loadDom } = require("./audit-helpers.cjs");
+  const { dom, context } = domContext('<div id="course_syllabus">' +
+    "<p>Decide 3 topics for the project</p><p>Marks 10 points</p><p>The final is worth 1/2 of the grade</p>" +
+    "<p>Quiz 1 on Sept. 14<br>Quiz 2 on October 5</p>" +
+    "<table><tr><td>Mar 3</td><td>Reading: chapter 4</td></tr></table></div>");
+  try {
+    loadDom(context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/datetime.js");
+    context.BC.registry = { register() {} };
+    vm.runInContext(fs.readFileSync(path.join(root, "src/content/features/syllabus.js"), "utf8")
+      .replace("  BC.registry.register(", "  BC.testCandidates = candidates;\n  BC.registry.register("), context);
+    const found = context.BC.testCandidates().map((f) => [f.title, f.date.getMonth(), f.date.getDate()]);
+    assert.deepEqual(copy(found), [
+      ["Quiz 1 on Sept. 14", 8, 14], ["Quiz 2 on October 5", 9, 5], ["Mar 3 · Reading: chapter 4", 2, 3],
+    ]);
+  } finally { dom.window.close(); }
+});
