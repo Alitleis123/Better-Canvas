@@ -107,6 +107,8 @@ function contrastAudit() {
       assert.deepEqual(diag, [], p.url);
       assert.equal(new Set(p[mode].diag).size, p[mode].diag.length, p.url + " repeated a failing request");
       assert.equal(p[mode].dark, mode === "on", p.url);
+      assert.ok(p[mode].contrast.total > 0, p.url + " " + mode + ": no text was measured");
+      assert.equal(p[mode].contrast.failing, 0, p.url + " " + mode + ": " + JSON.stringify(p[mode].contrast.worst));
       for (const c of p[mode].contrast.controls) assert.ok(c.ratio >= 4.5, p.url + " " + mode + ": " + JSON.stringify(c));
     }
   } finally {
