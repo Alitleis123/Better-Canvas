@@ -81,9 +81,14 @@
   function readLocal(values = {}) {
     return BC.cleanLocalData(Object.assign(emptyLocal(), values[LOCAL_KEY] || {}));
   }
+  // Background writes (grade history, reminders seen) fail the same way as the
+  // user's own, so one problem used to stack a toast per write. One a minute.
+  let lastFailureToast = 0;
   function reportFailure(error) {
     BC.util.warn("local storage", error);
-    if (BC.toast) BC.toast.error("Changes could not be saved: " + error.message);
+    if (!BC.toast || Date.now() - lastFailureToast < 60000) return;
+    lastFailureToast = Date.now();
+    BC.toast.error("Changes could not be saved: " + error.message);
   }
   function queueLocal(operation) {
     const result = localWrites.then(operation);
