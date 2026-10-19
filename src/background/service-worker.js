@@ -119,8 +119,8 @@ async function reinjectOpenTabs(details) {
   if (!details || (details.reason !== "update" && details.reason !== "install")) return;
   try {
     const perms = await chrome.permissions.getAll();
-    const custom = (perms.origins || []).filter((o) => !/instructure\.com/.test(o));
-    const tabs = await chrome.tabs.query({ url: ["*://*.instructure.com/*"].concat(custom) });
+    // customOrigins also leaves out the Openverse API, which isn't a Canvas page.
+    const tabs = await chrome.tabs.query({ url: ["*://*.instructure.com/*"].concat(customOrigins(perms.origins)) });
     for (const t of tabs) {
       if (t.discarded || !t.id) continue;
       try {
