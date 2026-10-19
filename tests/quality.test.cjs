@@ -89,3 +89,18 @@ test("shortcut recorder lets Tab move focus, clears on Backspace and ignores bar
     assert.deepEqual(writes, ["", "Mod+J"]);
   } finally { dom.window.close(); }
 });
+
+test("typing in a settings field is one undo step but each switch click is its own", () => {
+  const { store } = settingsStore();
+  for (const css of ["a", "a{", "a{c", "a{co", "a{color:red}"]) store.set((s) => { s.cosmetics.customCss = css; });
+  store.set((s) => { s.dashboard.hoverLift = false; });
+  store.set((s) => { s.dashboard.hoverLift = true; });
+  assert.equal(store.undo(), true);
+  assert.equal(store.get().dashboard.hoverLift, false);
+  assert.equal(store.undo(), true);
+  assert.equal(store.get().dashboard.hoverLift, true);
+  assert.equal(store.get().cosmetics.customCss, "a{color:red}");
+  assert.equal(store.undo(), true);
+  assert.equal(store.get().cosmetics.customCss, "");
+  assert.equal(store.canUndo(), false);
+});

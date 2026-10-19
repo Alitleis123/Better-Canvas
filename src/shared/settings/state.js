@@ -108,14 +108,34 @@
 
     function scheduleSave() { dirty = true; flushSave(); }
 
+    // Typing in a field or dragging a slider calls set() per keystroke or tick.
+    // Text and number edits to the same fields less than a second apart share one
+    // undo step, so Undo reverts the whole word or drag and 30 steps hold more
+    // than 30 letters. Switches and lists keep a step per click.
+    let burst = null;
+    function changedPaths(a, b, at, out) {
+      if (a === b) return out;
+      if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)) {
+        for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) changedPaths(a[k], b[k], at + "/" + k, out);
+      } else if (!BC.util.deepEqual(a, b)) out.push(typeof a === typeof b && (typeof b === "string" || typeof b === "number") ? at : null);
+      return out;
+    }
+
     function set(mutator, opts) {
       const before = clone(state);      // ONE clone, was 3 clones + 4 stringifies
       mutator(state);                   // in place, so captured sub-objects stay live
       if (BC.util.deepEqual(before, state) && !opts?.replacePaths?.length) return;
       markPaths(opts?.replacePaths);
       if (!(opts && opts.replay)) {
-        past.push({ state: before, replacePaths: opts?.replacePaths });
-        if (past.length > HISTORY) past.shift();
+        const changed = changedPaths(before, state, "", []), now = Date.now();
+        const paths = changed.includes(null) ? null : changed.join("|");
+        if (paths && burst && burst.paths === paths && now - burst.at < 1000 && past[past.length - 1] === burst.entry) burst.at = now;
+        else {
+          const entry = { state: before, replacePaths: opts?.replacePaths };
+          past.push(entry);
+          if (past.length > HISTORY) past.shift();
+          burst = { paths, at: now, entry };
+        }
         future.length = 0;
       }
       notify("value");
