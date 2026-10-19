@@ -26,7 +26,7 @@ A customizable study workspace for Instructure Canvas — free forever, settings
 - **Theme rotation** — cycle through selected themes daily or weekly.
 - Accent color, custom font stack, five font-size scales, line-height + letter-spacing sliders.
 - Density (Compact/Default/Spacious/Cozy), global corner-radius slider, rounded-vs-square UI toggle, sidebar-width control.
-- **Color-blind modes** (Protanopia/Deuteranopia/Tritanopia via SVG filters).
+- **Color-blind modes** (Protanopia/Deuteranopia/Tritanopia). SVG filters shift colors you may confuse toward ones you can tell apart.
 - **High-contrast**, **reduced-motion**, master **animation-speed slider**.
 - Cursor styles (default/large/precise), focus-ring styles.
 - Institution logo: hide / replace with image / replace with text.
@@ -100,26 +100,26 @@ Three modes:
 
 ### Productivity
 - **Focus mode** on any Canvas page.
-- **Reading ruler** and **reading-progress bar** on long pages.
+- **Reading ruler** and **reading-progress bar** on long pages. The progress bar is off by default.
 - **Sticky notes** anywhere on Canvas, per URL.
 - **Auto-save drafts** for every textarea, restored on next visit.
 - **Word / character count** on all Canvas text editors.
-- **Print-friendly view**, **copy-URL** floating button.
+- A **Tools** item in Canvas's menu with Copy link, Print, focus mode and a new sticky note. Printing leaves out Canvas's menus and Better Canvas overlays, in black on white.
 
 ### Assignment previews
-- Hover over any assignment link to see a floating card with title / due date / points / score / description — no page nav.
+- Hover over any assignment link to see a card with its title, due date, points, score and description. Escape or scrolling closes it, and Productivity has a switch for it.
 
 ### Accessibility
-- **TTS "Speak"** button on assignments / announcements / discussion bodies.
+- **TTS "Speak"** button on assignments, announcements and discussion bodies. Off by default.
 - **Larger click targets**, **dyslexia-friendly font stack**.
-- Color-blind SVG palette shifts. Reduced-motion honored.
+- Color-blind color correction. Reduced-motion honored.
 
 ### Insights
-- **Study-time tracking** — minutes on Canvas per course per day, all local, with a 14-day chart in settings.
+- **Study-time tracking**: time a Canvas tab is visible, focused and in use, per course per day, all local, with a 14-day chart in settings.
 - **Grade trend sparklines** and **Pomodoro session history** in the same tab.
 
 ### Instructor helpers
-- **Roster CSV export**, attendance quick-mark (P/A buttons + CSV), **ungraded-count badges** on the assignments index.
+- **Roster CSV export**, attendance quick-mark (P/A buttons + CSV), **ungraded-count badges** on the assignments index. They appear only in courses where you are a teacher, TA or designer.
 
 ### Backgrounds & CSS
 - Full-page background: solid / gradient / image / **repeating pattern** (dots, grid, diagonal, topography), blur + opacity.
@@ -127,8 +127,8 @@ Three modes:
 
 ### Data
 - Export / import all settings.
-- Reset per-section or all.
-- Undo/redo history (last 30 changes) inside the settings drawer.
+- Reset all options. Recurring tasks, tags, grade goals, GPA credits, saved themes, custom links, course nicknames and planner data are kept.
+- Undo/redo history (last 30 changes) inside the settings drawer. A burst of typing in one field is one step.
 
 ---
 
@@ -206,7 +206,7 @@ src/
       calendar.js      .ics export + mini month view
       previews.js      hover assignment cards
       productivity.js  focus mode, reading ruler, sticky notes, drafts, word count, print
-      accessibility.js TTS, colorblind SVG filters
+      accessibility.js TTS, color-blind correction filters
       instructor.js    roster CSV, attendance quick-mark, ungraded badges
       quizsaver.js     classic-quiz local draft autosave + restore banner
       modules.js       per-module + course progress bars
