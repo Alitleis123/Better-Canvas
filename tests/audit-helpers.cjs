@@ -13,4 +13,9 @@ function domContext(html = "", extra = {}) {
   Object.assign(dom.window, { structuredClone, ...extra });
   return { dom, context: dom.getInternalVMContext() };
 }
-module.exports = { root, copy, settle, load, domContext };
+// Files the background injects when the settings workspace first opens.
+function settingsUIFiles() {
+  const source = fs.readFileSync(path.join(root, "src/background/service-worker.js"), "utf8");
+  return vm.runInNewContext(/const SETTINGS_UI_JS = (\[[^\]]*\]);/.exec(source)[1]);
+}
+module.exports = { root, copy, settle, load, domContext, settingsUIFiles };

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
-const files = manifest.content_scripts[0].js.filter(f => !f.endsWith('/content.js'));
+const files = manifest.content_scripts[0].js.filter(f => !f.endsWith('/content.js')).concat(require('./audit-helpers.cjs').settingsUIFiles());
 const setup = `window.auditErrors=[];window.addEventListener('error',e=>auditErrors.push(e.message));window.addEventListener('unhandledrejection',e=>auditErrors.push(String(e.reason)));
 if(!crypto.subtle)Object.defineProperty(crypto,'subtle',{value:{digest:async(_,bytes)=>{let h=2166136261;for(const b of bytes)h=Math.imul(h^b,16777619)>>>0;return new Uint32Array([h]).buffer;}}});
 

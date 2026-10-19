@@ -31,6 +31,15 @@
     const last = BC.storage.local.lastRotation;
     if (last?.period === period || failedPeriod === period) return;
 
+    // Photo presets arrive with the settings workspace, not the page bundle.
+    const wanted = r.themeIds[idx % r.themeIds.length];
+    if (!BC.SettingsUI && BC.loadSettingsUI && !(settings.customThemes || []).concat(BC.PRESET_THEMES || []).some((t) => t && t.id === wanted)) {
+      rotating = true;
+      BC.loadSettingsUI().catch((e) => { failedPeriod = period; BC.diag.push("rotation", e); })
+        .then(() => { rotating = false; if (BC.requestApply) BC.requestApply(); });
+      return;
+    }
+
     // The in-flight guard blocks re-entry until the theme and period both save.
     // Record successful rotations in storage. Failed attempts wait for the next period.
     rotating = true;

@@ -2,12 +2,12 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const { root, load, domContext, settle } = require("./audit-helpers.cjs");
+const { root, load, domContext, settle, settingsUIFiles } = require("./audit-helpers.cjs");
 
 function setup() {
   const { dom, context } = domContext('<div id="root"></div>', { chrome: { runtime: { getURL: (s) => s }, storage: { onChanged: { addListener() {} } } } });
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json")));
-  load(context, ...manifest.content_scripts[0].js.filter((file) => file !== "src/content/content.js"));
+  load(context, ...manifest.content_scripts[0].js.filter((file) => file !== "src/content/content.js"), ...settingsUIFiles());
   const messages = [], BC = context.BC;
   BC.toast = Object.fromEntries(["success", "error", "warn"].map((type) => [type, (text) => messages.push({ type, text })]));
   BC.util.warn = () => {};
@@ -74,7 +74,7 @@ test("quota rejection keeps the settings edit, error and automatic retry value",
   let store;
   try {
     const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json")));
-    load(page.context, ...manifest.content_scripts[0].js.filter((file) => file !== "src/content/content.js"));
+    load(page.context, ...manifest.content_scripts[0].js.filter((file) => file !== "src/content/content.js"), ...settingsUIFiles());
     const BC = page.context.BC;
     BC.util.warn = () => {};
     await BC.storage.load();

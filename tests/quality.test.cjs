@@ -545,3 +545,42 @@ test("review round 3: section headings keep focus, see-through chips stay unpinn
     context.BC.darkEngine.stop();
   } finally { dom.window.close(); }
 });
+
+test("the settings workspace loads on first open, and a failed load says so", async () => {
+  const { domContext, load: loadDom, settingsUIFiles, settle } = require("./audit-helpers.cjs");
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json")));
+  const sw = fs.readFileSync(path.join(root, "src/background/service-worker.js"), "utf8");
+  const workerList = [...vm.runInNewContext(/const CONTENT_JS = (\[[^\]]*\]);/.exec(sw)[1])];
+  for (const file of ["manifest.json", "manifest.firefox.json"]) assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, file))).content_scripts[0].js, workerList, file);
+  const lazy = settingsUIFiles(), options = fs.readFileSync(path.join(root, "src/options/options.html"), "utf8");
+  for (const file of lazy) {
+    assert.ok(fs.existsSync(path.join(root, file)) && !workerList.includes(file), file);
+    assert.ok(options.includes(file.replace("src/", "../")), file + " is on the options page");
+  }
+  let reply = { ok: false, error: "Cannot access contents of the page" }, sent = 0;
+  const page = domContext('<ul id="menu"></ul>', { matchMedia: () => ({ matches: true, addEventListener() {} }), chrome: {
+    runtime: { id: "t", getURL: (s) => s, sendMessage(msg, cb) {
+      sent++; assert.equal(msg.type, "bc:loadSettingsUI");
+      setTimeout(() => { if (reply.ok) loadDom(page.context, ...lazy); cb(reply); });
+    } }, storage: { local: { get() {} }, onChanged: { addListener() {} } } } });
+  try {
+    loadDom(page.context, ...manifest.content_scripts[0].js.filter((f) => f !== "src/content/content.js"));
+    const BC = page.context.BC, errors = [], doc = page.dom.window.document;
+    BC.toast.error = (m) => errors.push(m);
+    assert.equal(BC.SettingsUI, undefined);
+    BC.features.settingsPanel.open();
+    await new Promise((r) => setTimeout(r, 20)); await settle();
+    assert.equal(errors.length, 1); assert.match(errors[0], /couldn't load/);
+    assert.equal(BC.features.settingsPanel.isOpen(), false);
+    reply = { ok: true };
+    BC.features.settingsPanel.open(); BC.features.settingsPanel.open();
+    await new Promise((r) => setTimeout(r, 20)); await settle();
+    assert.equal(sent, 2, "two quick clicks share one load");
+    assert.equal(BC.features.settingsPanel.isOpen(), true);
+    assert.ok(doc.getElementById("bc-drawer").shadowRoot.querySelector(".bcs-app, .bc-app"));
+    assert.equal(BC.PRESET_THEMES.length, 34);
+    BC.features.settingsPanel.close(); BC.features.settingsPanel.open();
+    assert.equal(BC.features.settingsPanel.isOpen(), true, "once loaded, open is immediate");
+    assert.equal(sent, 2);
+  } finally { page.dom.window.close(); }
+});

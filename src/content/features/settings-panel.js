@@ -54,13 +54,33 @@
       <div class="menu-item__text">Better Canvas</div>`;
     a.addEventListener("click", (e) => { e.preventDefault(); toggle(); });
     // Building the panel on hover means the click only has to animate it.
-    const warm = () => { if (!drawerHost || !drawerHost.isConnected) BC.util.guard(ensureDrawer, "drawer warm-up"); };
+    const warm = () => {
+      if (!drawerHost || !drawerHost.isConnected) loadUI().then(() => BC.util.guard(ensureDrawer, "drawer warm-up"), () => {});
+    };
     a.addEventListener("pointerenter", warm, { once: true });
     a.addEventListener("focus", warm, { once: true });
     li.appendChild(a);
     menu.appendChild(li);
   }
 
+
+  // The workspace code isn't in the page bundle. The background injects it on
+  // first use, and hovering the menu item starts that early.
+  let loading = null;
+  function loadUI() {
+    if (BC.SettingsUI) return Promise.resolve();
+    return loading || (loading = new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage({ type: "bc:loadSettingsUI" }, (r) => {
+          const error = chrome.runtime.lastError;
+          if (BC.SettingsUI) return resolve();
+          loading = null;
+          reject(new Error(error?.message || r?.error || "Settings did not load"));
+        });
+      } catch (e) { loading = null; reject(e); }
+    }));
+  }
+  BC.loadSettingsUI = loadUI;
 
   function ensureDrawer() {
     if (drawerHost && drawerHost.isConnected) return drawerHost;
@@ -93,6 +113,13 @@
   }
   function setExpanded(on) { document.getElementById("bc-open-settings")?.setAttribute("aria-expanded", String(on)); }
   function open(tab) {
+    if (!BC.SettingsUI) {
+      loadUI().then(() => open(tab), (e) => {
+        BC.diag.push("settings load", e);
+        BC.toast.error("Better Canvas settings couldn't load. Refresh the page and try again.");
+      });
+      return;
+    }
     ensureDrawer();
     if (typeof tab === "string") BC.SettingsUI.goto(tab);
     if (isOpen) return;

@@ -9,7 +9,6 @@ const CONTENT_JS = [
   "src/shared/themes.js",
   "src/shared/theme-library.js",
   "src/shared/theme-scenes.js",
-  "src/shared/theme-artwork.js",
     "src/shared/theme-media.js",
   "src/content/core/util.js",
   "src/content/core/datetime.js",
@@ -28,11 +27,7 @@ const CONTENT_JS = [
   "src/content/core/toast.js",
   "src/content/core/shortcuts.js",
   "src/content/core/commandPalette.js",
-  "src/shared/settings/state.js",
-  "src/shared/settings/components.js",
-  "src/shared/settings/locker.js",
     "src/shared/settings/studio.js",
-    "src/shared/settings/index.js",
   "src/content/features/theming.js",
   "src/content/features/cosmetics.js",
   "src/content/features/navigation.js",
@@ -58,6 +53,17 @@ const CONTENT_JS = [
   "src/content/features/settings-panel.js",
   "src/content/core/observer.js",
   "src/content/content.js",
+];
+
+// Only the settings workspace needs these, about 290 KB, so they load on first use
+// instead of on every Canvas page. studio.js stays in CONTENT_JS: the planner
+// draws its progress shapes with it.
+const SETTINGS_UI_JS = [
+  "src/shared/theme-artwork.js",
+  "src/shared/settings/state.js",
+  "src/shared/settings/components.js",
+  "src/shared/settings/locker.js",
+  "src/shared/settings/index.js",
 ];
 
 const FRAME_JS = [
@@ -333,6 +339,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "bc:themeSearch") {
     searchThemeImages(msg).then(sendResponse, (e) => sendResponse({ ok: false, error:
       e.name === "AbortError" ? "The image library took too long. Try again." : e.message }));
+    return true;
+  }
+  // Same isolated world as the page's content scripts, so the files join their BC.
+  if (msg.type === "bc:loadSettingsUI") {
+    if (!sender.tab || sender.tab.id == null) { sendResponse({ ok: false, error: "Settings open only in a Canvas tab" }); return; }
+    chrome.scripting.executeScript({ target: { tabId: sender.tab.id, frameIds: [sender.frameId || 0] }, files: SETTINGS_UI_JS })
+      .then(() => sendResponse({ ok: true }), (e) => sendResponse({ ok: false, error: e.message }));
     return true;
   }
   if (msg.type === "bc:syncRegistration") { syncRegistration().then(() => sendResponse({ ok: true })); return true; }

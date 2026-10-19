@@ -40,6 +40,26 @@ if (!scratch) throw Error("Set BC_BROWSER_SCRATCH to an approved temporary direc
       }) });
       return { ...value.result, buildVersion: chrome.runtime.getManifest().version };
     });
+    // The settings workspace and photo presets stay out of the page until first use.
+    const lazy = () => worker.evaluate(async () => {
+      const [tab] = await chrome.tabs.query({ url: "http://bc-test.instructure.com:8076/*" });
+      const [value] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({ ui: !!BC.SettingsUI, count: BC.PRESET_THEMES.length }) });
+      return value.result;
+    });
+    assert.deepEqual(await lazy(), { ui: false, count: 30 }); results.extension.push("Settings code and photo presets are not in the page bundle");
+    await worker.evaluate(async () => {
+      const [tab] = await chrome.tabs.query({ url: "http://bc-test.instructure.com:8076/*" });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => BC.loadSettingsUI() });
+    });
+    assert.deepEqual(await lazy(), { ui: true, count: 34 }); results.extension.push("The background injects them into the page's content-script world on request");
+    const coldPage = await browser.newPage();
+    await coldPage.goto("http://bc-test.instructure.com:8076/extension-check?cold=1");
+    await worker.evaluate(async () => {
+      const [tab] = await chrome.tabs.query({ url: "http://bc-test.instructure.com:8076/extension-check?cold=1" });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => BC.features.settingsPanel.open() });
+    });
+    await coldPage.waitForFunction(() => document.querySelector("#bc-drawer")?.shadowRoot?.querySelector(".bcs-app, .bc-app"), null, { timeout: 5000 });
+    await coldPage.close(); results.extension.push("Opening settings in a fresh tab loads and shows the workspace");
     const first = await inspect();
     for (const [key, value] of Object.entries({ count: 34, anime: 6, version: "3.3.1", top: true, buildVersion: "3.3.1" })) {
       assert.equal(first[key], value); results.extension.push(key + " = " + value);
@@ -55,7 +75,7 @@ if (!scratch) throw Error("Set BC_BROWSER_SCRATCH to an approved temporary direc
       const tabs = await chrome.tabs.query({ url: "http://bc-test.instructure.com:8076/*" });
       if (tabs.length !== 2) throw Error("Expected two independent extension contexts");
       await Promise.all(tabs.map((tab, index) => chrome.scripting.executeScript({ target: { tabId: tab.id },
-        func: async (id) => { await BC.storage.load(); await BC.storage.updateLocal((d) => { (d.notes.extensionCheck ||= {})[id] = "saved"; }); }, args: [String(index)] })));
+        func: async (id) => { await BC.loadSettingsUI(); await BC.storage.load(); await BC.storage.updateLocal((d) => { (d.notes.extensionCheck ||= {})[id] = "saved"; }); }, args: [String(index)] })));
       const { bcLocal } = await chrome.storage.local.get(["bcLocal"]);
       if (bcLocal.notes.extensionCheck[0] !== "saved" || bcLocal.notes.extensionCheck[1] !== "saved") throw Error("Concurrent tab edits were lost");
       const [stale] = await chrome.scripting.executeScript({ target: { tabId: tabs[0].id }, func: async () => {

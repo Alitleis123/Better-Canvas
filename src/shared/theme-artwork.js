@@ -1738,10 +1738,14 @@
     ]
   }
 ];
-  for (const pack of collections) {
+  // This file loads with the settings workspace, after the anime presets. The
+  // photo collections still go in front of them, where the gallery always had them.
+  if (BC.PRESET_THEMES.some((t) => t.id === "photos-" + collections[0].category)) return;
+  const at = BC.PRESET_THEMES.findIndex((t) => t.category === "anime");
+  BC.PRESET_THEMES.splice(at < 0 ? BC.PRESET_THEMES.length : at, 0, ...collections.map((pack) => {
     const theme = BC.themeLibrary.makeTheme(pack.images, { name: pack.name, category: pack.category, dark: pack.category !== "art" });
     theme.id = "photos-" + pack.category;
     theme.description = pack.images.length + " different photographs and artworks · coordinated full-page look";
-    BC.PRESET_THEMES.push(theme);
-  }
+    return theme;
+  }));
 })();
