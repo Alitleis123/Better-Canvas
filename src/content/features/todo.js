@@ -594,7 +594,8 @@
   function windowStart(t) {
     return state.windowStart ? BC.dt.startOfDay(state.windowStart) : defaultStart(t);
   }
-  const rangeDays = (t) => parseInt(t.rangeDays, 10) || 7;
+  // Day plan's tray looks three days ahead, so each day step fetches three days.
+  const rangeDays = (t) => (viewOf(t) === "timeblock" ? 3 : parseInt(t.rangeDays, 10) || 7);
   const viewOf = (t) => (["list", "kanban", "timeblock"].includes(t.view) ? t.view : "list");
 
   async function fetchWindow(settings, force) {
@@ -733,8 +734,11 @@
       // accidental check on an overdue item can still be undone.
       else if (d < r.start && isComplete(it) && doneAt[k] && now - doneAt[k] < 7 * BC.dt.DAY_MS) m.recentDone.push(it);
     }
-    m.total = m.windowItems.length;
-    m.done = m.windowItems.filter(isComplete).length;
+    // Day plan shows one day, so its ring, count and celebration cover that day,
+    // not every day fetched for its tray.
+    const counted = viewOf(t) === "timeblock" ? m.windowItems.filter((it) => itemDate(it) < BC.dt.addDays(r.start, 1)) : m.windowItems;
+    m.total = counted.length;
+    m.done = counted.filter(isComplete).length;
     return m;
   }
 
@@ -1001,7 +1005,7 @@
     const put = (fn) => () => BC.storage.update((d) => fn(d.todo));
     const radio = (key, value, label, cur) => ({ label, checked: cur === value, onClick: put((x) => { x[key] = value; }) });
     const g = t.groupBy || "day";
-    const days = rangeDays(t);
+    const days = parseInt(t.rangeDays, 10) || 7;   // the setting, not Day plan's fetch window
     BC.ui.menu(anchor, [
       { heading: "Group by" },
       radio("groupBy", "day", "Day", g), radio("groupBy", "course", "Course", g), radio("groupBy", "priority", "Priority", g),
