@@ -946,12 +946,13 @@
 
   function renderWidgets(store) {
     const state = store.get(), C = S();
-    const widget = (label, key) => row({ label, control: C.switch({ ariaLabel: label + " widget", get: () => state.dashboard.widgets[key], set: (v) => store.set((s) => { s.dashboard.widgets[key] = v; }) }) });
+    const dash = (s) => s.dashboard.enabled;
+    const widget = (label, key) => row({ label, enabledWhen: dash, control: C.switch({ ariaLabel: label + " widget", get: () => state.dashboard.widgets[key], set: (v) => store.set((s) => { s.dashboard.widgets[key] = v; }) }) });
     return [sec("Dashboard widgets", [widget("To Do", "todo"), widget("Coming Up", "comingUp"), widget("Recent Feedback", "recentFeedback"), widget("GPA estimate", "gpa"),
       row({ label: "Mini calendar", control: C.switch({ ariaLabel: "Mini calendar widget", get: () => state.calendar.miniOnDashboard, set: (v) => store.set((s) => { s.calendar.miniOnDashboard = v; }) }) }),
-      row({ label: "Hide sidebar", control: C.switch({ ariaLabel: "Hide sidebar", get: () => state.dashboard.hideSidebar, set: (v) => store.set((s) => { s.dashboard.hideSidebar = v; }) }) }),
-    ]), sec("On the page", [row({ label: "Sticky notes", hint: "Attach a note to the page you are studying.", control: C.switch({ ariaLabel: "Sticky notes", get: () => state.productivity.stickyNotes, set: (v) => store.set((s) => { s.productivity.stickyNotes = v; }) }) }),
-      row({ label: "Focus timer", control: C.switch({ ariaLabel: "Focus timer widget", get: () => state.todo.pomodoro.enabled, set: (v) => store.set((s) => { s.todo.pomodoro.enabled = v; }) }) }),
+      row({ label: "Hide sidebar", enabledWhen: dash, control: C.switch({ ariaLabel: "Hide sidebar", get: () => state.dashboard.hideSidebar, set: (v) => store.set((s) => { s.dashboard.hideSidebar = v; }) }) }),
+    ], { description: "Most of these need dashboard customization, under Edit Canvas > Dashboard." }), sec("On the page", [row({ label: "Sticky notes", hint: "Attach a note to the page you are studying.", control: C.switch({ ariaLabel: "Sticky notes", get: () => state.productivity.stickyNotes, set: (v) => store.set((s) => { s.productivity.stickyNotes = v; }) }) }),
+      row({ label: "Focus timer", hint: "Needs the Planner style under To Do.", enabledWhen: (s) => s.todo.mode === "custom", control: C.switch({ ariaLabel: "Focus timer widget", get: () => state.todo.pomodoro.enabled, set: (v) => store.set((s) => { s.todo.pomodoro.enabled = v; }) }) }),
     ])];
   }
 
@@ -1028,21 +1029,21 @@
           control: C.switch({ ariaLabel: "Celebrate", get: () => t.celebrate !== false, set: put((x, v) => { x.celebrate = v; }) }) }),
       ]),
       sec("Streaks", [
-        row({ label: "Daily streak", hint: "Counts days you complete at least one task.",
+        row({ label: "Daily streak", hint: "Counts days you complete at least one task.", enabledWhen: planner,
           control: C.switch({ ariaLabel: "Daily streak", get: () => t.streaks.enabled, set: put((x, v) => { x.streaks.enabled = v; }) }) }),
-        row({ label: "Grace days", hint: "Missed days that don't break the streak.", enabledWhen: (s) => s.todo.streaks.enabled,
+        row({ label: "Grace days", hint: "Missed days that don't break the streak.", enabledWhen: (s) => planner(s) && s.todo.streaks.enabled,
           control: C.number({ ariaLabel: "Grace days", min: 0, max: 14, get: () => t.streaks.graceDays, set: put((x, v) => { x.streaks.graceDays = Math.max(0, v | 0); }) }) }),
-        row({ label: "Repairs per month", enabledWhen: (s) => s.todo.streaks.enabled,
+        row({ label: "Repairs per month", enabledWhen: (s) => planner(s) && s.todo.streaks.enabled,
           control: C.number({ ariaLabel: "Repairs per month", min: 0, max: 31, get: () => t.streaks.repairsAvailable, set: put((x, v) => { x.streaks.repairsAvailable = Math.max(0, v | 0); }) }) }),
-      ]),
+      ], { description: "Shown in the planner, so it needs the Planner style." }),
       sec("Focus timer", [
-        row({ label: "Focus timer", hint: "A Pomodoro timer in the planner and on every page while it runs.", control: C.switch({ ariaLabel: "Focus timer", get: () => t.pomodoro.enabled, set: put((x, v) => { x.pomodoro.enabled = v; }) }) }),
-        row({ label: "Focus", enabledWhen: (s) => s.todo.pomodoro.enabled, control: C.number({ ariaLabel: "Focus minutes", min: 1, max: 180, suffix: "min", get: () => t.pomodoro.workMin, set: put((x, v) => { x.pomodoro.workMin = Math.max(1, v | 0); }) }) }),
-        row({ label: "Short break", enabledWhen: (s) => s.todo.pomodoro.enabled, control: C.number({ ariaLabel: "Short break minutes", min: 1, max: 60, suffix: "min", get: () => t.pomodoro.shortBreakMin, set: put((x, v) => { x.pomodoro.shortBreakMin = Math.max(1, v | 0); }) }) }),
-        row({ label: "Long break", enabledWhen: (s) => s.todo.pomodoro.enabled, control: C.number({ ariaLabel: "Long break minutes", min: 1, max: 120, suffix: "min", get: () => t.pomodoro.longBreakMin, set: put((x, v) => { x.pomodoro.longBreakMin = Math.max(1, v | 0); }) }) }),
-        row({ label: "Long break every", enabledWhen: (s) => s.todo.pomodoro.enabled, control: C.number({ ariaLabel: "Long break every", min: 1, max: 12, suffix: "sessions", get: () => t.pomodoro.longEvery, set: put((x, v) => { x.pomodoro.longEvery = Math.max(1, v | 0); }) }) }),
-        row({ label: "Sound when a phase ends", enabledWhen: (s) => s.todo.pomodoro.enabled, control: C.switch({ ariaLabel: "Sound when a phase ends", get: () => t.pomodoro.sound, set: put((x, v) => { x.pomodoro.sound = v; }) }) }),
-      ]),
+        row({ label: "Focus timer", hint: "A Pomodoro timer in the planner and on every page while it runs.", enabledWhen: planner, control: C.switch({ ariaLabel: "Focus timer", get: () => t.pomodoro.enabled, set: put((x, v) => { x.pomodoro.enabled = v; }) }) }),
+        row({ label: "Focus", enabledWhen: (s) => planner(s) && s.todo.pomodoro.enabled, control: C.number({ ariaLabel: "Focus minutes", min: 1, max: 180, suffix: "min", get: () => t.pomodoro.workMin, set: put((x, v) => { x.pomodoro.workMin = Math.max(1, v | 0); }) }) }),
+        row({ label: "Short break", enabledWhen: (s) => planner(s) && s.todo.pomodoro.enabled, control: C.number({ ariaLabel: "Short break minutes", min: 1, max: 60, suffix: "min", get: () => t.pomodoro.shortBreakMin, set: put((x, v) => { x.pomodoro.shortBreakMin = Math.max(1, v | 0); }) }) }),
+        row({ label: "Long break", enabledWhen: (s) => planner(s) && s.todo.pomodoro.enabled, control: C.number({ ariaLabel: "Long break minutes", min: 1, max: 120, suffix: "min", get: () => t.pomodoro.longBreakMin, set: put((x, v) => { x.pomodoro.longBreakMin = Math.max(1, v | 0); }) }) }),
+        row({ label: "Long break every", enabledWhen: (s) => planner(s) && s.todo.pomodoro.enabled, control: C.number({ ariaLabel: "Long break every", min: 1, max: 12, suffix: "sessions", get: () => t.pomodoro.longEvery, set: put((x, v) => { x.pomodoro.longEvery = Math.max(1, v | 0); }) }) }),
+        row({ label: "Sound when a phase ends", enabledWhen: (s) => planner(s) && s.todo.pomodoro.enabled, control: C.switch({ ariaLabel: "Sound when a phase ends", get: () => t.pomodoro.sound, set: put((x, v) => { x.pomodoro.sound = v; }) }) }),
+      ], { description: "Started from the planner, so it needs the Planner style." }),
       live(() => renderRecurringEditor(store), () => JSON.stringify(store.get().todo.recurring || [])),
       sec("Tags", [
         row({ label: "Your tags", hint: "Suggested when you tag a task in the planner.", stacked: true,
