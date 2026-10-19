@@ -331,7 +331,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     } catch (_) {}
     sendResponse({ ok: true }); return;
   }
+  if (msg.type === "bc:leftCanvas") { clearBadgeWithoutCanvas(); sendResponse({ ok: true }); return; }
 });
+
+// Only an open Canvas page refreshes the count. Once the last one closes or
+// navigates away, the number would otherwise stay on the toolbar for days. The
+// delay lets a navigating tab report its new address first.
+function clearBadgeWithoutCanvas() {
+  setTimeout(async () => {
+    try {
+      const perms = await chrome.permissions.getAll();
+      const tabs = await chrome.tabs.query({ url: BASE_PATTERNS.concat(customOrigins(perms.origins)) });
+      if (!tabs.length) await chrome.action.setBadgeText({ text: "" });
+    } catch (_) {}
+  }, 1000);
+}
+try { chrome.tabs.onRemoved.addListener(clearBadgeWithoutCanvas); } catch (_) {}
 
 // Right-click context menu: quick-add task
 try {

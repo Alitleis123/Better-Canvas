@@ -411,6 +411,27 @@ test("quiz drafts belong to one attempt and submitting clears every page of the 
   } finally { page.dom.window.close(); }
 });
 
+test("the toolbar count clears once no Canvas tab is left", async () => {
+  const listeners = {}, badge = [];
+  let open = [{ id: 1 }];
+  const event = (name) => ({ addListener: (fn) => { listeners[name] = fn; } });
+  const context = vm.createContext({ console, structuredClone, queueMicrotask, crypto: require("node:crypto").webcrypto, TextEncoder,
+    setTimeout: (fn) => fn(), clearTimeout() {}, chrome: {
+      runtime: { id: "test", onInstalled: event("installed"), onStartup: event("startup"), onMessage: event("message") },
+      permissions: { getAll: async () => ({ origins: ["https://canvas.school.edu/*"] }) },
+      tabs: { onRemoved: event("removed"), query: async (q) => { badge.push(q.url); return open; } },
+      action: { setBadgeText: async (v) => badge.push(v.text), setBadgeBackgroundColor() {} },
+      contextMenus: { onClicked: event("menu") }, storage: { local: {} },
+    } });
+  load(context, "src/background/service-worker.js");
+  const flush = () => new Promise((r) => setImmediate(r));
+  listeners.removed(5); await flush();
+  assert.deepEqual(copy(badge), [["*://*.instructure.com/*", "https://canvas.school.edu/*"]], "another Canvas tab keeps the count");
+  open = []; badge.length = 0;
+  listeners.message({ type: "bc:leftCanvas" }, { id: "test" }, () => {}); await flush();
+  assert.equal(badge.at(-1), "");
+});
+
 test("review round 1: loose version files are refused and undo bursts stop at history boundaries", () => {
   const context = vm.createContext({ console, setTimeout, clearTimeout, structuredClone, navigator: { platform: "Win32" } });
   load(context, "src/shared/defaults.js", "src/content/core/util.js", "src/shared/settings/index.js");

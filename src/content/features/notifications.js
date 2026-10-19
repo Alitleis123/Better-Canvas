@@ -275,6 +275,16 @@
     }
 
     bag.once("arm", () => {
+      // Leaving this page may leave no Canvas tab to keep the count current.
+      bag.listen(window, "pagehide", () => {
+        if (!lastBadge) return;
+        try { chrome.runtime.sendMessage({ type: "bc:leftCanvas" }, () => void chrome.runtime.lastError); } catch (_) {}
+      });
+      // Back/forward cache: the worker may have cleared the count while this page was away.
+      bag.listen(window, "pageshow", (e) => {
+        if (!e.persisted || !lastBadge) return;
+        const n = lastBadge; lastBadge = null; sendBadge(n);
+      });
       scanDueSoon(BC.storage.current); scanCourses(BC.storage.current);
       BC.alarms.every("bc-notif-due", 5 * 60 * 1000, () => scanDueSoon(BC.storage.current));
       BC.alarms.every("bc-notif-scan", 10 * 60 * 1000, () => scanCourses(BC.storage.current));
