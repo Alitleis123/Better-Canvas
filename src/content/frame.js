@@ -37,18 +37,41 @@
     if (el) el.remove();
   }
 
+  // The rich-content editor's frame holds the user's own writing. The engine never
+  // tags editable content, so pasted dark text vanished on a dark page. Keep it light.
+  const editing = () => document.designMode === "on" || !!(document.body && document.body.isContentEditable);
+  let lastSettings = null, watching = false;
+
   function apply(settings) {
     try {
       const doc = document.documentElement;
       if (!doc) return;
+      lastSettings = settings;
       lastMode = (settings && settings.theming && settings.theming.darkMode) || "";
-      const dark = !!settings && settings.enabled !== false && BC.isDarkActive(settings);
+      const dark = !!settings && settings.enabled !== false && BC.isDarkActive(settings) && !editing();
       doc.classList.toggle("bc-dark", dark);
       if (!dark) { BC.darkEngine.stop(); removeStyle(); return; }
       setStyle(buildCss(settings));
-      whenBody(() => BC.darkEngine.start());
+      whenBody(() => {
+        if (!watching) {
+          watching = true;
+          new MutationObserver(() => apply(lastSettings)).observe(document.body, { attributes: true, attributeFilter: ["contenteditable"] });
+        }
+        if (editing()) apply(lastSettings); else BC.darkEngine.start();
+      });
     } catch (_) {}
   }
+
+  // Settings arrive asynchronously, so a frame inside a dark page painted white
+  // first. Borrow the parent's background until they do.
+  try {
+    const parent = window.parent.document.documentElement;
+    if (parent.classList.contains("bc-dark")) {
+      const bg = window.parent.getComputedStyle(parent).getPropertyValue("--bc-surface-1").trim() || "#1b1b1f";
+      document.documentElement.classList.add("bc-dark");
+      setStyle("html.bc-dark, html.bc-dark body { color-scheme: dark; background-color: " + bg + " !important; }");
+    }
+  } catch (_) {}   // a cross-origin parent can't be read
 
   // Runs at document_start, before <body> exists.
   function whenBody(fn) {
