@@ -430,6 +430,18 @@ test("quiz drafts belong to one attempt and submitting clears every page of the 
     await new Promise((r) => setTimeout(r, 900)); await settle();
     assert.deepEqual(Object.keys(db.data.bcLocal.quizDrafts), ["/courses/1/quizzes/9/take"]);
     await assert.rejects(BC.storage.request({ type: "bc:quizSubmitted", root: "/courses/1/files" }), /Invalid quiz/);
+    // Review round 4: a submit that didn't go through must not leave saving off.
+    const typed = async (value) => { input.value = value; input.dispatchEvent(new page.dom.window.Event("input", { bubbles: true })); await new Promise((r) => setTimeout(r, 900)); await settle(); };
+    page.dom.window.dispatchEvent(Object.assign(new page.dom.window.Event("pageshow"), { persisted: true }));
+    await typed("after back");
+    assert.equal(db.data.bcLocal.quizDrafts[path + "#attempt-2"].answers.answer, "after back", "a back/forward restore resumes saving");
+    const request = BC.storage.request;
+    BC.storage.request = () => Promise.reject(Error("Storage writer unavailable"));
+    form.dispatchEvent(new page.dom.window.Event("submit", { bubbles: true, cancelable: true }));
+    await tick(); await settle();
+    BC.storage.request = request;
+    await typed("after failure");
+    assert.equal(db.data.bcLocal.quizDrafts[path + "#attempt-2"].answers.answer, "after failure", "a failed clear resumes saving");
   } finally { page.dom.window.close(); }
 });
 

@@ -32,7 +32,7 @@
   let saverEnabled = false, saveTimer = null, submitted = false;
 
   function stop() {
-    saverEnabled = false;
+    saverEnabled = submitted = false;
     clearTimeout(saveTimer); saveTimer = null;
     BC.lifecycle.clear("quizsaver");
   }
@@ -53,13 +53,16 @@
 
   // The page is about to navigate, so this is one message to the background rather
   // than a read and a commit. `submitted` stops a save already in flight from
-  // writing the draft back after it.
+  // writing the draft back after it. If the page is still here 10 seconds later,
+  // or the clear failed, the submit didn't go through and saving resumes.
+  const SUBMIT_GRACE_MS = 10000;
   function deleteQuizDrafts() {
     const root = quizRoot();
     clearTimeout(saveTimer); saveTimer = null;
     if (!root) return Promise.resolve();
     submitted = true;
-    return BC.storage.request({ type: "bc:quizSubmitted", root });
+    BC.lifecycle.bag("quizsaver").timeout(() => { submitted = false; }, SUBMIT_GRACE_MS);
+    return BC.storage.request({ type: "bc:quizSubmitted", root }).catch((e) => { submitted = false; throw e; });
   }
 
   function collectInputs() {
@@ -224,6 +227,8 @@
         if (!e.target || e.target.id !== "submit_quiz_form") return;
         setTimeout(() => { if (!e.defaultPrevented) deleteQuizDrafts().catch(() => {}); });
       }, true);
+      // Back from a failed submit through the back/forward cache.
+      bag.listen(window, "pageshow", (e) => { if (e.persisted) submitted = false; });
     });
 
     pruneOld();
