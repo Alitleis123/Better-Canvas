@@ -82,7 +82,7 @@
     if (!html) return "";
     const body = new DOMParser().parseFromString(html, "text/html").body;
     // Paragraphs and line breaks would otherwise run together: "FirstSecond".
-    for (const n of body.querySelectorAll("p, div, li, br, h1, h2, h3, h4, h5, h6, td")) n.after(" ");
+    for (const n of body.querySelectorAll("p, div, li, br, h1, h2, h3, h4, h5, h6, td")) { n.before(" "); n.after(" "); }
     return (body.textContent || "").replace(/\s+/g, " ").trim();
   }
 
