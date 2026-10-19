@@ -177,7 +177,15 @@
     startAlarms();
   }
 
-  const requestApply = BC.util.debounce(() => BC.applyAll(BC.storage.current), 120);
+  // 120ms after the last change, but never more than a second behind it: a page
+  // that kept mutating used to hold every feature back indefinitely.
+  let applyTimer = null, firstAsk = 0;
+  const requestApply = () => {
+    const now = Date.now();
+    if (!applyTimer) firstAsk = now;
+    clearTimeout(applyTimer);
+    applyTimer = setTimeout(() => { applyTimer = null; BC.applyAll(BC.storage.current); }, now - firstAsk >= 1000 ? 0 : 120);
+  };
   BC.requestApply = requestApply;
 
   // Zero-latency path for the settings drawer. Coalesced by requestAnimationFrame
