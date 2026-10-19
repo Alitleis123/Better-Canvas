@@ -445,7 +445,16 @@
     else BC.injector.removeNode("bc-note");
     if (p.autoSaveDrafts && BC.storage.loadLocal) BC.storage.loadLocal().then(() => installDrafts());
     else uninstallDrafts();
-    if (p.wordCount) installWordCount();
+    if (p.wordCount) {
+      installWordCount();
+      // A field shown later by a style or hidden change makes no DOM mutation the
+      // observer sees. Catch it when someone starts typing there.
+      const bag = BC.lifecycle.bag("productivity");
+      bag.once("wc-focus", () => bag.listen(document, "focusin", (e) => {
+        const s = BC.storage.current;
+        if (e.target && e.target.tagName === "TEXTAREA" && !e.target._bcWc && s && s.productivity && s.productivity.wordCount) installWordCount();
+      }, true));
+    }
     else if (document.querySelector('[data-bc-node="bc-wc"]')) {
       BC.injector.removeNode("bc-wc");
       for (const ta of document.querySelectorAll("textarea")) delete ta._bcWc;
