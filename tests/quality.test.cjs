@@ -392,3 +392,19 @@ test("quiz drafts belong to one attempt and submitting clears every page of the 
     assert.deepEqual(Object.keys(db.data.bcLocal.quizDrafts), ["/courses/1/quizzes/9/take"]);
   } finally { page.dom.window.close(); }
 });
+
+test("review round 1: loose version files are refused and undo bursts stop at history boundaries", () => {
+  const context = vm.createContext({ console, setTimeout, clearTimeout, structuredClone, navigator: { platform: "Win32" } });
+  load(context, "src/shared/defaults.js", "src/content/core/util.js", "src/shared/settings/index.js");
+  const kind = (j) => context.BC.SettingsUI.backupKind(j);
+  assert.equal(kind({ version: 1, items: [] }), null);
+  assert.equal(kind({ kind: "better-canvas-backup", version: 5, settings: "broken" }), null);
+  assert.equal(kind({ version: 5, enabled: false }), "settings");
+  const { store } = settingsStore();
+  store.set((s) => { s.cosmetics.customCss = "a"; });
+  store.reset();
+  store.undo();
+  store.set((s) => { s.cosmetics.customCss = "ab"; });
+  store.undo();
+  assert.equal(store.get().cosmetics.customCss, "a");
+});

@@ -68,8 +68,10 @@
       if (j.format === "better-canvas-locker") return "locker";
       const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
       if ((j.kind === "better-canvas-backup" || "local" in j) && isObj(j.settings)) return "backup";
+      if (j.kind === "better-canvas-backup") return null;   // a backup whose settings are missing
       if (isObj(j.settings) && typeof j.name === "string" && !("local" in j)) return "theme";
-      return typeof j.version === "number" || SETTINGS_SECTIONS.some((k) => isObj(j[k])) ? "settings" : null;
+      // A version number alone isn't enough: other exports have one too.
+      return SETTINGS_SECTIONS.some((k) => isObj(j[k])) || (typeof j.version === "number" && typeof j.enabled === "boolean") ? "settings" : null;
     },
     render(root, adapter, opts) {
       const o = opts || {};

@@ -126,7 +126,8 @@
       mutator(state);                   // in place, so captured sub-objects stay live
       if (BC.util.deepEqual(before, state) && !opts?.replacePaths?.length) return;
       markPaths(opts?.replacePaths);
-      if (!(opts && opts.replay)) {
+      if (opts && opts.replay) burst = null;
+      else {
         const changed = changedPaths(before, state, "", []), now = Date.now();
         const paths = changed.includes(null) ? null : changed.join("|");
         if (paths && burst && burst.paths === paths && now - burst.at < 1000 && past[past.length - 1] === burst.entry) burst.at = now;
@@ -145,6 +146,7 @@
     // Wholesale content replacement (reset / import). "structural" tells the UI
     // that a targeted sync isn't enough and the tab needs rebuilding.
     function swap(next) {
+      burst = null;
       replacement++;
       past.push({ state: clone(state), replace: true });
       if (past.length > HISTORY) past.shift();
@@ -155,6 +157,7 @@
     }
 
     function undo() {
+      burst = null;   // a step that comes back from Undo or Redo starts a new burst
       if (!past.length) return false;
       const entry = past.pop();
       future.push({ ...entry, state: clone(state) });
@@ -167,6 +170,7 @@
     }
 
     function redo() {
+      burst = null;
       if (!future.length) return false;
       const entry = future.pop();
       past.push({ ...entry, state: clone(state) });
@@ -190,6 +194,7 @@
         if (own !== -1) { pendingEchoes.splice(0, own + 1); return; }
         if (BC.util.deepEqual(incoming, state)) return;
         if (dirty) return;
+        burst = null;   // Undo must not fold a change from another tab into the last edit
         overwrite(state, incoming);
         baseline = clone(incoming);
         notify("structural");
