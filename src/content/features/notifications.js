@@ -36,7 +36,8 @@
     // opts: { title, message, url, key, type }
     if (opts.key && (seen.has(opts.key) || firedBefore(opts.key))) return;
     if (opts.key) seen.add(opts.key);
-    if (n.inPage) BC.toast.info(opts.message, { title: opts.title, actions: opts.url ? [{ label: "Open", onClick: () => window.open(opts.url, "_blank") }] : [] });
+    // Reminders stay up long enough to be noticed: 12s, held while hovered.
+    if (n.inPage) BC.toast.info(opts.message, { title: opts.title, timeout: 12000, actions: opts.url ? [{ label: "Open", onClick: () => window.open(opts.url, "_blank") }] : [] });
     if (n.enabled) {
       try {
         if ("Notification" in window && Notification.permission === "granted") {
@@ -81,13 +82,17 @@
     // without the interruptions.
     if (!wantToasts && !n.badgeCount) return;
     try {
-      const start = new Date();
-      const end = new Date(); end.setDate(end.getDate() + 3);
-      const items = await BC.api.plannerItems(start.toISOString(), end.toISOString());
       const leadMinutes = settings.notifications.leadMinutes || [60, 240, 1440];
+      // Look far enough ahead for the longest reminder, and a day for the badge.
+      const ahead = Math.max(24 * 60, ...leadMinutes.map((m) => Number(m) || 0)) + 10;
+      const start = new Date();
+      const end = new Date(start.getTime() + ahead * 60000);
+      const items = await BC.api.plannerItems(start.toISOString(), end.toISOString());
       const now = Date.now();
       let dueCount = 0;
       for (const it of items) {
+        // Lectures, office hours and announcements aren't work that comes due.
+        if (it.plannable_type === "calendar_event" || it.plannable_type === "announcement") continue;
         const dueISO = it.plannable_date || (it.plannable && it.plannable.due_at);
         if (!dueISO) continue;
         // Done includes submitted work, not only items ticked in the planner —
@@ -231,6 +236,9 @@
 
   function scanStreak(settings) {
     if (!BC.todo || !BC.todo.streakState) return;
+    // Streaks only exist in the planner, and only while they're switched on.
+    const t = settings.todo || {};
+    if (t.mode !== "custom" || !(t.streaks && t.streaks.enabled)) return;
     const ss = BC.todo.streakState(settings);
     // Only worth interrupting for when there's actually something to lose, the day
     // is nearly over, and grace won't cover it. Quiet hours already gate fire().

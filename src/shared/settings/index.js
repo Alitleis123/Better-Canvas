@@ -1384,7 +1384,17 @@
         row({ label: "On the page", hint: "A small card in the corner of Canvas.",
           control: C.switch({ ariaLabel: "Notifications on the page", get: () => n.inPage, set: put((x, v) => { x.inPage = v; }) }) }),
         row({ label: "Desktop notifications", hint: "Your browser asks for permission the first time.",
-          control: C.switch({ ariaLabel: "Desktop notifications", get: () => n.enabled, set: put((x, v) => { x.enabled = v; }) }) }),
+          control: C.switch({ ariaLabel: "Desktop notifications", get: () => n.enabled, set: (v) => {
+            store.set((x) => { x.notifications.enabled = v; });
+            // Ask from the click itself: Firefox ignores a permission request that
+            // isn't. Only a Canvas page can ask for Canvas's permission.
+            if (!v || !/^https?:$/.test(location.protocol) || !("Notification" in window) || Notification.permission === "granted") return;
+            Promise.resolve(Notification.requestPermission()).then((p) => {
+              if (p === "granted") return;
+              store.set((x) => { x.notifications.enabled = false; });
+              BC.toast && BC.toast.warn("Your browser blocked notifications for this site. Allow them in the site settings, then turn this on again.");
+            }).catch(() => {});
+          } }) }),
         row({ label: "Toolbar badge", hint: "How many items are due in the next 24 hours.",
           control: C.switch({ ariaLabel: "Toolbar badge", get: () => n.badgeCount, set: put((x, v) => { x.badgeCount = v; }) }) }),
       ]),
