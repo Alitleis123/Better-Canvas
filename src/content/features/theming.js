@@ -48,6 +48,8 @@
     /* Reduced motion */
     :root[data-bc-motion="0"] *, :root[data-bc-motion="0"] *::before, :root[data-bc-motion="0"] *::after {
       animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important;
+      /* One run, or an infinite spinner lands at a random angle every frame. */
+      animation-iteration-count: 1 !important;
     }
 
     /* Rounded UI off */
@@ -85,13 +87,16 @@
          :root { --bc-font-sans: ${font}; }`
       : "";
 
-    // The !important root font-size is for Canvas's own text; the custom
-    // properties are what let OUR components scale predictably alongside it.
-    const scaleRule = `:root, html body {
-      font-size: calc(14px * ${fontSize}) !important;
-      line-height: ${lineHeight} !important;
-      letter-spacing: ${letter}px !important;
-    }
+    // Canvas's own text is only overridden when a setting moves off its default.
+    // A fixed 14px root on every page shrank every rem-sized Canvas control and
+    // ignored the browser's font size setting. The scale is a percentage of it.
+    // The custom properties are what let OUR components scale alongside it.
+    const bodyText = [
+      lineHeight !== 1.5 ? `line-height: ${lineHeight} !important;` : "",
+      letter ? `letter-spacing: ${letter}px !important;` : "",
+    ].join(" ").trim();
+    const scaleRule = (fontSize !== 1 ? `:root { font-size: ${+(fontSize * 100).toFixed(2)}% !important; }\n` : "") +
+      (bodyText ? `:root, html body { ${bodyText} }\n` : "") + `
     :root {
       --bc-font-scale: ${fontSize};
       --bc-line-height: ${lineHeight};
