@@ -89,7 +89,7 @@ html.bc-dark ::placeholder { color: var(--bc-text-subtle, var(--bc-muted)) !impo
 html.bc-dark ::selection { background-color: var(--bc-accent); color: var(--bc-accent-contrast, #fff); }
 /* Canvas renders equations as black ink on a transparent image. */
 html.bc-dark img.equation_image { background-color: #fff !important; border-radius: 2px; padding: 1px 2px; }
-html.bc-dark :is(#content, #right-side, #breadcrumbs, .user_content, .ic-app-main-content, .ToDoSidebar) a[href]:not(.Button, .btn, [role="button"], [class*="baseButton"], .ic-DashboardCard__link, .ic-DashboardCard__action) {
+html.bc-dark :is(#content, #right-side, #breadcrumbs, .user_content, .ic-app-main-content, .ToDoSidebar) a[href]:not(.Button, .btn, [role="button"], [class*="baseButton"], .ic-DashboardCard__link, .ic-DashboardCard__action, [data-bc-dfg="k"]) {
   color: var(--bc-link) !important;
 }
 html.bc-dark .ic-Dashboard-header__layout { background-color: var(--bc-surface-1) !important; box-shadow: none !important; border-color: var(--bc-border) !important; }
@@ -116,6 +116,7 @@ html.bc-dark [data-bc-dhov]:hover { background-color: var(--bc-surface-hover, va
 html.bc-dark [data-bc-dfg="t"] { color: var(--bc-text) !important; }
 html.bc-dark [data-bc-dfg="m"] { color: var(--bc-muted) !important; }
 html.bc-dark [data-bc-dfg="k"] { color: #1f1f23 !important; }
+html.bc-dark a[data-bc-dfg="k"] { color: #1d4ed8 !important; }   /* still reads as a link */
 html.bc-dark [data-bc-dbd~="t"] { border-top-color: var(--bc-border) !important; }
 html.bc-dark [data-bc-dbd~="r"] { border-right-color: var(--bc-border) !important; }
 html.bc-dark [data-bc-dbd~="b"] { border-bottom-color: var(--bc-border) !important; }
@@ -187,13 +188,17 @@ html.bc-dark [data-bc-dbd~="x"] { text-shadow: none !important; }
           r.kind = "tint";
           r.hue = bucket(bg);
         }
-      } else r.surf = L < MID ? "dark" : "light";
+      } else {
+        r.surf = L < MID ? "dark" : "light";
+        r.chip = L >= MID;   // a solid mid-tone colour we leave as it is
+      }
     } else if (img) {
       r.own = true;
       r.surf = "light";
     }
     const fg = parse(cs.color);
     if (fg && fg.a >= 0.4 && lum(fg) < FG_DARK) r.fgDark = fg;
+    if (fg && fg.a >= 0.4 && lum(fg) > 0.5) r.fgLight = true;
     const sides = sidesOf(cs);
     if (sides.some((x) => x.light)) r.sides = sides;
     // Legacy headers emboss their text with a white shadow, which blurs it once
@@ -225,6 +230,21 @@ html.bc-dark [data-bc-dbd~="x"] { text-shadow: none !important; }
     return "1";
   }
 
+  // Whether the nearest ancestor with a background is a solid mid-tone colour that
+  // stays light. Photos and images don't count: text over them is left alone.
+  function insideChip(el, batch) {
+    for (let p = el.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+      const b = batch.get(p);
+      if (b) { if (b.own) return !!b.chip; continue; }
+      const cs = getComputedStyle(p);
+      if (cs.backgroundImage && cs.backgroundImage !== "none") return false;
+      const bg = parse(cs.backgroundColor);
+      if (!bg || bg.a < 0.35) continue;
+      return !p.hasAttribute("data-bc-dbg") && lum(bg) >= MID && lum(bg) < BG_LIGHT;
+    }
+    return false;
+  }
+
   function decide(r, tokens, batch) {
     const out = { dbg: null, dfg: null, dbd: null };
     if (r.el === document.body || r.el === document.documentElement) { r.surf = "1"; return out; }
@@ -244,12 +264,16 @@ html.bc-dark [data-bc-dbd~="x"] { text-shadow: none !important; }
     const surf = r.surf || outer(r.el, tokens, batch);
     const darkAfter = surf !== "light";
 
+    // A solid mid-tone background we leave light (a pasted table colour, a pale
+    // chip) kept the page's light text: light text on #ffd966 measured 1.24:1.
+    // The chip pins dark text, and so does light text inside one, links included.
+    if (!darkAfter && ((r.own && r.chip) || (r.fgLight && insideChip(r.el, batch)))) out.dfg = "k";
     if (r.fgDark) {
       if (!darkAfter) {
         // Dark text on a chip we leave light. It may only be dark because it
         // inherits Canvas's colour from an ancestor we're about to lighten, so the
         // chip pins it.
-        if (r.own) out.dfg = "k";
+        if (r.own || r.el.tagName === "A") out.dfg = "k";
       } else if (surf !== "dark") {
         const c = r.fgDark;
         out.dfg = spread(c) < 40 ? (lum(c) < 0.05 ? "t" : "m") : "h" + bucket(c);

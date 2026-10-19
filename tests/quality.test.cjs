@@ -457,3 +457,22 @@ test("review round 2B: syllabus dates after 'is', paragraphs in cells, and focus
     assert.equal(doc.activeElement.getAttribute("aria-label"), "Done c");
   } finally { page.dom.window.close(); }
 });
+
+test("dark mode pins dark text on mid-tone backgrounds it leaves light", () => {
+  const { domContext, load: loadDom } = require("./audit-helpers.cjs");
+  const { dom, context } = domContext('<style>body { color: rgb(230, 230, 235); } a { color: rgb(150, 190, 255); }</style>' +
+    '<div id="content"><table><tr><td id="cell" style="background-color: rgb(255, 217, 102)">Due <span id="inner">Friday</span> <a id="link" href="/x">rubric</a></td>' +
+    '<td id="photo" style="background-image: url(x.png)"><span id="over">caption</span></td><td id="plain"><span id="plainText">normal</span></td></tr></table></div>');
+  try {
+    loadDom(context, "src/content/core/darkengine.js");
+    dom.window.document.documentElement.classList.add("bc-dark");
+    context.BC.darkEngine.start();
+    const tag = (id) => dom.window.document.getElementById(id).getAttribute("data-bc-dfg");
+    assert.equal(tag("cell"), "k");
+    assert.equal(tag("inner"), "k");
+    assert.equal(tag("link"), "k");
+    assert.equal(tag("over"), null, "text over an image is left alone");
+    assert.equal(tag("plainText"), null, "light text on the dark page is fine");
+    context.BC.darkEngine.stop();
+  } finally { dom.window.close(); }
+});
