@@ -45,7 +45,11 @@
     return bar;
   }
 
+  // A failed request (signed out, offline) waits a minute. Without this, every
+  // page update fetched the modules again.
+  let failedAt = 0;
   function render(courseId) {
+    if (Date.now() - failedAt < 60000) return;
     BC.api.courseModules(courseId).then((mods) => {
       let done = 0, total = 0;
       for (const m of mods) {
@@ -72,7 +76,7 @@
       const fill = summary.querySelector(".bc-mod-fill");
       fill.style.width = pct + "%";
       fill.classList.toggle("done", pct >= 100);
-    }).catch((e) => BC.diag.push("modules", e));
+    }).catch((e) => { failedAt = Date.now(); BC.diag.push("modules", e); });
   }
 
   function apply(settings, ctx) {

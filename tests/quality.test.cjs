@@ -606,3 +606,15 @@ test("theme rotation loads the photo presets before rotating to one", async () =
   assert.equal(draft.applied, "photos-art"); assert.equal(loads, 1);
   assert.equal(local.lastRotation.themeId, "photos-art");
 });
+
+test("found on real Canvas: a failed module fetch waits instead of repeating on every page update", async () => {
+  let feature, calls = 0;
+  const BC = { features: {}, registry: { register: (f) => { feature = f; } }, diag: { push() {} },
+    injector: { setStyle() {}, removeNode() {} }, api: { courseModules: () => { calls++; return Promise.reject(Error("Canvas API 401")); } } };
+  const context = vm.createContext({ console, document: { querySelectorAll: () => [], getElementById: () => null } });
+  context.globalThis = context; context.BC = BC;
+  load(context, "src/content/features/modules.js");
+  const settings = { modules: { progressBars: true } }, ctx = { page: "modules", courseId: "142" };
+  for (let i = 0; i < 5; i++) { feature.apply(settings, ctx); await new Promise((r) => setImmediate(r)); }
+  assert.equal(calls, 1, "page updates after a failure don't refetch");
+});
