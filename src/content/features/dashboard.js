@@ -89,6 +89,9 @@
       /* Canvas squeezes its title against "Switch to new dashboard view" once the
          page is narrow (e.g. with our settings panel open). */
       .ic-Dashboard-header__layout { gap: var(--bc-space-3, 12px); flex-wrap: wrap; }
+      /* List View and Recent Activity hide the card container inline. The layouts
+         below set display with !important, so keep Canvas's hide winning. */
+      #DashboardCard_Container[style*="display: none"] { display: none !important; }
     `;
     // Canvas gives each card a fixed 262px width and a side margin, and offsets the
     // wrapper by a matching negative margin so the first column lines up with the
@@ -587,10 +590,6 @@
       if (d.showSparkline)     overlaySparkline(card, id);
     }
     if (d.courseSearch) setSearchCount(shown, cardsById.size);
-
-    // Ensure grid uses order — apply flex/grid ordering
-    const container = document.getElementById("DashboardCard_Container") || document.querySelector(".ic-DashboardCard__box");
-    if (container && container.style.display) container.style.display = ""; // let CSS layoutCss govern
 
     // Each loader feeds more than one feature: the GPA card reads the scores, and
     // the due-count badges read the planner counts. Gating them on the inline-grade
