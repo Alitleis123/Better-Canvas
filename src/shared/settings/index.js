@@ -354,7 +354,7 @@
           options: [{ value: "default", label: "Default" }, { value: "bold", label: "Bold" }, { value: "high-contrast", label: "High contrast" }] }) }),
         row({ label: "Cursor", control: C.segmented({ ariaLabel: "Cursor", get: () => t.cursor, set: put((x, v) => { x.cursor = v; }),
           options: [{ value: "default", label: "Default" }, { value: "large", label: "Large" }, { value: "precise", label: "Crosshair" }] }) }),
-        row({ label: "Color-blind filter", control: C.select({ ariaLabel: "Color-blind filter", get: () => t.colorBlind, set: put((x, v) => { x.colorBlind = v; }),
+        row({ label: "Color-blind filter", hint: "Shifts colors you may confuse toward ones you can tell apart.", control: C.select({ ariaLabel: "Color-blind filter", get: () => t.colorBlind, set: put((x, v) => { x.colorBlind = v; }),
           options: [{ value: "off", label: "Off" }, { value: "protanopia", label: "Protanopia" }, { value: "deuteranopia", label: "Deuteranopia" }, { value: "tritanopia", label: "Tritanopia" }] }) }),
         row({ label: "High contrast", control: C.switch({ ariaLabel: "High contrast", get: () => t.highContrast, set: put((x, v) => { x.highContrast = v; }) }) }),
         row({ label: "Reduce motion", hint: "Turns off animations even if your system allows them.",

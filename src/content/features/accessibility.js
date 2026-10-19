@@ -80,10 +80,15 @@
     svg.setAttribute("aria-hidden", "true");
     svg.setAttribute("width", "0"); svg.setAttribute("height", "0");
     svg.style.position = "absolute";
+    // Correction, not simulation. The old matrices showed the page as a colour-blind
+    // reader already sees it, which helps nobody. These are I + E(I - S): S is the
+    // simulation matrix and E moves the lost difference into channels the reader
+    // can see (red error into green and blue; blue error into red and green).
+    // Rows sum to 1, so white and greys stay put.
     svg.innerHTML = `
-      <filter id="bc-cb-protanopia"><feColorMatrix type="matrix" values="0.567 0.433 0 0 0  0.558 0.442 0 0 0  0 0.242 0.758 0 0  0 0 0 1 0"/></filter>
-      <filter id="bc-cb-deuteranopia"><feColorMatrix type="matrix" values="0.625 0.375 0 0 0  0.7 0.3 0 0 0  0 0.3 0.7 0 0  0 0 0 1 0"/></filter>
-      <filter id="bc-cb-tritanopia"><feColorMatrix type="matrix" values="0.95 0.05 0 0 0  0 0.433 0.567 0 0  0 0.475 0.525 0 0  0 0 0 1 0"/></filter>
+      <filter id="bc-cb-protanopia" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="1 0 0 0 0  -0.255 1.255 0 0 0  0.303 -0.545 1.242 0 0  0 0 0 1 0"/></filter>
+      <filter id="bc-cb-deuteranopia" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="1 0 0 0 0  -0.438 1.438 0 0 0  0.262 -0.563 1.3 0 0  0 0 0 1 0"/></filter>
+      <filter id="bc-cb-tritanopia" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="1.05 -0.382 0.332 0 0  0 1.234 -0.234 0 0  0 0 1 0 0  0 0 0 1 0"/></filter>
     `;
     document.documentElement.appendChild(svg);
   }
