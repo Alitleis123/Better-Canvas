@@ -116,10 +116,13 @@
         ));
         return;
       }
-      list.innerHTML = items.slice(0, 200).map((f) => `
+      // f.url is the download link, which opened a blank tab and downloaded the
+      // file. The course file page previews it and has its own download button.
+      const failedNote = cache.failed ? `<div class="bc-file">Files from ${cache.failed} course${cache.failed === 1 ? "" : "s"} couldn't load. Refresh to try again.</div>` : "";
+      list.innerHTML = failedNote + items.slice(0, 200).map((f) => `
         <div class="bc-file">
           <span class="bc-file-ic">${iconFor(f)}</span>
-          <a href="${BC.util.escapeHtml(f.url || f.html_url || "#")}" target="_blank" rel="noopener" title="${BC.util.escapeHtml(f.courseName || "")}">${BC.util.escapeHtml(f.display_name || "")}</a>
+          <a href="${BC.util.escapeHtml(f.courseId && f.id ? "/courses/" + f.courseId + "/files/" + f.id : f.url || f.html_url || "#")}" target="_blank" rel="noopener" title="${BC.util.escapeHtml(f.courseName || "")}">${BC.util.escapeHtml(f.display_name || "")}</a>
           <span class="bc-file-star ${stars.has(String(f.id)) ? "on" : ""}" data-id="${BC.util.escapeHtml(String(f.id))}" title="Star" role="button" tabindex="0" aria-label="Star ${BC.util.escapeHtml(f.display_name || "file")}" aria-pressed="${stars.has(String(f.id)) ? "true" : "false"}">★</span>
         </div>
       `).join("");
