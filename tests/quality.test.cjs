@@ -584,3 +584,25 @@ test("the settings workspace loads on first open, and a failed load says so", as
     assert.equal(sent, 2);
   } finally { page.dom.window.close(); }
 });
+
+test("theme rotation loads the photo presets before rotating to one", async () => {
+  let feature, applies = 0, loads = 0;
+  const local = {};
+  const BC = { features: {}, registry: { register: (f) => { feature = f; } }, PRESET_THEMES: [], toast: { info() {} }, diag: { push() {} },
+    requestApply: () => { applies++; },
+    loadSettingsUI: async () => { loads++; BC.PRESET_THEMES.push({ id: "photos-art", name: "Art", settings: {} }); BC.SettingsUI = {}; },
+    applyTheme: (d, theme) => { d.applied = theme.id; },
+    storage: { local, update: async (fn) => fn(draft), updateLocal: async (fn) => fn(local) } };
+  const settings = { theming: { rotation: { enabled: true, mode: "daily", themeIds: ["photos-art"] } }, customThemes: [] };
+  const draft = JSON.parse(JSON.stringify(settings));
+  const context = vm.createContext({ console, globalThis: null });
+  context.globalThis = context; context.BC = BC;
+  load(context, "src/content/features/rotation.js");
+  feature.apply(settings);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(loads, 1); assert.equal(applies, 1); assert.equal(draft.applied, undefined);
+  feature.apply(settings);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(draft.applied, "photos-art"); assert.equal(loads, 1);
+  assert.equal(local.lastRotation.themeId, "photos-art");
+});
