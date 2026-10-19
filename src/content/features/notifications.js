@@ -275,9 +275,9 @@
     }
 
     bag.once("arm", () => {
-      // Leaving this page may leave no Canvas tab to keep the count current.
+      // Leaving this page may leave no Canvas tab to keep the count current. Sent
+      // even when this page never showed a count: another tab's may still be up.
       bag.listen(window, "pagehide", () => {
-        if (!lastBadge) return;
         try { chrome.runtime.sendMessage({ type: "bc:leftCanvas" }, () => void chrome.runtime.lastError); } catch (_) {}
       });
       // Back/forward cache: the worker may have cleared the count while this page was away.

@@ -445,6 +445,23 @@ test("quiz drafts belong to one attempt and submitting clears every page of the 
   } finally { page.dom.window.close(); }
 });
 
+test("leaving a Canvas page always asks the worker to check the toolbar count", () => {
+  const { domContext, load: loadDom } = require("./audit-helpers.cjs");
+  const sent = [];
+  const page = domContext("", { chrome: { runtime: { id: "t", sendMessage: (msg, cb) => { sent.push(msg.type); cb && cb(); } } } });
+  try {
+    loadDom(page.context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/lifecycle.js");
+    const BC = page.context.BC, never = () => new Promise(() => {});
+    Object.assign(BC, { alarms: { every() {}, clear() {} }, storage: { current: BC.cloneDefaults(), local: {}, updateLocal: never },
+      api: { plannerItems: never, coursesWithScores: never, courseAnnouncements: never } });
+    loadDom(page.context, "src/content/features/notifications.js");
+    BC.features.notifications.apply(BC.storage.current);
+    sent.length = 0;
+    page.dom.window.dispatchEvent(new page.dom.window.Event("pagehide"));
+    assert.deepEqual(sent, ["bc:leftCanvas"], "even before this page has shown a count");
+  } finally { page.dom.window.close(); }
+});
+
 test("the toolbar count clears once no Canvas tab is left", async () => {
   const listeners = {}, badge = [];
   let open = [{ id: 1 }];
