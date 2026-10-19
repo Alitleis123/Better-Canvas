@@ -367,3 +367,28 @@ test("study time counts active focused seconds and the background adds them", as
     assert.equal(sent.length, 1);
   } finally { dom.window.close(); }
 });
+
+test("quiz drafts belong to one attempt and submitting clears every page of the quiz", async () => {
+  const { database } = require("./storage-harness.cjs");
+  const { domContext, load: loadDom, settle } = require("./audit-helpers.cjs");
+  const path = "/courses/1/quizzes/2/take";
+  const old = { savedAt: Date.now(), answers: { answer: "attempt one" } };
+  const db = database({ bcLocal: { quizDrafts: { [path + "#attempt-1"]: old, "/courses/1/quizzes/2/take/questions/5#attempt-1": old, "/courses/1/quizzes/9/take": old } } });
+  const client = db.client();
+  const page = domContext('<div id="content"><form id="submit_quiz_form"><input type="hidden" name="attempt" value="2"><div id="questions"><input name="answer" type="text"></div></form></div>', { chrome: client.chrome });
+  try {
+    page.dom.reconfigure({ url: "http://bc-test.instructure.com" + path });
+    loadDom(page.context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/lifecycle.js", "src/content/core/storage.js");
+    const BC = page.context.BC, doc = page.dom.window.document;
+    await BC.storage.load(); await BC.storage.loadLocal();
+    BC.injector = { setStyle() {}, removeNode(id) { doc.querySelector('[data-bc-node="' + id + '"]')?.remove(); },
+      ensureNode(id, _host, factory) { const node = doc.querySelector('[data-bc-node="' + id + '"]') || factory(); node.dataset.bcNode = id; return node; } };
+    loadDom(page.context, "src/content/features/quizsaver.js");
+    const settings = BC.cloneDefaults(); settings.productivity.quizDraftSaver = true;
+    BC.features.quizsaver.apply(settings, { path });
+    assert.equal(doc.querySelector(".bc-quiz-banner"), null, "attempt 1's answers aren't offered on attempt 2");
+    doc.getElementById("submit_quiz_form").dispatchEvent(new page.dom.window.Event("submit", { bubbles: true, cancelable: true }));
+    await BC.storage.updateLocal(() => {}); await settle();
+    assert.deepEqual(Object.keys(db.data.bcLocal.quizDrafts), ["/courses/1/quizzes/9/take"]);
+  } finally { page.dom.window.close(); }
+});

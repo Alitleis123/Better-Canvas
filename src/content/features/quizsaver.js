@@ -41,8 +41,23 @@
     return /^\/courses\/\d+\/quizzes\/\d+\/take/.test(path);
   }
 
+  // Keyed by attempt as well as page. A timed auto-submit never clicks Submit, so
+  // the next attempt used to open with a banner offering the old answers.
   function draftKey() {
-    return location.pathname.replace(/\/$/, "");
+    const attempt = document.querySelector('#submit_quiz_form input[name="attempt"], #submit_quiz_form [name="attempt"]');
+    const path = location.pathname.replace(/\/$/, "");
+    return attempt && attempt.value ? path + "#attempt-" + attempt.value : path;
+  }
+  // Every page of a one-question-at-a-time quiz has its own draft.
+  const quizRoot = () => (location.pathname.match(/^\/courses\/\d+\/quizzes\/\d+/) || [""])[0];
+
+  function deleteQuizDrafts() {
+    const root = quizRoot();
+    clearTimeout(saveTimer); saveTimer = null;
+    if (!root) return Promise.resolve();
+    return BC.storage.updateLocal((d) => {
+      for (const k of Object.keys(d.quizDrafts || {})) if (k === root || k.startsWith(root + "/") || k.startsWith(root + "#")) delete d.quizDrafts[k];
+    });
   }
 
   function collectInputs() {
@@ -199,9 +214,12 @@
       const inQuestions = (t) => t && t.closest && t.closest("#questions");
       bag.listen(document, "change", (e) => { if (inQuestions(e.target)) debouncedSave(); }, true);
       bag.listen(document, "input", (e) => { if (inQuestions(e.target)) debouncedSave(); }, true);
-      // Submitting the quiz makes the draft obsolete.
+      // Submitting the quiz makes every draft of it obsolete, on every page.
       bag.listen(document, "click", (e) => {
-        if (e.target && e.target.closest && e.target.closest("#submit_quiz_button")) deleteDraft(draftKey()).catch(() => {});
+        if (e.target && e.target.closest && e.target.closest("#submit_quiz_button")) deleteQuizDrafts().catch(() => {});
+      }, true);
+      bag.listen(document, "submit", (e) => {
+        if (e.target && e.target.id === "submit_quiz_form") deleteQuizDrafts().catch(() => {});
       }, true);
     });
 
