@@ -243,16 +243,27 @@
     // Hand over from a copy left behind by an update, then listen for our own
     // successor. Events on window reach every content-script world.
     try { window.dispatchEvent(new CustomEvent("bc:retire")); } catch (_) {}
+    // The dispatch is synchronous, so anything still on the page is a dead copy's:
+    // Firefox stops old content scripts on update without letting them answer. Its
+    // settings button stayed and did nothing, and blocked ours from being added.
+    for (const n of document.querySelectorAll("[data-bc-node], style[data-better-canvas]")) n.remove();
     window.addEventListener("bc:retire", retire);
     // Tells the service worker this page's copy knows how to hand over.
     document.documentElement.setAttribute("data-bc-handover", "");
-    Promise.all([BC.storage.load(), BC.storage.loadLocal()]).then(([settings]) => {
+    const begin = (settings) => {
       let tries = 0;
       const tryStart = () => {
         if (BC.detect.isCanvas()) return start(settings);
         if (tries++ < 24) setTimeout(tryStart, 250);
       };
       BC.util.whenBody(tryStart);
+    };
+    // A failed load or migration used to leave the page with no features and no
+    // word why. Run on defaults for this page and say so.
+    Promise.all([BC.storage.load(), BC.storage.loadLocal()]).then(([settings]) => begin(settings), (error) => {
+      BC.diag.push("boot", error);
+      begin(BC.cloneDefaults());
+      BC.util.whenBody(() => BC.toast && BC.toast.error("Better Canvas couldn't read its settings, so this page uses the defaults. Refresh to try again."));
     });
   }
 
