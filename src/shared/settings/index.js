@@ -163,7 +163,7 @@
         b.onclick = () => { search.input.value = ""; showTab(id); }; subnav.appendChild(b); navBtns.set(id, b);
       }
       const workspaceTitle = el("h1", { text: "Edit Canvas" });
-      const workspaceDesc = el("p", { text: "Make room for your kind of focus." });
+      const workspaceDesc = el("p");
       const preview = BC.StudioPreview(), draftBar = el("div", { class: "bcs-draft-bar", hidden: true });
       const previewColumn = el("div", { class: "bcs-preview-column" }, [preview.root, draftBar]);
       const workspaceBody = el("div", { class: "bcs-workspace-body" }, [previewColumn, main]);
@@ -209,7 +209,7 @@
         workspaceBody.classList.toggle("is-editing", editing);
         previewColumn.hidden = subnav.hidden = !editing;
         workspaceTitle.textContent = editing ? "Edit Canvas" : tab.label;
-        workspaceDesc.textContent = editing ? "Make room for your kind of focus." : tab.description;
+        workspaceDesc.textContent = tab.description;
         for (const [tid, b] of navBtns) {
           if (tid === active || (tid === "edit" && editing)) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
         }
@@ -306,7 +306,7 @@
     const put = (fn) => (v) => store.set((x) => fn(x.theming, v));
     return [
       sec("Mode", [
-        row({ label: "Theme", hint: "Auto follows your system. Schedule switches at the times below.",
+        row({ label: "Dark mode", hint: "Auto follows your system. Schedule switches at the times below.",
           control: C.segmented({ ariaLabel: "Theme", get: () => t.darkMode, set: put((x, v) => { x.darkMode = v; }),
             options: [{ value: "off", label: "Light", icon: "sun" }, { value: "on", label: "Dark", icon: "moon" },
                       { value: "auto", label: "Auto", icon: "monitor" }, { value: "scheduled", label: "Schedule", icon: "clock" }] }) }),
@@ -589,7 +589,7 @@
         const style = theme.settings.theming.experience;
         for (let i = 0; theme.settings.dashboard.themeImages.length < 48; i++) theme.settings.dashboard.themeImages.push(BC.sceneArt(style, i));
         applyOnline(theme);
-        status.textContent = "Applied " + Math.min(64, collection.length) + " photos/artworks" + (collection.length < 48 ? " with matching illustrations for the remaining courses." : " with wallpaper and coordinated surfaces.");
+        status.textContent = "Previewing " + Math.min(64, collection.length) + " images" + (collection.length < 48 ? ", with matching illustrations for the remaining courses" : "") + ". Press Apply theme to keep it.";
       } catch (e) { if (seq === generation) status.textContent = e.message; }
       finally { if (seq === generation) grid.removeAttribute("aria-busy"); }
     }
@@ -650,7 +650,7 @@
         try {
           const j = JSON.parse(txt);
           const settings = j && typeof j === "object" ? themeOnly(j.settings) : null;
-          if (!settings) throw new Error("bad");
+          if (!settings) throw new Error("this file has no theme in it");
           const saved = { id: BC.util.uuid(), name: String(j.name || "Imported theme").slice(0, 80), settings };
           store.set((x) => { x.customThemes = (x.customThemes || []).concat([saved]); });
           store.applyPreset(saved);
@@ -1258,7 +1258,7 @@
         row({ label: "Your links", hint: "Extra links in every course's menu.", stacked: true,
           control: C.links({ get: () => n.course.customLinks, set: put((x, v) => { x.course.customLinks = v; }) }) }),
       ], { description: "Tabs from the courses you've opened. Hiding or moving one applies in every course that has it." }),
-      sec("Page chrome", [
+      sec("Page layout", [
         row({ label: "Breadcrumbs", control: C.segmented({ ariaLabel: "Breadcrumbs", get: () => n.breadcrumbs, set: put((x, v) => { x.breadcrumbs = v; }),
           options: [{ value: "default", label: "Default" }, { value: "compact", label: "Compact" }, { value: "hidden", label: "Hidden" }] }) }),
         row({ label: "Course switcher", hint: "A row of course tabs at the top of every page.",
@@ -1352,12 +1352,12 @@
         sw("Sticky notes", "stickyNotes", "Notes you can pin to any Canvas page."),
       ]),
       sec("Quick actions", [
-        sw("Quick actions button", "quickActions", "A small round button in the bottom-right corner of every page."),
+        sw("Tools menu", "quickActions", "A Tools item in Canvas's left menu, or a round button in the corner when the menu is hidden."),
         row({ label: "Copy link", enabledWhen: (st) => st.productivity.quickActions !== false,
           control: C.switch({ ariaLabel: "Copy link", get: () => p.copyUrlButton, set: (v) => store.set((x) => { x.productivity.copyUrlButton = v; }) }) }),
         row({ label: "Print page", enabledWhen: (st) => st.productivity.quickActions !== false,
           control: C.switch({ ariaLabel: "Print page", get: () => p.printFriendly, set: (v) => store.set((x) => { x.productivity.printFriendly = v; }) }) }),
-      ], { description: "Focus mode, a new sticky note and the command palette are always in the menu." }),
+      ], { description: "The Tools menu also has focus mode, the command palette and, with sticky notes on, a new note." }),
       sec("Modules", [
         swOf("modules", "Progress bars", "progressBars", "Completion for each module and the whole course."),
       ]),

@@ -6,9 +6,9 @@
 
   const STEPS = [
     { title: "Welcome to Better Canvas", body: "Settings, notes and drafts stay on this device. Image searches send your query to api.openverse.org. Photo themes and previews contact third-party image hosts. Free, no telemetry." },
-    { title: "Dark mode + themes", body: "Head to Appearance for 12+ built-in themes, or write your own custom CSS." },
+    { title: "Dark mode + themes", body: "Open Edit Canvas > Themes for " + ((BC.PRESET_THEMES || []).length || "dozens of") + " themes, or Background for your own CSS." },
     { title: "Planner widget", body: "Try the To Do → Planner widget for a weekly ring, streaks, Pomodoro, and grouped views." },
-    { title: "Command palette", body: "Press " + BC.util.modLabel() + "+K to jump anywhere: any tab, any course, any setting." },
+    { title: "Command palette", body: "Press " + BC.util.modLabel() + "+K to jump anywhere: any tab, any course, or a command." },
     { title: "Open settings any time", body: "Click Better Canvas in Canvas's left navigation, or use " + BC.util.modLabel() + "+Shift+S." },
   ];
 
