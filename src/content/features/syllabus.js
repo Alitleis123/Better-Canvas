@@ -53,7 +53,7 @@
     }
     m = text.match(RE_NUM);
     // "worth 1/2" and "1/3 of the grade" are fractions, not dates.
-    if (m && (/\b(worth|weighted|counts?|is)\s*$/i.test(text.slice(0, m.index)) || /^\s*of\b/i.test(text.slice(m.index + m[0].length)))) m = null;
+    if (m && (/\b(worth|weighted|counts?)\s*$/i.test(text.slice(0, m.index)) || /^\s*of\b/i.test(text.slice(m.index + m[0].length)))) m = null;
     if (m) {
       const mo = +m[1], day = +m[2];
       if (mo < 1 || mo > 12 || day < 1 || day > 31) return null;
@@ -85,7 +85,7 @@
         if (!date) continue;
         // In a schedule table the date sits in one cell and the topic in the next,
         // so the whole row is the title.
-        const row = el.tagName === "TD" && el.closest("tr");
+        const cell = el.closest("td"), row = cell && cell.closest("tr");
         const full = row ? [...row.children].map((c) => c.textContent.replace(/\s+/g, " ").trim()).filter(Boolean).join(" · ") : text;
         const title = full.length > 90 ? full.slice(0, 87) + "…" : full;
         const key = title + "|" + date.toDateString();
