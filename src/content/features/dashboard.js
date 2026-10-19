@@ -125,7 +125,11 @@
     // action icons.
     if (d.layout === "compact") css += `
       ${CARD} .ic-DashboardCard__header > .ic-DashboardCard__header_hero,
-      ${CARD} .ic-DashboardCard__header_image { height: 48px !important; }`;
+      ${CARD} .ic-DashboardCard__header_image { height: 48px !important; }
+      /* 48px holds one row of pills: grade on the left, due count on the right. */
+      ${CARD} .bc-inline-grade { top: 13px !important; }
+      ${CARD} .bc-badges { top: 13px !important; bottom: auto !important; left: auto !important; right: 10px !important; }
+      ${CARD} .bc-card-spark { display: none !important; }`;
     // CSS columns only apply to block containers; Canvas's card wrapper is flex, so
     // the old rule was ignored and masonry looked identical to the default.
     if (d.layout === "masonry") css += `
