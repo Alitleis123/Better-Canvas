@@ -817,20 +817,29 @@
   }
 
   // Enough to find "the same control" after a rebuild: its row and its label.
+  const FOCUSABLE = "button, input, select, a[href], [tabindex]";
+  // A control inside the closed Done section, or anything hidden, can't take focus.
+  const shown = (n) => !n.closest("[hidden]") && !(n.closest("details:not([open])") && !n.closest("summary"));
   function focusTarget(container, node) {
     const row = node.closest("[data-key]");
-    const keys = [...container.querySelectorAll("[data-key]")].map((n) => n.dataset.key);
-    return { key: row && row.dataset.key, next: row ? keys.slice(keys.indexOf(row.dataset.key) + 1) : [],
+    const keys = [...container.querySelectorAll("[data-key]")].filter(shown).map((n) => n.dataset.key);
+    // The control's place in its row survives a label change (Star becomes Unstar).
+    const index = row ? [...row.querySelectorAll(FOCUSABLE)].indexOf(node) : -1;
+    return { key: row && row.dataset.key, next: row ? keys.slice(keys.indexOf(row.dataset.key) + 1) : [], index,
       label: node.getAttribute("aria-label"), text: node.textContent, tag: node.tagName };
   }
   function restoreFocus(container, had) {
     const same = (n) => n.tagName === had.tag && (had.label ? n.getAttribute("aria-label") === had.label : n.textContent === had.text);
-    const find = (scope) => scope && [...scope.querySelectorAll("button, input, select, a[href], [tabindex]")].find(same);
-    const rowOf = (key) => key && [...container.querySelectorAll("[data-key]")].find((n) => n.dataset.key === key);
+    const controls = (scope) => [...scope.querySelectorAll(FOCUSABLE)].filter(shown);
+    const rowOf = (key) => key && [...container.querySelectorAll("[data-key]")].find((n) => n.dataset.key === key && shown(n));
     const row = rowOf(had.key);
-    let target = row ? find(row) || row.querySelector("input, button") : !had.key && find(container);
+    let target = null;
+    if (row) {
+      const list = controls(row), atIndex = [...row.querySelectorAll(FOCUSABLE)][had.index];
+      target = (atIndex && atIndex.tagName === had.tag && shown(atIndex) ? atIndex : null) || list.find(same) || list[0] || null;
+    } else if (!had.key) target = controls(container).find(same) || null;
     // The row left the view (checked off with completed hidden): go to the next one.
-    if (!target && had.key) for (const key of had.next) { const r = rowOf(key); if (r) { target = r.querySelector("input, button"); break; } }
+    if (!target && had.key) for (const key of had.next) { const r = rowOf(key); if (r) { target = controls(r)[0] || null; if (target) break; } }
     if (target) target.focus({ preventScroll: true });
   }
 
@@ -2141,7 +2150,18 @@
       return;
     }
     if (ensureMount()) loadAndRender(settings);
-    if (!clockTimer) clockTimer = BC.lifecycle.bag("todo").interval(() => { if (!document.hidden) rerender(); }, 60000);
+    if (!clockTimer) {
+      // Each minute redraws due labels. After midnight the window itself moves,
+      // so the new day is fetched rather than yesterday's redrawn.
+      let day = BC.dt.ymd(new Date());
+      const tick = () => {
+        if (document.hidden) return;
+        const now = BC.dt.ymd(new Date());
+        if (now !== day) { day = now; loadAndRender(BC.storage.current); } else rerender();
+      };
+      clockTimer = BC.lifecycle.bag("todo").interval(tick, 60000);
+      BC.lifecycle.bag("todo").listen(document, "visibilitychange", tick);
+    }
   }
   let clockTimer = null;
 

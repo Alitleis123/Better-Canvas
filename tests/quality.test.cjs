@@ -408,3 +408,34 @@ test("review round 1: loose version files are refused and undo bursts stop at hi
   store.undo();
   assert.equal(store.get().cosmetics.customCss, "a");
 });
+
+test("review round 2B: syllabus dates after 'is', paragraphs in cells, and focus that skips hidden rows", async () => {
+  const { domContext, load: loadDom } = require("./audit-helpers.cjs");
+  const { dom, context } = domContext('<div id="course_syllabus"><p>The exam is 10/25</p>' +
+    "<table><tr><td><p>Oct 25</p></td><td>Lab 1</td></tr><tr><td><p>Oct 25</p></td><td>Lab 2</td></tr></table></div>");
+  try {
+    loadDom(context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/datetime.js");
+    context.BC.registry = { register() {} };
+    vm.runInContext(fs.readFileSync(path.join(root, "src/content/features/syllabus.js"), "utf8")
+      .replace("  BC.registry.register(", "  BC.testCandidates = candidates;\n  BC.registry.register("), context);
+    assert.deepEqual(copy(context.BC.testCandidates().map((f) => f.title)), ["The exam is 10/25", "Oct 25 · Lab 1", "Oct 25 · Lab 2"]);
+  } finally { dom.window.close(); }
+
+  const { BC, page } = await plannerContext();
+  try {
+    const doc = page.dom.window.document;
+    const row = (k, star) => `<li data-key="${k}"><input type="checkbox" aria-label="Done ${k}"><button aria-label="${star ? "Unstar" : "Star"} ${k}">*</button></li>`;
+    const container = doc.createElement("div"); doc.body.append(container);
+    container.innerHTML = row("a") + row("b") + row("c");
+    container.querySelector('[aria-label="Star b"]').focus();
+    let had = BC.test.focusTarget(container, doc.activeElement);
+    container.innerHTML = row("a") + row("b", true) + row("c");
+    BC.test.restoreFocus(container, had);
+    assert.equal(doc.activeElement.getAttribute("aria-label"), "Unstar b");
+    container.querySelector('[aria-label="Done b"]').focus();
+    had = BC.test.focusTarget(container, doc.activeElement);
+    container.innerHTML = row("a") + row("c") + '<details><summary>Done</summary><ul>' + row("b") + "</ul></details>";
+    BC.test.restoreFocus(container, had);
+    assert.equal(doc.activeElement.getAttribute("aria-label"), "Done c");
+  } finally { page.dom.window.close(); }
+});
