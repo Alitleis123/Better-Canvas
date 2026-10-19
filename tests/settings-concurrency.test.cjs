@@ -94,7 +94,8 @@ for (const name of ["studio", "options"]) {
         return send(message, callback);
       };
       a.store.set((d) => { d.dashboard.cardRadius = 12; });
-      for (let i = 0; i < 100 && !release; i++) await settle();
+      // The commit follows the read's SHA-256, which runs on the thread pool, so wait in real time.
+      for (let i = 0; i < 100 && !release; i++) await new Promise((resolve) => setTimeout(resolve, 5));
       assert.ok(release);
       a.store.set((d) => { d.dashboard.cardRadius = 8; });
       // Let the production 220 ms trailing throttle queue the reversal.
