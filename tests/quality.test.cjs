@@ -405,9 +405,18 @@ test("quiz drafts belong to one attempt and submitting clears every page of the 
     await tick(); await BC.storage.updateLocal(() => {}); await settle();
     assert.equal(Object.keys(db.data.bcLocal.quizDrafts).length, 3);
     form.removeEventListener("submit", cancel);
+    const sent = [], send = client.chrome.runtime.sendMessage;
+    client.chrome.runtime.sendMessage = (msg, cb) => { sent.push(msg.type); return send(msg, cb); };
     form.dispatchEvent(new page.dom.window.Event("submit", { bubbles: true, cancelable: true }));
-    await tick(); await BC.storage.updateLocal(() => {}); await settle();
+    await tick(); await settle();
+    assert.deepEqual(sent, ["bc:quizSubmitted"], "one message, so a navigation can't split it");
     assert.deepEqual(Object.keys(db.data.bcLocal.quizDrafts), ["/courses/1/quizzes/9/take"]);
+    // Typing between the submit and the navigation doesn't write a draft back.
+    const input = doc.querySelector('[name="answer"]');
+    input.value = "late"; input.dispatchEvent(new page.dom.window.Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 900)); await settle();
+    assert.deepEqual(Object.keys(db.data.bcLocal.quizDrafts), ["/courses/1/quizzes/9/take"]);
+    await assert.rejects(BC.storage.request({ type: "bc:quizSubmitted", root: "/courses/1/files" }), /Invalid quiz/);
   } finally { page.dom.window.close(); }
 });
 

@@ -244,6 +244,21 @@ async function addStudyTime(msg) {
   return { ok: true };
 }
 
+// Submitting a quiz navigates straight away. One message handled here can't be cut
+// in half by that the way a read-then-commit round trip from the page could.
+async function clearQuizDrafts(msg) {
+  const root = String(msg.root || "");
+  if (!/^\/courses\/\d+\/quizzes\/\d+$/.test(root)) throw new Error("Invalid quiz");
+  const stored = await storageCall("get", ["bcLocal"]);
+  const drafts = stored.bcLocal && stored.bcLocal.quizDrafts;
+  if (!drafts || typeof drafts !== "object") return { ok: true };
+  const keys = Object.keys(drafts).filter((k) => k === root || k.startsWith(root + "/") || k.startsWith(root + "#"));
+  if (!keys.length) return { ok: true };
+  for (const k of keys) delete drafts[k];
+  await storageCall("set", { bcLocal: stored.bcLocal });
+  return { ok: true };
+}
+
 async function readSettingsSnapshot() {
   const values = await storageCall("get", ["bcSettings"]);
   return { ok: true, value: values.bcSettings, base: await storageHash(values.bcSettings) };
@@ -308,9 +323,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (msg.type === "bc:settingsRead" ? readSettingsSnapshot() : readLocalSnapshot(msg)).then(sendResponse, (error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
-  if (["bc:localCommit", "bc:settingsCommit", "bc:locker", "bc:studyTime"].includes(msg.type)) {
+  if (["bc:localCommit", "bc:settingsCommit", "bc:locker", "bc:studyTime", "bc:quizSubmitted"].includes(msg.type)) {
     const result = storageWrites.then(() => msg.type === "bc:locker" ? commitLocker(msg) : msg.type === "bc:settingsCommit" ? commitSettings(msg)
-      : msg.type === "bc:studyTime" ? addStudyTime(msg) : commitLocal(msg));
+      : msg.type === "bc:studyTime" ? addStudyTime(msg) : msg.type === "bc:quizSubmitted" ? clearQuizDrafts(msg) : commitLocal(msg));
     storageWrites = result.catch(() => {});
     result.then(sendResponse, (error) => sendResponse({ ok: false, error: error.message }));
     return true;

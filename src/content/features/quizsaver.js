@@ -29,7 +29,7 @@
 
   const MAX_DRAFTS = 10;
   const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-  let saverEnabled = false, saveTimer = null;
+  let saverEnabled = false, saveTimer = null, submitted = false;
 
   function stop() {
     saverEnabled = false;
@@ -51,13 +51,15 @@
   // Every page of a one-question-at-a-time quiz has its own draft.
   const quizRoot = () => (location.pathname.match(/^\/courses\/\d+\/quizzes\/\d+/) || [""])[0];
 
+  // The page is about to navigate, so this is one message to the background rather
+  // than a read and a commit. `submitted` stops a save already in flight from
+  // writing the draft back after it.
   function deleteQuizDrafts() {
     const root = quizRoot();
     clearTimeout(saveTimer); saveTimer = null;
     if (!root) return Promise.resolve();
-    return BC.storage.updateLocal((d) => {
-      for (const k of Object.keys(d.quizDrafts || {})) if (k === root || k.startsWith(root + "/") || k.startsWith(root + "#")) delete d.quizDrafts[k];
-    });
+    submitted = true;
+    return BC.storage.request({ type: "bc:quizSubmitted", root });
   }
 
   function collectInputs() {
@@ -94,11 +96,11 @@
   }
 
   function saveDraft() {
-    if (!saverEnabled || !onTakePage(location.pathname)) return;
+    if (!saverEnabled || submitted || !onTakePage(location.pathname)) return;
     const answers = snapshot();
     const key = draftKey();
     BC.storage.updateLocal((d) => {
-      if (!saverEnabled) return;
+      if (!saverEnabled || submitted) return;
       const q = (d.quizDrafts = d.quizDrafts || {});
       if (!Object.keys(answers).length) { delete q[key]; return; }
       q[key] = { savedAt: Date.now(), answers };

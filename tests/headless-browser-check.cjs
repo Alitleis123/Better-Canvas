@@ -76,6 +76,28 @@ if (!scratch) throw Error("Set BC_BROWSER_SCRATCH to an approved temporary direc
     });
     results.extension.push(...storageChecks);
     await secondPage.close();
+    // A real submit navigates at once. The drafts must still be cleared, and a
+    // cancelled submit must keep them.
+    const drafts = () => worker.evaluate(async () => Object.keys((await chrome.storage.local.get(["bcLocal"])).bcLocal.quizDrafts || {}).sort());
+    const until = async (check, label) => {
+      for (let i = 0; i < 50; i++) { if (check(await drafts())) return; await new Promise((r) => setTimeout(r, 100)); }
+      throw Error(label + ": " + (await drafts()).join(", "));
+    };
+    await worker.evaluate(async (old) => {
+      const { bcLocal } = await chrome.storage.local.get(["bcLocal"]);
+      bcLocal.quizDrafts = { "/courses/1/quizzes/2/take#attempt-1": old, "/courses/1/quizzes/9/take": old };
+      await chrome.storage.local.set({ bcLocal, bcSettings: { version: 5, enabled: true, onboarding: { seen: true }, productivity: { quizDraftSaver: true } } });
+    }, { savedAt: Date.now(), answers: { answer: "attempt one" } });
+    await page.goto("http://bc-test.instructure.com:8076/courses/1/quizzes/2/take");
+    await page.fill("#answer", "attempt two");
+    await until((keys) => keys.includes("/courses/1/quizzes/2/take#attempt-2"), "The answer was never saved");
+    await page.evaluate(() => document.getElementById("submit_quiz_form").addEventListener("submit", (e) => e.preventDefault(), { once: true }));
+    await page.click("#submit_quiz_button");
+    await new Promise((r) => setTimeout(r, 500));
+    assert.equal((await drafts()).length, 3); results.extension.push("A cancelled quiz submit keeps the drafts");
+    await Promise.all([page.waitForURL("**/quizzes/2/history"), page.click("#submit_quiz_button")]);
+    await until((keys) => keys.join() === "/courses/1/quizzes/9/take", "Drafts survived a real submit");
+    results.extension.push("A real quiz submit clears that quiz's drafts across the navigation");
     await page.goto("http://127.0.0.1:8076/");
     await page.waitForFunction(() => document.querySelector("#bc-drawer")?.shadowRoot?.querySelector(".bcs-app, .bc-app"));
     results.studio = await page.evaluate(fs.readFileSync(path.join(__dirname, "studio-browser-checks.js"), "utf8"));
