@@ -92,7 +92,7 @@
         { label: "Export settings", icon: "download", onClick: () => exportFlow(store) },
         adapter.openOptions ? { label: "Open in a browser tab", icon: "external", onClick: () => adapter.openOptions() } : null,
         { separator: true },
-        { label: "Reset all settings…", icon: "refresh", danger: true, onClick: () => { if (confirm("Reset ALL Better Canvas settings to their defaults?")) store.reset(); } },
+        { label: "Reset all settings…", icon: "refresh", danger: true, onClick: () => confirmReset(store) },
       ].filter(Boolean)));
       const search = BC.ui.input({ type: "search", placeholder: "Search settings", ariaLabel: "Search all settings", icon: "search", size: "sm" });
       search.classList.add("bcs-search");
@@ -276,6 +276,11 @@
   };
 
   // ---- shared bits ----------------------------------------------------------
+
+  const RESET_HINT = "Puts every option back to its default. Keeps your recurring tasks, tags, grade goals, GPA credits, saved themes, custom links, course nicknames and planner data.";
+  function confirmReset(store) {
+    if (confirm("Reset every Better Canvas option to its default?\n\n" + RESET_HINT.replace(/^.*?\. /, ""))) store.reset();
+  }
 
   const sec = (title, children, extra) => S().section(Object.assign({ title, children: children.filter(Boolean) }, extra || {}));
   const row = (o) => S().row(o);
@@ -1535,8 +1540,8 @@
       ]),
       renderDiagnostics(),
       sec("Reset", [
-        row({ label: "Reset all settings", hint: "Puts every setting back to its default. Planner data is kept.",
-          control: BC.ui.button("Reset…", { size: "sm", variant: "danger", icon: "refresh", onClick: () => { if (confirm("Reset ALL Better Canvas settings to their defaults?")) store.reset(); } }) }),
+        row({ label: "Reset all settings", hint: RESET_HINT,
+          control: BC.ui.button("Reset…", { size: "sm", variant: "danger", icon: "refresh", onClick: () => confirmReset(store) }) }),
       ]),
     ];
   }

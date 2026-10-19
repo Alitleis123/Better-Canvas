@@ -32,6 +32,12 @@
     }
   }
 
+  const RESET_KEEPS = [
+    ["todo", "recurring"], ["todo", "tags"], ["grades", "goals"], ["grades", "creditsByCourse"],
+    ["customThemes"], ["navigation", "global", "customLinks"], ["navigation", "course", "customLinks"],
+    ["dashboard", "courseOrder"], ["onboarding"],
+  ];
+
   BC.SettingsState.create = function (adapter) {
     // Clone up front: the drawer's adapter hands back BC.storage.current itself,
     // and we now mutate in place — writing through to the live settings object
@@ -201,7 +207,25 @@
           return carry;
         } catch (e) { return false; }
       },
-      reset() { swap(BC.cloneDefaults()); },
+      // Options go back to their defaults. Things the user made stay: recurring
+      // tasks, tags, grade goals, GPA credits, saved themes, custom links, course
+      // nicknames, hidden courses and card order.
+      reset() {
+        const next = BC.cloneDefaults();
+        for (const path of RESET_KEEPS) {
+          let from = state, to = next;
+          for (const key of path.slice(0, -1)) { from = from && from[key]; to = to[key]; }
+          const key = path[path.length - 1];
+          if (from && from[key] !== undefined) to[key] = clone(from[key]);
+        }
+        for (const [id, c] of Object.entries(state.dashboard?.courses || {})) {
+          const mine = {};
+          if (c && c.nickname) mine.nickname = c.nickname;
+          if (c && c.hidden) mine.hidden = true;
+          if (Object.keys(mine).length) next.dashboard.courses[id] = mine;
+        }
+        swap(next);
+      },
       applyPreset(preset) {
         const src = preset.settings || preset;
         const preserved = ["colorBlind", "reducedMotion", "fontSizeScale", "cursor"];
