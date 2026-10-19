@@ -8,7 +8,8 @@
   // removed and recreated on every applyAll — several times a second whenever
   // Canvas mutates the page — which also yanked keyboard focus off a link mid-tab.
   function syncCustomLinks(nodeId, list, links, linkCss) {
-    const safe = (links || []).filter((l) => l && BC.util.isSafeHttpUrl(l.url));
+    // A path on this Canvas, like /courses/1/files, is as safe as a full address.
+    const safe = (links || []).filter((l) => l && (BC.util.isSafeHttpUrl(l.url) || /^\/(?!\/)\S*$/.test(l.url || "")));
     let ul = document.getElementById(nodeId);
     if (!safe.length) { if (ul) ul.remove(); return; }
     const sig = JSON.stringify(safe.map((l) => [l.url, l.label || "", !!l.newTab]));

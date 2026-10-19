@@ -1855,7 +1855,9 @@
   border: 1px solid var(--bc-border, #e4e4e7); border-radius: var(--bc-radius-md, 8px); background: var(--bc-surface-2, #fff);
 }
 .bcs-sortable__item > :last-child { flex: 1 1 auto; min-width: 0; }
-.bcs-sortable__grip { display: inline-flex; flex: none; color: var(--bc-text-subtle, #a1a1aa); cursor: grab; }
+.bcs-sortable__grip { display: inline-flex; flex: none; color: var(--bc-text-subtle, #a1a1aa); cursor: grab; padding: 2px; margin: 0; border: 0; border-radius: 4px; background: none; }
+.bcs-sortable__grip:focus-visible { outline: 2px solid var(--bc-focus-ring, #4f46e5); outline-offset: 1px; color: var(--bc-text, #18181b); }
+.bcs-links input[aria-invalid] { border-color: var(--bc-danger, #b91c1c); }
 .bcs-sortable__grip .bc-icon { width: 16px; height: 16px; }
 .bcs-sortable__row { display: flex; align-items: center; justify-content: space-between; gap: var(--bc-space-3, 12px); font-size: var(--bc-text-sm, 13px); }
 .bcs-navlist__note { flex: none; padding: 0 6px; border-radius: var(--bc-radius-pill, 999px); background: var(--bc-surface-3, #f4f4f5);

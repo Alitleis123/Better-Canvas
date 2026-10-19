@@ -304,3 +304,29 @@ test("scene themes store short references, resolve when painted and compact old 
   assert.equal(merged.cosmetics.background.image, "bc-scene:woodland#731:wall");
   assert.equal(BC.themeMedia.parse("bc-scene:nowhere#1"), null);
 });
+
+test("number fields ignore out-of-range typing and clamp on change; lists reorder with arrow keys", () => {
+  const { domContext, load: loadDom } = require("./audit-helpers.cjs");
+  const { dom, context } = domContext('<div id="root"></div>');
+  try {
+    loadDom(context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/icons.js", "src/content/core/ui.js", "src/shared/settings/components.js");
+    const C = context.BC.SettingsComponents, doc = dom.window.document, ev = (n, t) => n.dispatchEvent(new dom.window.Event(t, { bubbles: true }));
+    let width = 200;
+    const num = C.number({ get: () => width, set: (v) => { width = v; }, min: 150, max: 400 });
+    doc.getElementById("root").append(num);
+    const inp = num.querySelector("input");
+    for (const v of ["2", "25", "250"]) { inp.value = v; ev(inp, "input"); }
+    assert.equal(width, 250);
+    inp.value = "4000"; ev(inp, "input");
+    assert.equal(width, 250);
+    ev(inp, "change");
+    assert.equal(width, 400);
+    let order = null;
+    const list = C.sortable({ items: [{ id: "a" }, { id: "b" }, { id: "c" }], render: (it) => doc.createTextNode(it.id), onChange: (ids) => { order = [...ids]; } });
+    doc.getElementById("root").append(list);
+    const grip = list.querySelectorAll(".bcs-sortable__grip")[2];
+    grip.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+    assert.deepEqual(order, ["a", "c", "b"]);
+    assert.equal(doc.activeElement, grip);
+  } finally { dom.window.close(); }
+});

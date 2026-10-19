@@ -151,10 +151,19 @@
     if (min != null) inp.min = min;
     if (max != null) inp.max = max;
     if (step != null) inp.step = step;
+    // Live while the value is in range. Typing 250 used to apply 2, then 25, and
+    // nothing stopped 4000. Leaving the field clamps it.
+    const inRange = (v) => isFinite(v) && (min == null || v >= min) && (max == null || v <= max);
     inp.addEventListener("input", () => {
       const v = parseFloat(inp.value);
-      if (!isFinite(v)) return;
-      set(v);
+      if (inRange(v)) set(v);
+    });
+    inp.addEventListener("change", () => {
+      let v = parseFloat(inp.value);
+      if (!isFinite(v)) { inp.value = get() ?? ""; return; }
+      if (min != null) v = Math.max(min, v);
+      if (max != null) v = Math.min(max, v);
+      set(v); inp.value = get() ?? v;
     });
     bind(inp, () => { const v = get(); if (!focused(inp) && inp.value !== String(v ?? "")) inp.value = v ?? ""; });
     return el("div", { class: "bcs-number" }, [inp, suffix ? el("span", { class: "bcs-number__suffix", text: suffix }) : null]);
@@ -322,10 +331,24 @@
     const list = el("ul", { class: "bcs-sortable" });
     items.forEach((it) => {
       const li = el("li", { class: "bcs-sortable__item", draggable: "true", "data-id": String(it.id) }, [
-        el("span", { class: "bcs-sortable__grip", title: "Drag to reorder" }, [BC.ui.icon("grip")]),
+        // A span, not a button: Firefox won't start a drag on a button.
+        el("span", { class: "bcs-sortable__grip", tabindex: "0", role: "button", title: "Drag, or focus and press the arrow keys, to reorder",
+          "aria-label": "Reorder. Press up or down arrow to move." }, [BC.ui.icon("grip")]),
         render(it),
       ]);
       list.appendChild(li);
+    });
+    // Keyboard users had no way to reorder at all.
+    list.addEventListener("keydown", (e) => {
+      const grip = e.target.closest && e.target.closest(".bcs-sortable__grip");
+      if (!grip || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+      e.preventDefault(); e.stopPropagation();
+      const li = grip.closest(".bcs-sortable__item");
+      const to = e.key === "ArrowUp" ? li.previousElementSibling : li.nextElementSibling;
+      if (!to) return;
+      list.insertBefore(li, e.key === "ArrowUp" ? to : to.nextSibling);
+      grip.focus();
+      onChange(order());
     });
     // Events are stopped here: on the dashboard, Canvas's own drag-and-drop library
     // listens on window and marks every drag it doesn't own as undroppable, so
@@ -405,8 +428,16 @@
         const patch = (values) => set((get() || []).map((link) => link.id === lnk.id ? { ...link, ...values } : link));
         const label = BC.ui.input({ size: "sm", placeholder: "Label", ariaLabel: "Link label", value: lnk.label || "" });
         label.addEventListener("input", () => { patch({ label: label.value }); });
-        const url = BC.ui.input({ size: "sm", type: "url", placeholder: "https://…", ariaLabel: "Link URL", value: lnk.url || "" });
-        url.addEventListener("input", () => { patch({ url: url.value }); });
+        const url = BC.ui.input({ size: "sm", type: "text", placeholder: "https://… or /courses/…", ariaLabel: "Link URL", value: lnk.url || "" });
+        // The menu skips anything else, so say so here instead of dropping it.
+        const valid = () => {
+          const v = url.value.trim();
+          const ok = !v || BC.util.isSafeHttpUrl(v) || /^\/(?!\/)\S*$/.test(v);
+          url.toggleAttribute("aria-invalid", !ok);
+          url.title = ok ? "" : "Use a full address starting with https://, or a Canvas path starting with /";
+        };
+        url.addEventListener("input", () => { patch({ url: url.value.trim() }); valid(); });
+        valid();
         const tab = BC.ui.checkbox({ checked: !!lnk.newTab, label: "New tab", onChange: (v) => { patch({ newTab: v }); } });
         const del = BC.ui.iconButton("trash", { label: "Remove link", size: "sm", onClick: () => { set((get() || []).filter((link) => link.id !== lnk.id)); render(); } });
         return el("div", { class: "bcs-links__row" }, [label, url, tab, del]);
