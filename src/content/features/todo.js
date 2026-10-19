@@ -1928,6 +1928,7 @@
       const osc = ctx.createOscillator(), g = ctx.createGain();
       osc.connect(g); g.connect(ctx.destination);
       osc.frequency.value = 880; g.gain.value = 0.08;
+      osc.onended = () => ctx.close();   // browsers cap open audio contexts
       osc.start(); osc.stop(ctx.currentTime + 0.3);
     } catch (_) {}
   }
@@ -1990,14 +1991,21 @@
     }).then(() => { BC.injector.removeNode("bc-pom-dock"); syncPomButtons(); BC.toast.info("Focus session stopped"); });
   }
 
-  function advancePomodoro(settings) {
+  // `endsAt` is the phase end the caller saw. Every open Canvas tab ticks, so a
+  // second tab, or a slow write, would otherwise advance again and skip the break.
+  function advancePomodoro(settings, endsAt) {
     const cfg = (settings.todo && settings.todo.pomodoro) || {};
+    let advanced = false;
     BC.storage.updateLocal((d) => {
+      advanced = false;
       const p = d.pomodoro;
-      if (!p || !p.phase) return;
+      if (!p || !p.phase || p.endsAt !== endsAt) return;
+      advanced = true;
       if (p.phase === "work") {
         p.cycle = (p.cycle || 0) + 1;
-        (p.sessions = p.sessions || []).push({ start: p.startedAt, end: Date.now(), min: phaseMinutes(cfg, "work"), task: p.taskTitle || "" });
+        // Skip ends a session early. Log the minutes actually focused.
+        const min = Math.min(phaseMinutes(cfg, "work"), Math.round((Date.now() - p.startedAt) / 60000));
+        (p.sessions = p.sessions || []).push({ start: p.startedAt, end: Date.now(), min, task: p.taskTitle || "" });
         if (p.sessions.length > 200) p.sessions = p.sessions.slice(-200);
         p.phase = p.cycle % (cfg.longEvery || 4) === 0 ? "long" : "short";
       } else {
@@ -2007,7 +2015,7 @@
       p.endsAt = Date.now() + phaseMinutes(cfg, p.phase) * 60000;
     }).then(() => {
       const p = pomState();
-      if (!p || !p.phase) return;
+      if (!advanced || !p || !p.phase) return;
       if (cfg.sound !== false) pomBeep();
       BC.toast.success(p.phase === "work" ? "Break's over — back to it" : "Session done. " + PHASE_LABEL[p.phase] + " time.");
     });
@@ -2038,7 +2046,7 @@
     });
     const phase = el("span", { class: "pom__phase", "data-pom-phase": "" });
     const task = el("span", { class: "pom__task", "data-pom-task": "" });
-    const skip = BC.ui.iconButton("skip", { label: "Skip to the next phase", size: "sm", onClick: () => advancePomodoro(BC.storage.current) });
+    const skip = BC.ui.iconButton("skip", { label: "Skip to the next phase", size: "sm", onClick: () => advancePomodoro(BC.storage.current, (pomState() || {}).endsAt) });
     const stop = BC.ui.iconButton("x", { label: "Stop the focus session", size: "sm", onClick: stopPomodoro });
     body.replaceChildren(el("div", { class: "pom", role: "group", "aria-label": "Focus timer" }, [ring, time, el("span", { class: "pom__text" }, [phase, task]), skip, stop]));
   }
@@ -2048,7 +2056,7 @@
     const host = document.querySelector('[data-bc-node="bc-pom-dock"]');
     if (!p || !p.phase) { BC.injector.removeNode("bc-pom-dock"); stopPomTick(); syncPomButtons(); return; }
     const remaining = p.endsAt - Date.now();
-    if (remaining <= 0) { advancePomodoro(BC.storage.current); return; }
+    if (remaining <= 0) { advancePomodoro(BC.storage.current, p.endsAt); return; }
     syncPomButtons();
     const root = host && host.shadowRoot;
     if (!root) return;

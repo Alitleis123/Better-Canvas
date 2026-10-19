@@ -128,3 +128,36 @@ test("pruning keeps every page's sticky notes, drops empty lists and expires wee
   assert.equal(db.requests.length, reads);
   assert.equal(db.events.length, events);
 });
+
+test("two tabs finishing the same focus phase start the break once", async () => {
+  const { database } = require("./storage-harness.cjs");
+  const { domContext, load: loadDom, settle } = require("./audit-helpers.cjs");
+  const endsAt = Date.now() - 1000;
+  const db = database({ bcLocal: { pomodoro: { phase: "work", cycle: 0, startedAt: endsAt - 25 * 60000, endsAt, sessions: [] } } });
+  async function view() {
+    const client = db.client(), page = domContext("", { chrome: client.chrome });
+    loadDom(page.context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/datetime.js", "src/content/core/color.js", "src/content/core/icons.js", "src/content/core/ui.js", "src/content/core/lifecycle.js", "src/content/core/storage.js");
+    const BC = page.context.BC;
+    await BC.storage.load(); await BC.storage.loadLocal();
+    const toasts = [];
+    BC.toast = { success: (m) => toasts.push(m), info: () => {}, error: () => {} };
+    vm.runInContext(fs.readFileSync(path.join(root, "src/content/features/todo.js"), "utf8")
+      .replace("  BC.registry.register({", "  BC.testAdvance = advancePomodoro;\n  BC.registry.register({"), page.context);
+    return { BC, page, toasts };
+  }
+  const a = await view(), b = await view();
+  try {
+    const settings = a.BC.cloneDefaults();
+    settings.todo.pomodoro = { ...(settings.todo.pomodoro || {}), sound: false };
+    a.BC.testAdvance(settings, endsAt); b.BC.testAdvance(settings, endsAt);
+    for (let i = 0; i < 6; i++) await settle();
+    await a.BC.storage.updateLocal(() => {}); await b.BC.storage.updateLocal(() => {});
+    for (let i = 0; i < 4; i++) await settle();
+    const p = db.data.bcLocal.pomodoro;
+    assert.equal(p.phase, "short");
+    assert.equal(p.cycle, 1);
+    assert.equal(p.sessions.length, 1);
+    assert.equal(p.sessions[0].min, 25);
+    assert.equal(a.toasts.length + b.toasts.length, 1);
+  } finally { a.page.dom.window.close(); b.page.dom.window.close(); }
+});
