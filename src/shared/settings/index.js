@@ -2020,6 +2020,8 @@
 @container bcs-app (max-width: 520px) {
   .bcs-row { grid-template-columns: minmax(0, 1fr); gap: var(--bc-space-2, 8px); }
   .bcs-row__control { justify-content: flex-start; }
+  /* a lone switch is small enough to stay beside its label */
+  .bcs-row:has(> .bcs-row__control > .bc-switch:only-child) { grid-template-columns: minmax(0, 1fr) auto; gap: var(--bc-space-3, 12px); }
   .bcs-stats { grid-template-columns: minmax(0, 1fr); }
 }
 `;
