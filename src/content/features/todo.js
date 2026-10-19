@@ -62,6 +62,8 @@
     ${S} .ToDoSidebarItem__Info ul, ${S} .ToDoSidebarItem__Info li { margin: 0 !important; padding: 0 !important; }
     ${S} .ToDoSidebarItem__Close { flex: none !important; margin: -4px -2px 0 0 !important; opacity: 0; transition: opacity var(--bc-dur-2, 150ms) ease; }
     ${S} .ToDoSidebarItem:hover .ToDoSidebarItem__Close, ${S} .ToDoSidebarItem:focus-within .ToDoSidebarItem__Close { opacity: 1; }
+    /* A touch screen has no hover, so the dismiss button was never visible there. */
+    @media (hover: none) { ${S} .ToDoSidebarItem__Close { opacity: 1; } }
     ${S} [data-testid="ToDoSidebar"] > :is(a, button, div > a) {
       display: block !important; margin: 6px 0 0 !important; padding: 7px 6px !important; border-radius: var(--bc-radius-md, 8px) !important;
       font-size: 13px !important; font-weight: 500 !important; text-align: center !important; color: var(--bc-accent-text, #4338ca) !important;
@@ -158,6 +160,9 @@
   transition: border-color var(--bc-dur-2, 150ms) ease, background-color var(--bc-dur-2, 150ms) ease, box-shadow var(--bc-dur-2, 150ms) ease;
 }
 .pl-check svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
+/* 18px looks right, but WCAG asks for a 24px target. Grow the hit area only. */
+.pl-check::before, .pl-block button::before { content: ""; position: absolute; inset: -4px; }
+.pl-block button { position: relative; }
 .pl-check path { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset var(--bc-dur-3, 220ms) var(--bc-ease-out, ease) 60ms, opacity var(--bc-dur-2, 150ms) ease; }
 .pl-check:hover { border-color: var(--pl-accent); box-shadow: 0 0 0 3px var(--bc-accent-weak, rgba(79,70,229,.12)); }
 .pl-check:not([aria-checked="true"]):hover { color: var(--pl-accent); }

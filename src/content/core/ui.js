@@ -221,6 +221,8 @@
   align-items: center; justify-content: center; background: transparent; color: var(--bc-muted, #6b6b74); cursor: pointer; }
 .bc-chip__x:hover { background: var(--bc-surface-pressed, #e4e4e7); color: var(--bc-text, #18181b); }
 .bc-chip__x .bc-icon { width: 12px; height: 12px; }
+.bc-chip__x { position: relative; }
+.bc-chip__x::before { content: ""; position: absolute; inset: -4px; }   /* a 24px target */
 .bc-badge2 {
   display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px;
   border-radius: var(--bc-radius-pill, 999px); background: var(--bc-surface-3, #f4f4f5); color: var(--bc-text, #18181b);
