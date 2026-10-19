@@ -14,11 +14,15 @@
       box-shadow: var(--bc-shadow-3, 0 10px 30px rgba(0,0,0,.18));
       max-width: 340px;
       font-family: var(--bc-font-sans); font-size: var(--bc-text-sm, 13px);
+      /* It sits just below the hovered link, over the next links in the list, so it
+         must never catch the pointer, and it leaves the page once faded out. */
+      pointer-events: none; visibility: hidden;
       opacity: 0; transform: translateY(4px);
       transition: opacity var(--bc-dur-2, 150ms) var(--bc-ease-out, ease),
-                  transform var(--bc-dur-2, 150ms) var(--bc-ease-out, ease);
+                  transform var(--bc-dur-2, 150ms) var(--bc-ease-out, ease),
+                  visibility 0s linear var(--bc-dur-2, 150ms);
     }
-    .bc-preview.show { opacity: 1; transform: translateY(0); }
+    .bc-preview.show { opacity: 1; transform: translateY(0); visibility: visible; transition-delay: 0s; }
     .bc-preview h5 { margin: 0 0 4px; font-size: var(--bc-text-md, 14px); }
     .bc-preview p { margin: 0; color: var(--bc-muted, #6b7280); }
   `;
@@ -62,7 +66,7 @@
         <h5>${BC.util.escapeHtml(asn.name || "Assignment")}</h5>
         <p>${BC.util.escapeHtml(due + points)}</p>
         ${score}
-        <p style="margin-top:6px;">${BC.util.escapeHtml((asn.description || "").replace(/<[^>]+>/g, " ").slice(0, 180) || "")}</p>
+        <p style="margin-top:6px;">${BC.util.escapeHtml(plainText(asn.description).slice(0, 180))}</p>
       `;
     } catch (e) {
       if (seq !== showSeq) return;
@@ -70,6 +74,13 @@
       el.innerHTML = `<h5>Couldn't load</h5><p>Open the assignment to see details.</p>`;
       BC.diag.push("previews", e);
     }
+  }
+
+  // Canvas descriptions are HTML. An inert parsed document decodes &nbsp; and
+  // &amp; without loading images or running anything.
+  function plainText(html) {
+    if (!html) return "";
+    return (new DOMParser().parseFromString(html, "text/html").body.textContent || "").replace(/\s+/g, " ").trim();
   }
 
   function positionAt(target, el) {
@@ -109,6 +120,8 @@
     const bag = BC.lifecycle.bag("previews");
     bag.listen(document, "mouseover", onOver);
     bag.listen(document, "mouseout", onOut);
+    bag.listen(document, "keydown", (e) => { if (e.key === "Escape") hide(); });
+    bag.listen(window, "scroll", hide, { capture: true, passive: true });
   }
   function uninstall() {
     if (!installed) return;

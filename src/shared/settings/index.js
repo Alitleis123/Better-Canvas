@@ -1324,6 +1324,7 @@
         sw("Focus mode", "focusMode", "Hides Canvas's menus and sidebars so only the page content is left."),
         sw("Reading ruler", "readingRuler", "A highlight band that follows your pointer."),
         sw("Reading progress", "readingProgress", "A thin bar along the top as you scroll."),
+        swOf("previews", "Assignment previews", "hoverAssignmentCards", "Hover an assignment link to see its due date, points and score."),
       ]),
       sec("Writing", [
         sw("Save drafts", "autoSaveDrafts", "Text you type in Canvas boxes is kept if the page closes."),
