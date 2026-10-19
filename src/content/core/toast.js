@@ -28,6 +28,8 @@
                   filter 240ms cubic-bezier(.3, 0, .2, 1);
     }
     .bc-toast.show { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+    /* The focus timer dock shares this corner. Stack toasts above it. */
+    html:has([data-bc-node="bc-pom-dock"]) .bc-toast-host { bottom: 80px; }
     /* Toasts sit over the bottom of the To Do sidebar, where its Done column is, so
        while something is being dragged they fade and let the drop through. */
     html[data-bc-dragging] .bc-toast-host .bc-toast { pointer-events: none; }
@@ -141,10 +143,22 @@
       if (reduced) el.classList.add("show");
       else requestAnimationFrame(() => el.classList.add("show"));
       if (timeout > 0) {
-        setTimeout(() => {
-          el.classList.remove("show");
-          setTimeout(() => el.remove(), reduced ? 0 : 240);
-        }, timeout);
+        // Hovering or focusing a toast holds it, so an Undo can still be reached.
+        let timer = null;
+        const held = () => el.matches(":hover") || el.contains(el.getRootNode().activeElement);
+        const arm = () => {
+          clearTimeout(timer);
+          if (held()) return;
+          timer = setTimeout(() => {
+            el.classList.remove("show");
+            setTimeout(() => el.remove(), reduced ? 0 : 240);
+          }, timeout);
+        };
+        el.addEventListener("mouseenter", () => clearTimeout(timer));
+        el.addEventListener("focusin", () => clearTimeout(timer));
+        el.addEventListener("mouseleave", () => setTimeout(arm));
+        el.addEventListener("focusout", () => setTimeout(arm));
+        arm();
       }
       return el;
     },
