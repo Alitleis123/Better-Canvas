@@ -102,6 +102,27 @@ if (!scratch) throw Error("Set BC_BROWSER_SCRATCH to an approved temporary direc
     await page.waitForFunction(() => document.querySelector("#bc-drawer")?.shadowRoot?.querySelector(".bcs-app, .bc-app"));
     results.studio = await page.evaluate(fs.readFileSync(path.join(__dirname, "studio-browser-checks.js"), "utf8"));
     assert.equal(results.errors.length, 0);
+    // Real touch input: drag the first navigation row down two places by its grip.
+    const rows = () => page.evaluate(() => [...document.querySelector("#bc-drawer").shadowRoot.querySelector(".bcs-sortable").children].map((li) => li.dataset.id));
+    await page.evaluate(() => BC.SettingsUI.goto("navigation"));
+    await page.waitForTimeout(300);
+    const grips = await page.evaluate(() => {
+      const list = document.querySelector("#bc-drawer").shadowRoot.querySelector(".bcs-sortable");
+      list.scrollIntoView({ block: "center" });
+      return [...list.querySelectorAll(".bcs-sortable__grip")].slice(0, 3)
+        .map((g) => { const r = g.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, size: Math.min(r.width, r.height) }; });
+    });
+    const startRows = await rows(), cdp = await browser.newCDPSession(page);
+    await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: grips[0].x, y: grips[0].y }] });
+    for (let y = grips[0].y; y <= grips[2].y + 4; y += 6) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: grips[0].x, y }] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
+    const moved = [startRows[1], startRows[2], startRows[0], ...startRows.slice(3)];
+    assert.ok(grips[0].size >= 24, "Grip is at least 24px");
+    assert.deepEqual(await rows(), moved);
+    assert.deepEqual(await page.evaluate(() => BC.storage.current.navigation.global.order), moved);
+    results.studio.push("Touch drag on a 24px grip reorders and saves the list");
     await page.evaluate(async () => {
       await Promise.all(document.getElementById("bc-drawer").getAnimations().map((animation) => animation.finished));
     });

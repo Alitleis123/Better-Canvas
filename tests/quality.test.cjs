@@ -328,6 +328,19 @@ test("number fields ignore out-of-range typing and clamp on change; lists reorde
     grip.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
     assert.deepEqual(order, ["a", "c", "b"]);
     assert.equal(doc.activeElement, grip);
+    // A finger on the grip drags the row; rows are 30px tall.
+    for (const li of list.children) li.getBoundingClientRect = () => ({ top: [...list.children].indexOf(li) * 30, height: 30 });
+    const point = (node, type, y, pointerType = "touch") => node.dispatchEvent(Object.assign(new dom.window.MouseEvent(type, { bubbles: true, cancelable: true, clientY: y }), { pointerType, pointerId: 1 }));
+    const first = list.querySelector(".bcs-sortable__grip");
+    point(first, "pointerdown", 10, "mouse"); point(first, "pointermove", 80, "mouse"); point(first, "pointerup", 80, "mouse");
+    assert.deepEqual(order, ["a", "c", "b"], "a mouse still uses HTML drag and drop");
+    point(first, "pointerdown", 10); point(first, "pointermove", 50);
+    assert.deepEqual([...list.children].map((li) => li.dataset.id), ["c", "a", "b"]);
+    assert.deepEqual(order, ["a", "c", "b"], "saved once, when the finger lifts");
+    point(first, "pointermove", 80); point(first, "pointerup", 80);
+    assert.deepEqual(order, ["c", "b", "a"]);
+    point(first, "pointermove", 0);
+    assert.deepEqual([...list.children].map((li) => li.dataset.id), ["c", "b", "a"], "moves stop after the finger lifts");
   } finally { dom.window.close(); }
 });
 

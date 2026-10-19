@@ -1863,7 +1863,7 @@
   border: 1px solid var(--bc-border, #e4e4e7); border-radius: var(--bc-radius-md, 8px); background: var(--bc-surface-2, #fff);
 }
 .bcs-sortable__item > :last-child { flex: 1 1 auto; min-width: 0; }
-.bcs-sortable__grip { display: inline-flex; flex: none; color: var(--bc-text-subtle, #a1a1aa); cursor: grab; padding: 2px; margin: 0; border: 0; border-radius: 4px; background: none; }
+.bcs-sortable__grip { display: inline-flex; flex: none; color: var(--bc-text-subtle, #a1a1aa); cursor: grab; padding: 4px; margin: -2px; border: 0; border-radius: 4px; background: none; touch-action: none; }
 .bcs-sortable__grip:focus-visible { outline: 2px solid var(--bc-focus-ring, #4f46e5); outline-offset: 1px; color: var(--bc-text, #18181b); }
 .bcs-links input[aria-invalid] { border-color: var(--bc-danger, #b91c1c); }
 .bcs-sortable__grip .bc-icon { width: 16px; height: 16px; }

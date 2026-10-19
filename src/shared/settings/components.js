@@ -350,6 +350,32 @@
       grip.focus();
       onChange(order());
     });
+    // Most touch browsers never start an HTML drag, so a finger on the grip moves
+    // the row directly. The neighbours move rather than the dragged row, which
+    // keeps the grip in place and its pointer capture intact.
+    list.addEventListener("pointerdown", (e) => {
+      const grip = e.target.closest && e.target.closest(".bcs-sortable__grip");
+      if (!grip || e.pointerType === "mouse") return;
+      e.preventDefault();
+      const li = grip.closest(".bcs-sortable__item"), before = order().join(",");
+      try { grip.setPointerCapture(e.pointerId); } catch (_) {}
+      li.classList.add("bcs-dragging");
+      const mid = (n) => { const r = n.getBoundingClientRect(); return r.top + r.height / 2; };
+      const move = (ev) => {
+        for (let n; (n = li.nextElementSibling) && ev.clientY > mid(n);) list.insertBefore(n, li);
+        for (let p; (p = li.previousElementSibling) && ev.clientY < mid(p);) list.insertBefore(p, li.nextSibling);
+      };
+      const end = () => {
+        grip.removeEventListener("pointermove", move);
+        grip.removeEventListener("pointerup", end);
+        grip.removeEventListener("pointercancel", end);
+        li.classList.remove("bcs-dragging");
+        if (order().join(",") !== before) onChange(order());
+      };
+      grip.addEventListener("pointermove", move);
+      grip.addEventListener("pointerup", end);
+      grip.addEventListener("pointercancel", end);
+    });
     // Events are stopped here: on the dashboard, Canvas's own drag-and-drop library
     // listens on window and marks every drag it doesn't own as undroppable, so
     // "drop" never fired and a new order was shown but never saved. The order is
