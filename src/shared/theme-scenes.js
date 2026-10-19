@@ -87,13 +87,39 @@
     cache.set(key, result);
     return result;
   }
-  BC.sceneArt = artwork;
+  // Settings store a short reference, which BC.themeMedia resolves to the drawing
+  // when it's painted. Storing the data URIs put up to 1.2 MB in bcSettings, and
+  // every settings write and every frame load carried it.
+  BC.sceneArtData = artwork;
+  BC.sceneArt = function (id, seed, wallpaper = false) {
+    const s = byId[id] || byId.woodland, n = Math.max(0, seed | 0);
+    return { url: "bc-scene:" + s.id + "#" + n + (wallpaper ? ":wall" : ""), title: s.name + " · composition " + (n + 1),
+      creator: "Better Canvas", license: "Original artwork" };
+  };
+  // Swap data URIs saved by 3.3.1 and earlier for their references.
+  BC.compactSceneArt = function (settings) {
+    const fix = (s) => {
+      const exp = s && s.theming && s.theming.experience;
+      if (!exp || !byId[exp]) return;
+      const svg = (url) => typeof url === "string" && url.startsWith("data:image/svg+xml");
+      for (const img of (s.dashboard && Array.isArray(s.dashboard.themeImages) && s.dashboard.themeImages) || []) {
+        const m = img && svg(img.url) && / · composition (\d+)$/.exec(img.title || "");
+        if (m && artwork(exp, +m[1] - 1).url === img.url) img.url = BC.sceneArt(exp, +m[1] - 1).url;
+      }
+      const bg = s.cosmetics && s.cosmetics.background;
+      if (bg && svg(bg.image) && bg.image === artwork(exp, 731, true).url) bg.image = BC.sceneArt(exp, 731, true).url;
+    };
+    if (!settings) return settings;
+    fix(settings);
+    for (const t of Array.isArray(settings.customThemes) ? settings.customThemes : []) fix(t && t.settings);
+    return settings;
+  };
   BC.themeScenes = byId;
   for (const s of scenes) {
     const theme = BC.themeLibrary.makeTheme([], s);
     let images;
     Object.defineProperty(theme.settings.dashboard, "themeImages", { enumerable: true,
-      get() { return images || (images = Array.from({ length: 48 }, (_, i) => artwork(s.id, i))); } });
+      get() { return images || (images = Array.from({ length: 48 }, (_, i) => BC.sceneArt(s.id, i))); } });
     theme.id = "scene-" + s.id;
     theme.description = s.description;
     Object.assign(theme.settings.theming, {
@@ -101,7 +127,7 @@
       radius: ["blueprint", "gallery", "mono"].includes(s.id) ? 6 : 20,
       font: 'system-ui, -apple-system, "Segoe UI", sans-serif',
     });
-    theme.settings.cosmetics.background = { mode: "image", image: artwork(s.id, 731, true).url, opacity: 100, blur: 0, when: "always" };
+    theme.settings.cosmetics.background = { mode: "image", image: BC.sceneArt(s.id, 731, true).url, opacity: 100, blur: 0, when: "always" };
     BC.PRESET_THEMES.push(theme);
   }
 })();

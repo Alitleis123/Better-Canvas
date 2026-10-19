@@ -3,6 +3,10 @@
   "use strict";
   const BC = globalThis.BC = globalThis.BC || {};
   const parse = (url) => {
+    // A generated scene drawing. It's a whole image, so it's marked like a
+    // wallpaper: sized to cover, not cut from a sprite sheet.
+    const scene = /^bc-scene:([a-z]+)#(\d{1,5})(:wall)?$/.exec(String(url || ""));
+    if (scene) return BC.themeScenes && BC.themeScenes[scene[1]] ? { scene: scene[1], seed: +scene[2], wall: !!scene[3], wallpaper: true } : null;
     const wall = /^bc-wall:(anime-garden|anime-night)$/.exec(String(url || ""));
     if (wall) return { name: wall[1], wallpaper: true, index: 0 };
     const m = /^bc-art:(anime-garden|anime-night)#(\d{1,2})$/.exec(String(url || ""));
@@ -10,6 +14,7 @@
   };
   const resolve = (url) => {
     const art = parse(url);
+    if (art && art.scene) return BC.sceneArtData(art.scene, art.seed, art.wall).url;
     return art ? chrome.runtime.getURL("src/assets/themes/" + art.name + (art.wallpaper ? "-wallpaper.png" : ".png#scene-" + art.index)) : url;
   };
   const position = (url) => {

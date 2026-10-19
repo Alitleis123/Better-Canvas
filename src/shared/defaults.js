@@ -405,6 +405,8 @@
         link.id = id; used.add(id);
       });
     }
+    // Loaded only where the scene drawings are (not the popup or subframes).
+    if (BC.compactSceneArt) BC.compactSceneArt(settings);
     return settings;
   };
 

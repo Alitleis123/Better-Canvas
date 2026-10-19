@@ -3,6 +3,7 @@
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
   const PREFIX = "[Better Canvas]";
+  const cssUrlMemo = new Map();
 
   const util = (BC.util = {
     log(...a) { try { console.log(PREFIX, ...a); } catch (_) {} },
@@ -110,10 +111,16 @@
     // newlines alone, so a URL containing `")` closed the string and the rest of an
     // imported setting became live CSS.
     cssUrl(s) {
+      // A scene reference resolves to a ~20 KB data URI. Escaping it again for
+      // every card on every observer tick was most of the dashboard's apply time.
+      const ref = BC.themeMedia && BC.themeMedia.parse(s) ? String(s) : null;
+      if (ref && cssUrlMemo.has(ref)) return cssUrlMemo.get(ref);
       if (BC.themeMedia) s = BC.themeMedia.resolve(s);
-      return String(s == null ? "" : s).trim()
+      const out = String(s == null ? "" : s).trim()
         .replace(/[\r\n\f]/g, "")
         .replace(/[\\"'()<>]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0"));
+      if (ref) { if (cssUrlMemo.size > 512) cssUrlMemo.clear(); cssUrlMemo.set(ref, out); }
+      return out;
     },
 
     // Priority-ordered lookup. querySelector("#a, #b") returns whichever match comes

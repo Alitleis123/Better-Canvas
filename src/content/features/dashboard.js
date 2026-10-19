@@ -595,7 +595,8 @@
         || (d.autoHideConcluded && concludedIds && concludedIds.has(id))
         || (!!query && name.indexOf(query) === -1);
       const artwork = artworkByCourse.get(id);
-      const fallback = !spec.bgImage && artwork && !artwork.url.startsWith("data:") && scene
+      // Only remote photos can fail to load and need a drawing behind them.
+      const fallback = !spec.bgImage && artwork && /^https?:/i.test(artwork.url) && scene
         ? BC.sceneArt(scene.id, Array.from(artworkByCourse.keys()).indexOf(id)).url : "";
       overlayCard(card, { ...spec, bgImage: spec.bgImage || (artwork && artwork.url), bgFallback: fallback, hidden: effHidden });
       if (!effHidden) shown++;

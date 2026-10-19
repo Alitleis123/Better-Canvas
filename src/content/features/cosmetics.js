@@ -41,7 +41,7 @@
     if (cfg.mode === "color") layer = `background: ${BC.util.cssSafe(cfg.color)};`;
     else if (cfg.mode === "image" && BC.util.isSafeUrl(cfg.image)) {
       const scene = BC.themeScenes && BC.themeScenes[settings.theming.experience];
-      const fallback = scene && !cfg.image.startsWith("data:") ? `, url("${BC.util.cssUrl(BC.sceneArt(scene.id, 731, true).url)}") center/cover no-repeat` : "";
+      const fallback = scene && /^https?:/i.test(cfg.image) ? `, url("${BC.util.cssUrl(BC.sceneArt(scene.id, 731, true).url)}") center/cover no-repeat` : "";
       layer = BC.themeMedia && BC.themeMedia.parse(cfg.image) ? BC.themeMedia.style(cfg.image, true) : `background: url("${BC.util.cssUrl(cfg.image)}") center/cover no-repeat${fallback};`;
     } else if (cfg.mode === "gradient") {
       layer = `background: linear-gradient(${cfg.gradient.angle|0}deg, ${BC.util.cssSafe(cfg.gradient.from)} 0%, ${BC.util.cssSafe(cfg.gradient.to)} 100%);`;

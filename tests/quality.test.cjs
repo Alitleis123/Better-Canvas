@@ -280,3 +280,27 @@ test("grade tools show Canvas's current score and keep the final-exam inputs thr
     assert.equal(doc.querySelector("[data-weight]").value, "10");
   } finally { dom.window.close(); }
 });
+
+test("scene themes store short references, resolve when painted and compact old data URIs", () => {
+  const ctx = vm.createContext({ URL, console, setTimeout, clearTimeout, structuredClone, navigator: { platform: "Win32" }, chrome: { runtime: { getURL: (s) => "chrome-extension://x/" + s } } });
+  for (const file of ["src/shared/defaults.js", "src/content/core/util.js", "src/shared/themes.js", "src/shared/theme-library.js", "src/shared/theme-scenes.js", "src/shared/theme-artwork.js", "src/shared/theme-media.js"]) load(ctx, file);
+  const { BC } = ctx;
+  const s = BC.cloneDefaults();
+  BC.applyTheme(s, BC.PRESET_THEMES.find((p) => p.id === "scene-woodland"));
+  assert.ok(JSON.stringify(s).length < 20000, "settings stay small: " + JSON.stringify(s).length);
+  assert.equal(s.dashboard.themeImages[3].url, "bc-scene:woodland#3");
+  assert.equal(s.cosmetics.background.image, "bc-scene:woodland#731:wall");
+  assert.ok(BC.util.isSafeUrl(s.dashboard.themeImages[3].url));
+  assert.match(BC.util.cssUrl(s.dashboard.themeImages[3].url), /^data:image\/svg\+xml,/);
+  assert.equal(BC.themeMedia.style("bc-scene:woodland#3").includes("background-size:cover"), true);
+  // What 3.3.1 stored: the drawing itself.
+  const old = BC.cloneDefaults();
+  old.theming.experience = "woodland";
+  old.dashboard.themeImages = [BC.sceneArtData("woodland", 3), { url: "https://example.com/a.jpg", title: "Photo · composition 2" }];
+  old.cosmetics.background = { mode: "image", image: BC.sceneArtData("woodland", 731, true).url };
+  const merged = BC.mergeDefaults(JSON.parse(JSON.stringify(old)));
+  assert.equal(merged.dashboard.themeImages[0].url, "bc-scene:woodland#3");
+  assert.equal(merged.dashboard.themeImages[1].url, "https://example.com/a.jpg");
+  assert.equal(merged.cosmetics.background.image, "bc-scene:woodland#731:wall");
+  assert.equal(BC.themeMedia.parse("bc-scene:nowhere#1"), null);
+});
