@@ -226,6 +226,24 @@ async function commitLocal(msg) {
   return { ok: true };
 }
 
+// Study time arrives as small increments, often from a page that's unloading,
+// so the worker adds them here instead of the page doing a read and a commit.
+async function addStudyTime(msg) {
+  const minutes = Number(msg.minutes);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(msg.ymd || "") || !/^(\d{1,20}|other)$/.test(msg.key || "") || !(minutes > 0 && minutes <= 60)) {
+    throw new Error("Invalid study time");
+  }
+  const stored = await storageCall("get", ["bcLocal"]);
+  const local = stored.bcLocal && typeof stored.bcLocal === "object" ? stored.bcLocal : {};
+  const st = (local.studyTime = local.studyTime && typeof local.studyTime === "object" ? local.studyTime : {});
+  const day = (st[msg.ymd] = st[msg.ymd] && typeof st[msg.ymd] === "object" ? st[msg.ymd] : {});
+  day[msg.key] = +((Number(day[msg.key]) || 0) + minutes).toFixed(2);
+  const days = Object.keys(st).sort();
+  while (days.length > 60) delete st[days.shift()];
+  await storageCall("set", { bcLocal: local });
+  return { ok: true };
+}
+
 async function readSettingsSnapshot() {
   const values = await storageCall("get", ["bcSettings"]);
   return { ok: true, value: values.bcSettings, base: await storageHash(values.bcSettings) };
@@ -290,8 +308,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (msg.type === "bc:settingsRead" ? readSettingsSnapshot() : readLocalSnapshot(msg)).then(sendResponse, (error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
-  if (["bc:localCommit", "bc:settingsCommit", "bc:locker"].includes(msg.type)) {
-    const result = storageWrites.then(() => msg.type === "bc:locker" ? commitLocker(msg) : msg.type === "bc:settingsCommit" ? commitSettings(msg) : commitLocal(msg));
+  if (["bc:localCommit", "bc:settingsCommit", "bc:locker", "bc:studyTime"].includes(msg.type)) {
+    const result = storageWrites.then(() => msg.type === "bc:locker" ? commitLocker(msg) : msg.type === "bc:settingsCommit" ? commitSettings(msg)
+      : msg.type === "bc:studyTime" ? addStudyTime(msg) : commitLocal(msg));
     storageWrites = result.catch(() => {});
     result.then(sendResponse, (error) => sendResponse({ ok: false, error: error.message }));
     return true;

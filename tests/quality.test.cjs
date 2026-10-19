@@ -330,3 +330,40 @@ test("number fields ignore out-of-range typing and clamp on change; lists reorde
     assert.equal(doc.activeElement, grip);
   } finally { dom.window.close(); }
 });
+
+test("study time counts active focused seconds and the background adds them", async () => {
+  const { database } = require("./storage-harness.cjs");
+  const { domContext, load: loadDom, settle } = require("./audit-helpers.cjs");
+  const db = database({ bcLocal: { studyTime: {} } });
+  const client = db.client();
+  const sent = [];
+  const send = client.chrome.runtime.sendMessage;
+  client.chrome.runtime.sendMessage = (msg, cb) => { if (msg.type === "bc:studyTime") sent.push(msg); return send(msg, cb || (() => {})); };
+  const { dom, context } = domContext("", { chrome: client.chrome });
+  try {
+    let now = 1_800_000_000_000;
+    dom.window.Date.now = () => now;
+    dom.window.document.hasFocus = () => true;
+    loadDom(context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/datetime.js", "src/content/core/lifecycle.js");
+    const BC = context.BC;
+    const s = BC.cloneDefaults();
+    BC.storage = { current: s };
+    BC.detect = { context: () => ({ courseId: "42" }) };
+    BC.registry = { register(f) { BC.feature = f; } };
+    loadDom(context, "src/content/features/insights.js");
+    BC.feature.apply(s);
+    now += 15000;
+    dom.window.dispatchEvent(new dom.window.Event("pagehide"));
+    await settle(); await settle(); await settle();
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].key, "42");
+    assert.equal(sent[0].minutes, 0.25);
+    const ymd = sent[0].ymd;
+    assert.equal(db.data.bcLocal.studyTime[ymd]["42"], 0.25);
+    // Ten idle minutes later nothing more is counted.
+    now += 10 * 60000;
+    dom.window.dispatchEvent(new dom.window.Event("pagehide"));
+    await settle();
+    assert.equal(sent.length, 1);
+  } finally { dom.window.close(); }
+});

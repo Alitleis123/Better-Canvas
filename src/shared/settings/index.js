@@ -1513,7 +1513,7 @@
 
   function renderInsightsData(mount, local, names) {
     const courseName = (id) => names[id] || (id === "other" ? "Other pages" : "Course " + id);
-    const fmtMin = (m) => m >= 60 ? Math.floor(m / 60) + "h " + (m % 60) + "m" : m + "m";
+    const fmtMin = (raw) => { const m = Math.round(raw); return m >= 60 ? Math.floor(m / 60) + "h " + (m % 60) + "m" : m + "m"; };
 
     const st = local.studyTime || {};
     const days = [];
