@@ -80,7 +80,10 @@
   // &amp; without loading images or running anything.
   function plainText(html) {
     if (!html) return "";
-    return (new DOMParser().parseFromString(html, "text/html").body.textContent || "").replace(/\s+/g, " ").trim();
+    const body = new DOMParser().parseFromString(html, "text/html").body;
+    // Paragraphs and line breaks would otherwise run together: "FirstSecond".
+    for (const n of body.querySelectorAll("p, div, li, br, h1, h2, h3, h4, h5, h6, td")) n.after(" ");
+    return (body.textContent || "").replace(/\s+/g, " ").trim();
   }
 
   function positionAt(target, el) {

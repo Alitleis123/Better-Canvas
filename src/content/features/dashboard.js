@@ -97,7 +97,7 @@
       .ic-Dashboard-header__layout { gap: var(--bc-space-3, 12px); flex-wrap: wrap; }
       /* List View and Recent Activity hide the card container inline. The layouts
          below set display with !important, so keep Canvas's hide winning. */
-      #DashboardCard_Container[style*="display: none"] { display: none !important; }
+      #DashboardCard_Container:is([style*="display: none"], [style*="display:none"]) { display: none !important; }
     `;
     // Canvas gives each card a fixed 262px width and a side margin, and offsets the
     // wrapper by a matching negative margin so the first column lines up with the
