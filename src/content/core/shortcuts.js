@@ -74,7 +74,8 @@
   }
 
   function onKey(ev) {
-    if (fromDrawer(ev) || isTypingTarget(realTarget(ev))) return;
+    // A held key repeats keydown. Toggles flipped on and off for as long as it was held.
+    if (ev.repeat || fromDrawer(ev) || isTypingTarget(realTarget(ev))) return;
     const s = BC.storage && BC.storage.current;
     if (!s || !s.shortcuts || !s.shortcuts.enabled) return;
 
