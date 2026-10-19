@@ -130,7 +130,7 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "src/assets/themes/*.png"
+        "src/assets/themes/*.webp"
       ],
       "matches": [
         "<all_urls>"

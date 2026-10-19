@@ -15,7 +15,7 @@
   const resolve = (url) => {
     const art = parse(url);
     if (art && art.scene) return BC.sceneArtData(art.scene, art.seed, art.wall).url;
-    return art ? chrome.runtime.getURL("src/assets/themes/" + art.name + (art.wallpaper ? "-wallpaper.png" : ".png#scene-" + art.index)) : url;
+    return art ? chrome.runtime.getURL("src/assets/themes/" + art.name + (art.wallpaper ? "-wallpaper.webp" : ".webp#scene-" + art.index)) : url;
   };
   const position = (url) => {
     const art = parse(url);

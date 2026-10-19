@@ -25,7 +25,7 @@ test('bundled anime artwork is portable, distinct per course and present in both
     assert.equal(imported.dashboard.themeImages.length, 32);
     const assigned = BC.assignThemeImages(imported.dashboard.themeImages, Array.from({ length: 32 }, (_, i) => String(i * 32)));
     assert.equal(new Set([...assigned.values()].map((a) => BC.themeMedia.resolve(a.url))).size, 32);
-    assert.match(BC.themeMedia.resolve(imported.cosmetics.background.image), /-wallpaper\.png$/);
+    assert.match(BC.themeMedia.resolve(imported.cosmetics.background.image), /-wallpaper\.webp$/);
     for (const url of [imported.cosmetics.background.image, ...imported.dashboard.themeImages.map((i) => i.url)]) {
       const resolved = BC.themeMedia.resolve(url).replace('chrome-extension://test/', '').split('#')[0];
       assert.ok(fs.existsSync(path.join(root, resolved)));
@@ -38,7 +38,7 @@ test('bundled anime artwork is portable, distinct per course and present in both
   }
   for (const file of ['manifest.json', 'manifest.firefox.json']) {
     const manifest = JSON.parse(fs.readFileSync(path.join(root, file)));
-    assert.ok(manifest.web_accessible_resources.some((r) => r.resources.includes('src/assets/themes/*.png')));
+    assert.ok(manifest.web_accessible_resources.some((r) => r.resources.includes('src/assets/themes/*.webp')));
   }
 });
 test('asset references cannot escape the bundled artwork allowlist', () => {
