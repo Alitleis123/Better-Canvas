@@ -432,6 +432,10 @@
     const today = BC.dt.ymd(new Date());
     const key = courseId + ":" + today;
     if (total == null || historyRecorded.has(key)) return;
+    // Today's point is usually there already, from an earlier page. Each page load
+    // used to make a storage round trip per course to find that out.
+    const known = ((BC.storage.local && BC.storage.local.gradeHistory) || {})[courseId];
+    if (Array.isArray(known) && known.some((e) => e.date === today)) { historyRecorded.add(key); return; }
     return BC.storage.updateLocal((d) => {
       const gh = (d.gradeHistory = d.gradeHistory || {});
       const arr = gh[courseId] || [];
