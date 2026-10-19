@@ -151,8 +151,8 @@
     groups.forEach((g, i) => {
       const w = (g.group_weight || 0) / total;
       const dash = C * w;
-      const off = C - dash - cum;
-      arcs += `<circle cx="30" cy="30" r="${R}" fill="none" stroke="${palette[i%palette.length]}" stroke-width="8" stroke-dasharray="${dash} ${C-dash}" stroke-dashoffset="${off}" transform="rotate(-90 30 30)"/>`;
+      // A negative offset starts this arc where the previous one ended.
+      arcs += `<circle cx="30" cy="30" r="${R}" fill="none" stroke="${palette[i%palette.length]}" stroke-width="8" stroke-dasharray="${dash} ${C-dash}" stroke-dashoffset="${-cum}" transform="rotate(-90 30 30)"/>`;
       cum += dash;
       items += `<li><span style="background:${palette[i%palette.length]}"></span>${BC.util.escapeHtml(g.name)} — ${Math.round(w*100)}%</li>`;
     });
