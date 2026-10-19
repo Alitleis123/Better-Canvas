@@ -12,6 +12,7 @@
  *   data-bc-dfg   text        t body · m muted · hN tinted · k keep dark (on a light chip)
  *   data-bc-dbd   edges       the border sides ("t r b l") that were light; "x" a light text shadow
  *   data-bc-dhov  hover       turns light only while hovered
+ *   data-bc-dhovdark          a pinned light chip that turns dark while hovered
  *
  * Reads happen before writes, so classification sees Canvas's own colours rather
  * than ones we've already changed. Editable regions are never tagged: the rich
@@ -116,7 +117,10 @@ html.bc-dark [data-bc-dhov]:hover { background-color: var(--bc-surface-hover, va
 html.bc-dark [data-bc-dfg="t"] { color: var(--bc-text) !important; }
 html.bc-dark [data-bc-dfg="m"] { color: var(--bc-muted) !important; }
 html.bc-dark [data-bc-dfg="k"] { color: #1f1f23 !important; }
-html.bc-dark a[data-bc-dfg="k"] { color: #1d4ed8 !important; }   /* still reads as a link */
+/* Still reads as a link: at least 5.4:1 on the darkest chip that gets pinned. */
+html.bc-dark a[data-bc-dfg="k"] { color: #1e3a8a !important; text-decoration: underline; }
+/* A chip that darkens on hover gets the page's light text back while hovered. */
+html.bc-dark [data-bc-dhovdark]:hover, html.bc-dark [data-bc-dhovdark]:hover [data-bc-dfg="k"] { color: var(--bc-text) !important; }
 html.bc-dark [data-bc-dbd~="t"] { border-top-color: var(--bc-border) !important; }
 html.bc-dark [data-bc-dbd~="r"] { border-right-color: var(--bc-border) !important; }
 html.bc-dark [data-bc-dbd~="b"] { border-bottom-color: var(--bc-border) !important; }
@@ -190,7 +194,9 @@ html.bc-dark [data-bc-dbd~="x"] { text-shadow: none !important; }
         }
       } else {
         r.surf = L < MID ? "dark" : "light";
-        r.chip = L >= MID;   // a solid mid-tone colour we leave as it is
+        // A solid mid-tone colour we leave as it is. A see-through one shows the
+        // dark page under it, where dark text would be unreadable.
+        r.chip = L >= MID && bg.a >= 0.9;
       }
     } else if (img) {
       r.own = true;
@@ -240,7 +246,7 @@ html.bc-dark [data-bc-dbd~="x"] { text-shadow: none !important; }
       if (cs.backgroundImage && cs.backgroundImage !== "none") return false;
       const bg = parse(cs.backgroundColor);
       if (!bg || bg.a < 0.35) continue;
-      return !p.hasAttribute("data-bc-dbg") && lum(bg) >= MID && lum(bg) < BG_LIGHT;
+      return !p.hasAttribute("data-bc-dbg") && bg.a >= 0.9 && lum(bg) >= MID && lum(bg) < BG_LIGHT;
     }
     return false;
   }
@@ -387,22 +393,28 @@ html.bc-dark [data-bc-dbd~="x"] { text-shadow: none !important; }
     }
   }
 
-  // Backgrounds that only turn light on :hover never show up in a scan.
-  let hoverFrame = 0, hoverTarget = null;
+  // Backgrounds that only turn light on :hover never show up in a scan. Nor do
+  // light chips that turn dark on :hover, whose pinned dark text would vanish;
+  // those get data-bc-dhovdark. Checked again after Canvas's ~200ms colour fade.
+  let hoverFrame = 0, hoverTarget = null, hoverTimer = 0;
+  function hoverCheck() {
+    if (!running) return;
+    let el = hoverTarget && hoverTarget.nodeType === 1 ? hoverTarget : null;
+    for (let i = 0; el && i < 4; i++, el = el.parentElement) {
+      if (el === document.body || el.hasAttribute("data-bc-dbg") || el.hasAttribute("data-bc-dhov")) continue;
+      if (!eligible(el)) return;
+      const cs = getComputedStyle(el);
+      const bg = parse(cs.backgroundColor);
+      if (!bg || bg.a < 0.35 || cs.backgroundImage !== "none") continue;
+      if (lum(bg) >= BG_LIGHT) el.setAttribute("data-bc-dhov", "");
+      else if (lum(bg) < MID && el.getAttribute("data-bc-dfg") === "k" && el.matches(":hover")) el.setAttribute("data-bc-dhovdark", "");
+    }
+  }
   function onOver(e) {
     hoverTarget = e.target;
     if (hoverFrame) return;
-    hoverFrame = requestAnimationFrame(() => {
-      hoverFrame = 0;
-      let el = hoverTarget && hoverTarget.nodeType === 1 ? hoverTarget : null;
-      for (let i = 0; el && i < 4; i++, el = el.parentElement) {
-        if (el === document.body || el.hasAttribute("data-bc-dbg") || el.hasAttribute("data-bc-dhov")) continue;
-        if (!eligible(el)) return;
-        const cs = getComputedStyle(el);
-        const bg = parse(cs.backgroundColor);
-        if (bg && bg.a >= 0.35 && lum(bg) >= BG_LIGHT && cs.backgroundImage === "none") el.setAttribute("data-bc-dhov", "");
-      }
-    });
+    hoverFrame = requestAnimationFrame(() => { hoverFrame = 0; hoverCheck(); });
+    clearTimeout(hoverTimer); hoverTimer = setTimeout(hoverCheck, 300);
   }
 
   // A scan at document_start runs before Canvas's stylesheets have applied, and
@@ -430,9 +442,10 @@ html.bc-dark [data-bc-dbd~="x"] { text-shadow: none !important; }
   }
 
   function clearAll() {
-    for (const el of document.querySelectorAll(TAGGED + ",[data-bc-dhov]")) {
+    for (const el of document.querySelectorAll(TAGGED + ",[data-bc-dhov],[data-bc-dhovdark]")) {
       for (const a of ATTRS) el.removeAttribute(a);
       el.removeAttribute("data-bc-dhov");
+      el.removeAttribute("data-bc-dhovdark");
     }
   }
 
