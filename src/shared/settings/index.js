@@ -206,6 +206,8 @@
         active = lastTab = tab.id;
         cancelDraft();
         const editing = EDIT_TABS.includes(active);
+        // Undo and Redo cover settings, which the locker doesn't show.
+        undoBtn.hidden = redoBtn.hidden = active === "locker";
         workspaceBody.classList.toggle("is-editing", editing);
         previewColumn.hidden = subnav.hidden = !editing;
         workspaceTitle.textContent = editing ? "Edit Canvas" : tab.label;
@@ -225,6 +227,7 @@
       function showSearch(q) {
         disposeTab();
         cancelDraft(); previewColumn.hidden = subnav.hidden = true; workspaceBody.classList.remove("is-editing");
+        undoBtn.hidden = redoBtn.hidden = false;
         workspaceTitle.textContent = "Search settings"; workspaceDesc.textContent = "Find a control anywhere in Better Canvas.";
         const query = q.trim().toLowerCase();
         for (const b of navBtns.values()) b.removeAttribute("aria-current");
@@ -271,7 +274,8 @@
         redoBtn.disabled = !store.canRedo();
         // Wholesale replacement (reset / import / undo / redo / external change) can
         // alter anything including list lengths, so rebuild — preserving scroll.
-        if (kind === "structural" && !search.input.value.trim()) {
+        // My locker doesn't read settings. Rebuilding it closed the note being edited.
+        if (kind === "structural" && !search.input.value.trim() && active !== "locker") {
           const top = main.scrollTop;
           showTab(active, true);
           main.scrollTop = top;

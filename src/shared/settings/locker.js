@@ -5,10 +5,17 @@
   const el = (t, a, c) => BC.ui.el(t, a, c);
   const renderers = new Set();
   const plain = (v, n) => typeof v === "string" ? v.slice(0, n) : "";
+  // "www.example.com" was stored as an empty URL while the status said Saved.
+  // Give an address without a scheme https://.
+  function withScheme(url) {
+    const s = typeof url === "string" ? url.trim() : "";
+    return s && !/^[a-z][a-z0-9+.-]*:/i.test(s) && /^[^\s/]+\.[^\s]+$/.test(s) ? "https://" + s : s;
+  }
   function normalize(value) {
     if (!value || typeof value !== "object" || !["note", "set", "link"].includes(value.type)) return null;
+    const url = withScheme(value.url);
     return { id: /^[a-zA-Z0-9-]{1,80}$/.test(value.id || "") ? value.id : crypto.randomUUID(), type: value.type,
-      title: plain(value.title, 200), body: plain(value.body, 100000), url: BC.util.isSafeHttpUrl(value.url) ? value.url.slice(0, 4096) : "",
+      title: plain(value.title, 200), body: plain(value.body, 100000), url: BC.util.isSafeHttpUrl(url) ? url.slice(0, 4096) : "",
       folder: plain(value.folder, 100), pinned: !!value.pinned, updated: Number(value.updated) || Date.now(),
       cards: (Array.isArray(value.cards) ? value.cards : []).slice(0, 500).filter((c) => c && typeof c === "object").map((c) => ({ front: plain(c.front, 5000), back: plain(c.back, 5000) })) };
   }
