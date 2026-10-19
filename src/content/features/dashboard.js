@@ -407,14 +407,15 @@
   };
   function ensureLoaded(key, loader) {
     const state = loadState[key];
-    if (state.status === "loading" || Date.now() < state.next || document.hidden) return;
-    const generation = state.generation;
-    state.status = "loading";
-    // A hidden tab doesn't refetch. It catches up when it's shown again.
-    const wake = (delay) => BC.lifecycle.pageBag("dashboard").timeout(() => { if (!document.hidden && BC.requestApply) BC.requestApply(); }, delay);
+    // A hidden tab doesn't fetch. It catches up when it's shown, including a
+    // dashboard first opened in a background tab, so listen before bailing out.
     BC.lifecycle.pageBag("dashboard").once("visible", () => BC.lifecycle.pageBag("dashboard").listen(document, "visibilitychange", () => {
       if (!document.hidden && BC.requestApply) BC.requestApply();
     }));
+    if (state.status === "loading" || Date.now() < state.next || document.hidden) return;
+    const generation = state.generation;
+    state.status = "loading";
+    const wake = (delay) => BC.lifecycle.pageBag("dashboard").timeout(() => { if (!document.hidden && BC.requestApply) BC.requestApply(); }, delay);
     Promise.resolve().then(loader).then((data) => {
       if (state.generation !== generation) return;
       if (key === "scores") scoresMap = data;
