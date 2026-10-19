@@ -238,22 +238,39 @@
     subscribeLocal(cb) { localListeners.add(cb); return () => localListeners.delete(cb); },
 
     // Bound the unbounded stores so bcLocal can't crawl toward the quota.
-    // Maps drop oldest-inserted entries first (insertion order ≈ age).
+    // Maps drop oldest-inserted entries first (insertion order ≈ age). Sticky
+    // notes are the user's own writing and are never capped; only empty page
+    // lists go. Drafts expire a week after their last edit.
     prune() {
+      const now = Date.now(), WEEK = 7 * 864e5;
       const capMap = (obj, max) => {
         if (!obj) return;
         const keys = Object.keys(obj);
         if (keys.length <= max) return;
         for (const k of keys.slice(0, keys.length - max)) delete obj[k];
       };
+      const stale = (d) => {
+        const savedAt = d.draftSavedAt || {};
+        return Object.keys(d.drafts || {}).filter((k) => /#\d+$/.test(k) || !(now - savedAt[k] < WEEK));
+      };
+      // Most page loads have nothing to prune. Check the copy in memory first so
+      // they skip the storage round trip.
+      const due = (d) => !d || stale(d).length || Object.keys(d.drafts || {}).length > 200 ||
+        Object.keys(d.draftSavedAt || {}).some((k) => !(d.drafts || {})[k]) ||
+        Object.keys(d.gradeHistory || {}).length > 30 || (Array.isArray(d.notifHistory) && d.notifHistory.length > 100) ||
+        Object.values(d.notes || {}).some((list) => Array.isArray(list) && !list.length) ||
+        Object.values(d.gradeHistory || {}).some((h) => Array.isArray(h) && h.length > 90);
+      if (!due(local)) return Promise.resolve();
       return storage.updateLocal((d) => {
-        capMap(d.notes, 100);
+        for (const [k, list] of Object.entries(d.notes || {})) if (Array.isArray(list) && !list.length) delete d.notes[k];
+        const savedAt = (d.draftSavedAt = d.draftSavedAt || {});
+        // Drafts saved before 3.3.2 have no time. Start their week now.
+        for (const k of Object.keys(d.drafts || {})) if (!savedAt[k] && !/#\d+$/.test(k)) savedAt[k] = now;
+        for (const k of stale(d)) delete d.drafts[k];
         capMap(d.drafts, 200);
+        for (const k of Object.keys(savedAt)) if (!(d.drafts || {})[k]) delete savedAt[k];
         capMap(d.gradeHistory, 30);
         if (Array.isArray(d.notifHistory) && d.notifHistory.length > 100) d.notifHistory = d.notifHistory.slice(0, 100);
-        // Legacy draft keys used a global textarea index and cannot be mapped to the
-        // structural scheme — restoring one would land in the wrong field.
-        for (const k of Object.keys(d.drafts || {})) if (/#\d+$/.test(k)) delete d.drafts[k];
         const gh = d.gradeHistory || {};
         for (const id of Object.keys(gh)) {
           if (Array.isArray(gh[id]) && gh[id].length > 90) gh[id] = gh[id].slice(-90);

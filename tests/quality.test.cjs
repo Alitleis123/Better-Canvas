@@ -104,3 +104,27 @@ test("typing in a settings field is one undo step but each switch click is its o
   assert.equal(store.get().cosmetics.customCss, "");
   assert.equal(store.canUndo(), false);
 });
+
+test("pruning keeps every page's sticky notes, drops empty lists and expires week-old drafts", async () => {
+  const { database } = require("./storage-harness.cjs");
+  const notes = {};
+  for (let i = 0; i < 150; i++) notes["https://school.instructure.com/p" + i] = [{ id: "n" + i, text: "note " + i }];
+  notes["https://school.instructure.com/empty"] = [];
+  const old = Date.now() - 8 * 864e5;
+  const db = database({ bcLocal: { notes, drafts: { fresh: "keep", old: "drop", legacy: "keep for now" }, draftSavedAt: { fresh: Date.now(), old } } });
+  const t = db.tab();
+  await t.storage.loadLocal();
+  await t.storage.prune();
+  const local = db.data.bcLocal;
+  assert.equal(Object.keys(local.notes).length, 150);
+  assert.equal(local.notes["https://school.instructure.com/p0"][0].text, "note 0");
+  assert.equal("https://school.instructure.com/empty" in local.notes, false);
+  assert.deepEqual(Object.keys(local.drafts).sort(), ["fresh", "legacy"]);
+  assert.equal(typeof local.draftSavedAt.legacy, "number");
+  assert.equal("old" in local.draftSavedAt, false);
+  // Nothing left to prune, so the next page load skips storage entirely.
+  const reads = db.requests.length, events = db.events.length;
+  await t.storage.prune();
+  assert.equal(db.requests.length, reads);
+  assert.equal(db.events.length, events);
+});

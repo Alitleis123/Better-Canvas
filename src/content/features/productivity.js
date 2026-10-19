@@ -191,7 +191,11 @@
   }
   function editNotes(mutator) {
     const key = pageKey();
-    return BC.storage.updateLocal((d) => { d.notes = d.notes || {}; d.notes[key] = mutator(d.notes[key] || []); });
+    return BC.storage.updateLocal((d) => {
+      d.notes = d.notes || {};
+      const list = mutator(d.notes[key] || []);
+      if (list.length) d.notes[key] = list; else delete d.notes[key];
+    });
   }
 
   // ONE delegated drag, installed once — not a pair of document-level listeners
@@ -362,8 +366,10 @@
         const val = ta.tagName === "TEXTAREA" ? ta.value : ta.textContent;
         BC.storage.updateLocal((d) => {
           d.drafts = d.drafts || {};
+          d.draftSavedAt = d.draftSavedAt || {};
           // Emptying the field discards the draft instead of storing "".
-          if (val && val.trim()) d.drafts[key] = val; else delete d.drafts[key];
+          if (val && val.trim()) { d.drafts[key] = val; d.draftSavedAt[key] = Date.now(); }
+          else { delete d.drafts[key]; delete d.draftSavedAt[key]; }
         });
       };
       h.save = save;
@@ -379,7 +385,7 @@
         clearTimeout(h.timer);
         h.timer = null;
         if (!draftsEnabled()) return;
-        BC.storage.updateLocal((d) => { if (d.drafts) delete d.drafts[key]; });
+        BC.storage.updateLocal((d) => { if (d.drafts) delete d.drafts[key]; if (d.draftSavedAt) delete d.draftSavedAt[key]; });
       };
       if (h.form) h.form.addEventListener("submit", h.submit);
       ta._bcDraft = true;
