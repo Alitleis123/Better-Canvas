@@ -205,9 +205,10 @@
 
   // The colour block at the top of the card. Overlays sit on it (top-left and
   // bottom corners) so they never cover Canvas's ⋮ menu at the top right or the
-  // action icons along the bottom of the card.
+  // action icons along the bottom of the card. The colour block alone: the header
+  // also wraps the course code and term below it, which the overlays used to cover.
   function headerOf(card) {
-    return card.querySelector(".ic-DashboardCard__header") || card;
+    return card.querySelector(".ic-DashboardCard__header_image") || card.querySelector(".ic-DashboardCard__header") || card;
   }
 
   function overlayInlineGrade(card, courseId, scoresMap) {
@@ -437,14 +438,18 @@
     for (const it of items) {
       const cid = it.course_id ? String(it.course_id) : (it.context_type === "Course" ? String(it.context_id) : null);
       if (!cid) continue;
-      const entry = counts.get(cid) || { total: 0, done: 0 };
-      entry.total++;
       const done = BC.api.plannerItemDone(it);
-      if (done) entry.done++;
-      counts.set(cid, entry);
+      const dueISO = it.plannable_date || (it.plannable && it.plannable.due_at);
+      // The bar is "done in the last month", so work that isn't due yet stays out:
+      // counting it showed a caught-up student about 60%.
+      if (dueISO && new Date(dueISO).getTime() <= now) {
+        const entry = counts.get(cid) || { total: 0, done: 0 };
+        entry.total++;
+        if (done) entry.done++;
+        counts.set(cid, entry);
+      }
 
       // Due-in-24h count for the card badge — free from the data we already have.
-      const dueISO = it.plannable_date || (it.plannable && it.plannable.due_at);
       if (!done && dueISO) {
         const diff = new Date(dueISO).getTime() - now;
         if (diff > 0 && diff <= 24 * 60 * 60 * 1000) dueSoon.set(cid, (dueSoon.get(cid) || 0) + 1);
@@ -485,7 +490,7 @@
     // layout CSS
     BC.injector.setStyle("bc-dashboard-ui", layoutCss(d) + `
       .ic-DashboardCard { position: relative; }
-      .ic-DashboardCard__header { position: relative; }
+      .ic-DashboardCard__header, .ic-DashboardCard__header_image { position: relative; }
       /* glass pills over the course colour */
       .bc-inline-grade, .bc-badge {
         display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px;
