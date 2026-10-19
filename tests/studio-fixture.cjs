@@ -6,6 +6,8 @@ const root = path.resolve(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
 const files = manifest.content_scripts[0].js.filter(f => !f.endsWith('/content.js'));
 const setup = `window.auditErrors=[];window.addEventListener('error',e=>auditErrors.push(e.message));window.addEventListener('unhandledrejection',e=>auditErrors.push(String(e.reason)));
+if(!crypto.subtle)Object.defineProperty(crypto,'subtle',{value:{digest:async(_,bytes)=>{let h=2166136261;for(const b of bytes)h=Math.imul(h^b,16777619)>>>0;return new Uint32Array([h]).buffer;}}});
+
 const stored={bcSettings:BC.cloneDefaults(),bcLocal:{notes:{},drafts:{},cache:{}}};
 const events=[];const writes=[];const messages=[];window.auditWrites=writes;
 window.chrome={storage:{local:{remove:(key,cb)=>{delete stored[key];queueMicrotask(()=>cb&&cb());},getKeys:cb=>queueMicrotask(()=>cb(Object.keys(stored))),get:(keys,cb)=>queueMicrotask(()=>cb(structuredClone(keys===null?stored:Object.fromEntries((Array.isArray(keys)?keys:[keys]).filter(k=>Object.hasOwn(stored,k)).map(k=>[k,stored[k]]))))),set:(obj,cb)=>{const changes={};for(const k of Object.keys(obj)){changes[k]={oldValue:stored[k],newValue:structuredClone(obj[k])};stored[k]=structuredClone(obj[k]);}queueMicrotask(()=>{events.forEach(fn=>fn(changes,'local'));if(cb)cb();});}},onChanged:{addListener:f=>events.push(f),removeListener:f=>{const i=events.indexOf(f);if(i>=0)events.splice(i,1);}}},permissions:{},contextMenus:{onClicked:{addListener:()=>{}}},runtime:{id:'audit-mock',onInstalled:{addListener:()=>{}},onStartup:{addListener:()=>{}},onMessage:{addListener:f=>messages.push(f)},sendMessage:(msg,cb)=>messages.forEach(f=>f(msg,{id:'audit-mock'},cb)),getURL:s=>s}};
