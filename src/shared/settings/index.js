@@ -58,7 +58,19 @@
   const GROUPS = ["Look", "Home", "Courses", "Tools", "More"];
   let lastTab = "themes";   // reopening the panel returns to where you were
 
+  const SETTINGS_SECTIONS = ["theming", "dashboard", "todo", "navigation", "cosmetics", "grades"];
   BC.SettingsUI = {
+    // What a chosen JSON file is: "backup" (settings + local data), "settings" (a
+    // bare older export), "locker", "theme", or null. Any other object used to
+    // import as defaults and silently reset everything.
+    backupKind(j) {
+      if (!j || typeof j !== "object" || Array.isArray(j)) return null;
+      if (j.format === "better-canvas-locker") return "locker";
+      const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
+      if ((j.kind === "better-canvas-backup" || "local" in j) && isObj(j.settings)) return "backup";
+      if (isObj(j.settings) && typeof j.name === "string" && !("local" in j)) return "theme";
+      return typeof j.version === "number" || SETTINGS_SECTIONS.some((k) => isObj(j[k])) ? "settings" : null;
+    },
     render(root, adapter, opts) {
       const o = opts || {};
       if (root.dispose) root.dispose();
@@ -1575,8 +1587,9 @@
   // backup silently loses it.
   function exportFlow(store) {
     const adapter = store.adapter || {};
+    let localFailed = false;
     Promise.resolve(adapter.getLocal ? adapter.getLocal() : null)
-      .catch(() => null)
+      .catch(() => { localFailed = true; return null; })
       .then((local) => {
         const payload = {
           kind: "better-canvas-backup",
@@ -1586,7 +1599,8 @@
           local: local || null,
         };
         download(JSON.stringify(payload, null, 2), "better-canvas-settings.json");
-        BC.toast && BC.toast.success("Settings exported");
+        if (localFailed) BC.toast && BC.toast.warn("Exported settings only. Notes and planner data could not be read.");
+        else BC.toast && BC.toast.success("Settings exported");
       });
   }
 
@@ -1599,12 +1613,18 @@
         try { parsed = JSON.parse(txt); } catch (_) { parsed = null; }
         if (!parsed || typeof parsed !== "object") { BC.toast && BC.toast.error("That isn't a settings file"); return; }
 
-        // Accept both shapes: the {settings, local} envelope and a bare pre-3.1
-        // settings object.
-        const isEnvelope = parsed.kind === "better-canvas-backup" || (parsed.settings && typeof parsed.settings === "object");
-        const settingsPart = isEnvelope ? parsed.settings : parsed;
-        const rawLocal = isEnvelope ? parsed.local : null;
-        const localPart = rawLocal && typeof rawLocal === "object" && !Array.isArray(rawLocal) ? BC.cleanLocalData(rawLocal) : null;
+        const kind = BC.SettingsUI.backupKind(parsed);
+        if (kind !== "backup" && kind !== "settings") {
+          BC.toast && BC.toast.error(kind === "locker" ? "That's a My locker export. Import it from My locker."
+            : kind === "theme" ? "That's a theme file. Import it from Edit Canvas > Themes." : "That isn't a settings file");
+          return;
+        }
+        const settingsPart = kind === "backup" ? parsed.settings : parsed;
+        const rawLocal = kind === "backup" ? parsed.local : null;
+        let localPart = rawLocal && typeof rawLocal === "object" && !Array.isArray(rawLocal) ? BC.cleanLocalData(rawLocal) : null;
+        // Replacing local data drops this device's notes and drafts, and Undo can't
+        // bring them back, so it needs its own yes.
+        if (localPart && !confirm("This backup also has sticky notes, drafts, planner data and grade history. Replace the ones on this device?\n\nCancel imports the settings only.")) localPart = null;
 
         const carry = store.importJSON(JSON.stringify(settingsPart));
         if (!carry) { BC.toast && BC.toast.error("That isn't a settings file"); return; }

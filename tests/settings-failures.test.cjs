@@ -40,7 +40,7 @@ test("settings import waits for storage and reports its failure without a succes
       return node;
     };
     items.find((item) => item.label.startsWith("Import settings")).onClick();
-    Object.defineProperty(input, "files", { value: [{ text: async () => '{"enabled":false}' }] });
+    Object.defineProperty(input, "files", { value: [{ text: async () => '{"version":5,"enabled":false}' }] });
     input.onchange(); await settle(); await settle();
     assert.equal(s.messages.some((m) => m.type === "success"), false);
     assert.match(s.messages.find((m) => m.type === "error").text, /could not be imported.*Quota exceeded/);

@@ -47,3 +47,16 @@ test("reset restores options but keeps what the user made", () => {
   assert.equal(store.undo(), true);
   assert.equal(store.get().dashboard.courses[7].color, "#ff0000");
 });
+
+test("settings import recognizes backups and turns away locker and theme files", () => {
+  const context = vm.createContext({ console, setTimeout, clearTimeout, structuredClone, navigator: { platform: "Win32" } });
+  load(context, "src/shared/defaults.js", "src/content/core/util.js", "src/shared/settings/index.js");
+  const kind = (j) => context.BC.SettingsUI.backupKind(j);
+  assert.equal(kind({ kind: "better-canvas-backup", version: 5, settings: { theming: {} }, local: null }), "backup");
+  assert.equal(kind({ settings: { theming: {} }, local: { notes: {} } }), "backup");
+  assert.equal(kind({ version: 3, theming: { darkMode: "on" }, dashboard: {} }), "settings");
+  assert.equal(kind({ format: "better-canvas-locker", version: 1, items: [] }), "locker");
+  assert.equal(kind({ id: "x", name: "Mine", settings: { theming: {}, cosmetics: {} } }), "theme");
+  assert.equal(kind({ hello: "world" }), null);
+  assert.equal(kind([]), null);
+});
