@@ -789,8 +789,10 @@
     const t = settings.todo;
     const items = model.windowItems.concat(model.overdue, model.recentDone, model.sleeping).map((it) => keyForItem(it) + (isComplete(it) ? "+" : "-")).join(",");
     const courses = settings.dashboard && settings.dashboard.courses;
+    // The minute keeps "due soon", overdue and the Day plan's now-line current on
+    // a tab left open.
     return JSON.stringify([state.lastFetchKey, items, state.filterCourse, state.cards.size, [...state.expanded],
-      t, courses, tlocal(), (BC.storage.local || {}).streak, wide ? 1 : 0]);
+      t, courses, tlocal(), (BC.storage.local || {}).streak, wide ? 1 : 0, Math.floor(Date.now() / 60000)]);
   }
 
   function shouldSkip(container, sig) {
@@ -803,6 +805,24 @@
     const form = container.querySelector(".pl-add__form:not([hidden])");
     if (form && form.querySelector("input").value) return true;
     return BC.ui.popoverOpen();
+  }
+
+  // Enough to find "the same control" after a rebuild: its row and its label.
+  function focusTarget(container, node) {
+    const row = node.closest("[data-key]");
+    const keys = [...container.querySelectorAll("[data-key]")].map((n) => n.dataset.key);
+    return { key: row && row.dataset.key, next: row ? keys.slice(keys.indexOf(row.dataset.key) + 1) : [],
+      label: node.getAttribute("aria-label"), text: node.textContent, tag: node.tagName };
+  }
+  function restoreFocus(container, had) {
+    const same = (n) => n.tagName === had.tag && (had.label ? n.getAttribute("aria-label") === had.label : n.textContent === had.text);
+    const find = (scope) => scope && [...scope.querySelectorAll("button, input, select, a[href], [tabindex]")].find(same);
+    const rowOf = (key) => key && [...container.querySelectorAll("[data-key]")].find((n) => n.dataset.key === key);
+    const row = rowOf(had.key);
+    let target = row ? find(row) || row.querySelector("input, button") : !had.key && find(container);
+    // The row left the view (checked off with completed hidden): go to the next one.
+    if (!target && had.key) for (const key of had.next) { const r = rowOf(key); if (r) { target = r.querySelector("input, button"); break; } }
+    if (target) target.focus({ preventScroll: true });
   }
 
   function render(settings, container, opts) {
@@ -839,7 +859,12 @@
     const foot = buildFoot(settings);
     if (foot) card.append(foot);
 
+    // A rebuild replaces every node, which dropped keyboard focus to the page after
+    // each check-off, star or filter change. Put it back on the same control.
+    const ae = container.getRootNode().activeElement;
+    const had = ae && container.contains(ae) ? focusTarget(container, ae) : null;
     container.replaceChildren(card);
+    if (had) restoreFocus(container, had);
     syncPomButtons();
     if (!o.wide) { state.first = false; state.slide = 0; state.lastView = view; }
   }
@@ -2107,7 +2132,9 @@
       return;
     }
     if (ensureMount()) loadAndRender(settings);
+    if (!clockTimer) clockTimer = BC.lifecycle.bag("todo").interval(() => { if (!document.hidden) rerender(); }, 60000);
   }
+  let clockTimer = null;
 
   BC.registry.register({
     id: "todo",
@@ -2118,6 +2145,7 @@
       // The bag clear already killed the interval; null the handle so a re-enable
       // starts a fresh one instead of assuming one is still live.
       pomTimer = null;
+      clockTimer = null;
       mounted = null;
       state.sheet = null;
       state.lastFetchKey = "";

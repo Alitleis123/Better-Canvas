@@ -161,3 +161,47 @@ test("two tabs finishing the same focus phase start the break once", async () =>
     assert.equal(a.toasts.length + b.toasts.length, 1);
   } finally { a.page.dom.window.close(); b.page.dom.window.close(); }
 });
+
+async function plannerContext() {
+  const { database } = require("./storage-harness.cjs");
+  const { domContext, load: loadDom } = require("./audit-helpers.cjs");
+  const db = database({ bcLocal: {} }), client = db.client(), page = domContext("", { chrome: client.chrome });
+  loadDom(page.context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/datetime.js", "src/content/core/color.js", "src/content/core/icons.js", "src/content/core/ui.js", "src/content/core/lifecycle.js", "src/content/core/storage.js");
+  const BC = page.context.BC;
+  await BC.storage.load(); await BC.storage.loadLocal();
+  vm.runInContext(fs.readFileSync(path.join(root, "src/content/features/todo.js"), "utf8")
+    .replace("  BC.registry.register({", "  BC.test = { expandRecurring, focusTarget, restoreFocus };\n  BC.registry.register({"), page.context);
+  return { BC, page };
+}
+
+test("recurring tasks clamp to short months and start on the day they were made", async () => {
+  const { BC, page } = await plannerContext();
+  try {
+    const s = BC.cloneDefaults();
+    s.todo.recurring = [{ id: "m", title: "Rent", rule: "monthly", day: 31 }, { id: "d", title: "Read", rule: "daily", from: "2027-02-03" }];
+    const days = (id) => BC.test.expandRecurring(s, new Date(2027, 1, 1), new Date(2027, 2, 1)).filter((x) => x.bcRuleId === id).map((x) => x.bcYmd);
+    assert.deepEqual(copy(days("m")), ["2027-02-28"]);
+    assert.equal(days("d")[0], "2027-02-03");
+    assert.equal(days("d").length, 26);
+  } finally { page.dom.window.close(); }
+});
+
+test("a planner rebuild puts focus back on the same control or the next row", async () => {
+  const { BC, page } = await plannerContext();
+  try {
+    const doc = page.dom.window.document;
+    const build = (keys) => { const box = doc.createElement("div"); box.innerHTML = keys.map((k) => `<li data-key="${k}"><input type="checkbox" aria-label="Done ${k}"><button aria-label="Star ${k}">*</button></li>`).join(""); return box; };
+    const container = doc.createElement("div"); doc.body.append(container);
+    container.append(build(["a", "b", "c"]));
+    container.querySelector('[aria-label="Star b"]').focus();
+    let had = BC.test.focusTarget(container, doc.activeElement);
+    container.replaceChildren(build(["a", "b", "c"]));
+    BC.test.restoreFocus(container, had);
+    assert.equal(doc.activeElement.getAttribute("aria-label"), "Star b");
+    container.querySelector('[aria-label="Done b"]').focus();
+    had = BC.test.focusTarget(container, doc.activeElement);
+    container.replaceChildren(build(["a", "c"]));
+    BC.test.restoreFocus(container, had);
+    assert.equal(doc.activeElement.getAttribute("aria-label"), "Done c");
+  } finally { page.dom.window.close(); }
+});
