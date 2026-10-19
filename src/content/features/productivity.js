@@ -360,9 +360,15 @@
     for (const ta of document.querySelectorAll("textarea, [contenteditable=true]")) {
       if (draftHandlers.has(ta)) continue;
       if (isOurs(ta)) continue;
+      // Quiz answers belong to the quiz saver, which keeps each attempt apart.
+      // Here they'd restore attempt 1's essay into attempt 2.
+      if (ta.closest("#questions") && /^\/courses\/\d+\/quizzes\/\d+\/take/.test(location.pathname)) continue;
       const key = draftKey(ta);
       if (!key) continue;
-      const saved = BC.storage.local && BC.storage.local.drafts && BC.storage.local.drafts[key];
+      const local = BC.storage.local || {};
+      const savedAt = (local.draftSavedAt || {})[key];
+      // Pruning runs after features first apply. Don't restore what it's about to drop.
+      const saved = local.drafts && local.drafts[key] && !(savedAt && Date.now() - savedAt > 7 * 864e5) ? local.drafts[key] : null;
       if (saved && !ta.value && !ta.textContent) {
         if (ta.tagName === "TEXTAREA") {
           ta.value = saved;
