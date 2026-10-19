@@ -135,6 +135,18 @@
     return BC.api.assignmentGroups(courseId);
   }
 
+  // Same rule as the dashboard pill and notifications: current score, else final.
+  function canvasScore(courseId) {
+    return Promise.resolve().then(() => BC.api.coursesWithScores()).then((list) => {
+      const c = list.find((x) => String(x.id) === String(courseId));
+      const e = (c && c.enrollments || [])[0] || {};
+      const s = e.computed_current_score != null ? e.computed_current_score : e.computed_final_score;
+      return s == null ? null : Number(s);
+    }).catch(() => null);
+  }
+
+  const finalInputs = new Map();   // courseId -> the "need on final" inputs as typed
+
   function donutSVG(groups, hasWeights) {
     // Show weight distribution
     if (!hasWeights) return "";
@@ -200,8 +212,11 @@
       return d;
     });
     if (!panel.childElementCount) panel.replaceChildren(BC.ui.skeleton(4));
-    ensureGroups(courseId).then((groups) => {
-      const total = BC.grades.computeTotal(groups);
+    Promise.all([ensureGroups(courseId), canvasScore(courseId)]).then(([groups, canvas]) => {
+      // Canvas's own current score, the number the dashboard, goal alerts and
+      // history use too. Our estimate only fills in when Canvas hides it.
+      const total = canvas != null ? canvas : BC.grades.computeTotal(groups);
+      const estimated = canvas == null && total != null;
       const hasWeights = groups.some((g) => g.group_weight);
       const goal = BC.gradeNumber(((settings.grades.goals || {})[courseId] || {}).target);
       const missing = [];
@@ -220,7 +235,7 @@
       }
 
       // Skip the rebuild when nothing changed or while the user is typing in the panel.
-      const sig = [courseId, total == null ? "" : total.toFixed(3), goal, missing.length, hist.length,
+      const sig = [courseId, total == null ? "" : total.toFixed(3), estimated ? 1 : 0, goal, missing.length, hist.length,
                    settings.grades.showWeightDonut ? 1 : 0, settings.grades.showMissingWarning ? 1 : 0,
                    settings.grades.showTrendChart ? 1 : 0].join("|");
       const ae = document.activeElement;
@@ -232,7 +247,7 @@
         <h3>Grade Tools</h3>
         <div class="bc-gt-row">
           <div class="bc-gt-card">
-            <div class="bc-gt-label">Current course grade</div>
+            <div class="bc-gt-label">${estimated ? "Estimated course grade" : "Current course grade"}</div>
             <div class="bc-gt-total">${total != null ? total.toFixed(2) + "%" : "—"}</div>
             <div class="bc-gt-goal">Goal:
               <input type="number" min="0" max="150" step="0.5" aria-label="Course grade goal percent" data-goal>
@@ -272,17 +287,23 @@
       const target2 = panel.querySelector("[data-target]");
       const weight = panel.querySelector("[data-weight]");
       const out = panel.querySelector("[data-final-needed]");
+      // The panel rebuilds after a goal save or an auto-refresh. Keep what was typed.
+      const kept = finalInputs.get(courseId) || {};
+      target2.value = kept.t || ""; weight.value = kept.w || "";
       function compute() {
+        finalInputs.set(courseId, { t: target2.value, w: weight.value });
         const t = BC.gradeNumber(target2.value), w = BC.gradeNumber(weight.value, 100);
         if (t === null || w === null || w <= 0 || total == null) { out.textContent = ""; return; }
         // needed = (target - current * (1 - w/100)) / (w/100)
         const wf = w / 100;
         const current = total;
         const needed = (t - current * (1 - wf)) / wf;
-        out.textContent = ` = ${needed.toFixed(1)}%`;
+        out.textContent = needed > 100 ? ` = ${needed.toFixed(1)}%, more than a perfect score` :
+          needed <= 0 ? " = already secured" : ` = ${needed.toFixed(1)}%`;
       }
       target2.addEventListener("input", compute);
       weight.addEventListener("input", compute);
+      compute();
     }).catch((e) => {
       BC.util.warn("grades", e);
       panel.dataset.bcSig = "";

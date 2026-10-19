@@ -252,3 +252,31 @@ test("syllabus scan ignores words that start like months, fractions, and keeps t
     ]);
   } finally { dom.window.close(); }
 });
+
+test("grade tools show Canvas's current score and keep the final-exam inputs through a rebuild", async () => {
+  const { domContext, load: loadDom, settle } = require("./audit-helpers.cjs");
+  const { dom, context } = domContext('<div id="main"><div id="grades_summary"></div></div>');
+  try {
+    loadDom(context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/datetime.js", "src/content/core/ui.js", "src/content/core/lifecycle.js");
+    const BC = context.BC, nodes = new Map();
+    BC.injector = { setStyle() {}, removeNode() {}, ensureNode(id, host, factory) { if (!nodes.has(id)) nodes.set(id, factory()); return nodes.get(id); } };
+    BC.registry = { register(feature) { BC.feature = feature; } };
+    // Our own estimate would be 50%. Canvas says 88.
+    BC.api = { assignmentGroups: async () => [{ assignments: [{ id: 1, points_possible: 10, submission: { score: 5 } }] }],
+      coursesWithScores: async () => [{ id: 7, enrollments: [{ computed_current_score: 88 }] }] };
+    BC.storage = { local: {}, updateLocal: async () => {}, update: async () => {} };
+    loadDom(context, "src/content/features/grades.js");
+    const settings = BC.cloneDefaults(); settings.grades.autoRefresh = false;
+    const ctx = { page: "grades", courseId: "7", path: "/courses/7/grades" };
+    BC.feature.apply(settings, ctx); await settle(); await settle();
+    const doc = dom.window.document;
+    assert.equal(doc.querySelector(".bc-gt-total").textContent, "88.00%");
+    doc.querySelector("[data-target]").value = "99"; doc.querySelector("[data-weight]").value = "10";
+    doc.querySelector("[data-target]").dispatchEvent(new dom.window.Event("input"));
+    assert.match(doc.querySelector("[data-final-needed]").textContent, /more than a perfect score/);
+    settings.grades.showTrendChart = !settings.grades.showTrendChart;   // forces a rebuild
+    BC.feature.apply(settings, ctx); await settle(); await settle();
+    assert.equal(doc.querySelector("[data-target]").value, "99");
+    assert.equal(doc.querySelector("[data-weight]").value, "10");
+  } finally { dom.window.close(); }
+});
