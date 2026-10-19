@@ -109,16 +109,17 @@
       if (sort === "name") items.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
       else if (sort === "size") items.sort((a, b) => (b.size || 0) - (a.size || 0));
       else items.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
+      const failedNote = cache.failed ? `<div class="bc-file">Files from ${cache.failed} course${cache.failed === 1 ? "" : "s"} couldn't load. Refresh to try again.</div>` : "";
       if (!items.length) {
         list.replaceChildren(BC.ui.empty(
-          files.length ? "No files match the current filters." : "No files found in your active courses.",
-          files.length ? "" : "Files appear here once your courses have published files."
+          files.length ? "No files match the current filters." : cache.failed ? "No files loaded." : "No files found in your active courses.",
+          files.length ? "" : cache.failed ? "Some courses couldn't be reached. Refresh to try again." : "Files appear here once your courses have published files."
         ));
+        if (failedNote && files.length) list.insertAdjacentHTML("afterbegin", failedNote);
         return;
       }
       // f.url is the download link, which opened a blank tab and downloaded the
       // file. The course file page previews it and has its own download button.
-      const failedNote = cache.failed ? `<div class="bc-file">Files from ${cache.failed} course${cache.failed === 1 ? "" : "s"} couldn't load. Refresh to try again.</div>` : "";
       list.innerHTML = failedNote + items.slice(0, 200).map((f) => `
         <div class="bc-file">
           <span class="bc-file-ic">${iconFor(f)}</span>
