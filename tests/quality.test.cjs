@@ -661,3 +661,37 @@ test("found on real Canvas: text on accent fills uses the accent's contrast colo
     assert.match(dom.context.BC.darkEngine.baseCss(), /#skip_navigation_link \{ background-color: var\(--bc-accent\) !important; color: var\(--bc-accent-contrast/);
   } finally { dom.dom.window.close(); }
 });
+
+test("scene compositions differ from card to card and old saved drawings still compact", () => {
+  const ctx = vm.createContext({ URL, console, setTimeout, clearTimeout, structuredClone, navigator: { platform: "Win32" }, chrome: { runtime: { getURL: (s) => "chrome-extension://x/" + s } } });
+  for (const file of ["src/shared/defaults.js", "src/content/core/util.js", "src/shared/themes.js", "src/shared/theme-library.js", "src/shared/theme-scenes.js", "src/shared/theme-artwork.js", "src/shared/theme-media.js"]) load(ctx, file);
+  const { BC } = ctx;
+  const layouts = Array.from({ length: 48 }, (_, i) => BC.sceneLayout(i));
+  assert.equal(new Set(layouts.map((l) => [l.hue, l.subject, l.horizon, l.mirror].join())).size, 48);
+  for (let i = 1; i < 48; i++) {
+    assert.notEqual(layouts[i].subject, layouts[i - 1].subject, "seed " + i);
+    assert.notEqual(layouts[i].hue, layouts[i - 1].hue, "seed " + i);
+  }
+  // Cards shift the theme's hue; the wallpaper keeps its exact colours.
+  assert.equal(decodeURIComponent(BC.sceneArtData("nebula", 1).url).includes("#653b96"), false);
+  assert.equal(decodeURIComponent(BC.sceneArtData("nebula", 731, true).url).includes("#653b96"), true);
+
+  // 3.3.1 saved drawings from the older generator, so they're matched by markup and title.
+  const old = (h, body) => "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="' + h + '" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice">' + body + "</svg>");
+  const s = BC.cloneDefaults();
+  s.theming.experience = "nebula";
+  s.dashboard.themeImages = [
+    { url: old(850, "<circle/>"), title: "Cosmic Bloom · composition 5", creator: "Better Canvas", license: "Original artwork" },
+    { url: old(850, "<rect/>"), title: "Forest Retreat · composition 2", creator: "Better Canvas", license: "Original artwork" },
+    { url: old(850, "<rect/>"), title: "Cosmic Bloom · composition 3", creator: "Someone else" },
+    { url: "data:image/svg+xml,%3Csvg%3E%3C%2Fsvg%3E", title: "Cosmic Bloom · composition 4", creator: "Better Canvas" },
+  ];
+  s.cosmetics.background = { mode: "image", image: old(1000, "<path/>") };
+  const merged = BC.mergeDefaults(JSON.parse(JSON.stringify(s)));
+  assert.equal(merged.dashboard.themeImages[0].url, "bc-scene:nebula#4");
+  assert.equal(merged.dashboard.themeImages[1].url, "bc-scene:woodland#1");
+  assert.equal(merged.dashboard.themeImages[2].url, s.dashboard.themeImages[2].url);
+  assert.equal(merged.dashboard.themeImages[3].url, s.dashboard.themeImages[3].url);
+  assert.equal(merged.cosmetics.background.image, "bc-scene:nebula#731:wall");
+});
+

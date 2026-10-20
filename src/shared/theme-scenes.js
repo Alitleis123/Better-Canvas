@@ -17,7 +17,30 @@
     { id: "mono", name: "Graphite", category: "minimal", dark: true, colors: ["#181b20", "#373d47", "#6a737b", "#b5b9b5"], accent: "#bdc9c4", description: "Monochrome forms · hairline borders · precise typography" },
   ];
   const byId = Object.assign(Object.create(null), Object.fromEntries(scenes.map((s) => [s.id, s])));
+  const byName = Object.assign(Object.create(null), Object.fromEntries(scenes.map((s) => [s.name, s])));
   const cache = new Map();
+
+  // What changes from one card to the next. Moving blurred clouds around wasn't
+  // enough: every card still read as the same picture. Each seed also shifts the
+  // hue within the theme's family, may mirror the layout and tilts the sky, and
+  // the space scenes get a different subject and horizon. Neighbouring cards
+  // always differ in subject and hue, and no two of the first 48 match.
+  const HUES = [0, 22, -22, 11, -11, 32, -32, 6];
+  function layout(seed) {
+    const n = Math.max(0, seed | 0);
+    return { hue: HUES[n % 8], subject: n % 6, horizon: Math.floor(n / 6) % 4,
+      mirror: (Math.floor(n / 3) + Math.floor(n / 24)) % 2 === 1, sky: n % 4 };
+  }
+  function shiftHue(hex, deg) {
+    const v = parseInt(hex.slice(1), 16), r = (v >> 16) / 255, g = (v >> 8 & 255) / 255, b = (v & 255) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min, l = (max + min) / 2;
+    if (!deg || !d) return hex;
+    const c = d, h = ((max === r ? (g - b) / d % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60 + deg + 720) % 360;
+    const x = c * (1 - Math.abs(h / 60 % 2 - 1)), m = l - c / 2;
+    const rgb = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+    return "#" + rgb.map((u) => Math.round(Math.min(1, Math.max(0, u + m)) * 255).toString(16).padStart(2, "0")).join("");
+  }
+
   function artwork(id, seed, wallpaper = false) {
     const s = byId[id] || byId.woodland;
     const key = s.id + ":" + seed + ":" + wallpaper;
@@ -25,7 +48,9 @@
     let n = (Number(seed) + 1) * 2654435761 >>> 0;
     const rand = (lo, hi) => { n ^= n << 13; n ^= n >>> 17; n ^= n << 5; return lo + (n >>> 0) / 4294967296 * (hi - lo); };
     const int = (lo, hi) => Math.round(rand(lo, hi));
-    const [bg, mid, fg, glow] = s.colors;
+    const L = layout(seed);
+    // The wallpaper keeps the theme's own colours, which the panels are built on.
+    const [bg, mid, fg, glow] = s.colors.map((c) => shiftHue(c, wallpaper ? 0 : L.hue));
     const shapes = [];
     const circle = (x, y, r, fill, opacity = 1) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" opacity="${opacity}"/>`;
     const path = (d, fill, extra = "") => `<path d="${d}" fill="${fill}" ${extra}/>`;
@@ -45,17 +70,65 @@
         }
       }
     } else if (["orbit", "nebula", "aurora"].includes(s.id)) {
-      if (s.id === "nebula") for (let j = 0; j < 8; j++) shapes.push(`<ellipse cx="${int(50, 1150)}" cy="${int(30, 650)}" rx="${int(100, 380)}" ry="${int(40, 170)}" fill="${j % 2 ? fg : mid}" opacity=".27" filter="url(#soft)" transform="rotate(${int(-40, 40)} 600 350)"/>`);
-      if (s.id === "aurora") for (let j = 0; j < 5; j++) shapes.push(path(`M-100 ${int(0, 300)}Q${int(200, 450)} ${int(350, 600)} 650 170T1300 ${int(50, 350)}`, "none", `stroke="${j % 2 ? glow : fg}" stroke-width="${int(15, 65)}" opacity=".2" filter="url(#soft)"`));
-      for (let j = 0; j < 65; j++) shapes.push(circle(int(0, 1200), int(0, 700), rand(.4, 2).toFixed(1), glow, rand(.2, .8).toFixed(2)));
-      if (s.id === "orbit") {
-        const r = int(75, 185);
-        shapes.push(`<ellipse cx="${sunX}" cy="${sunY + 100}" rx="${r * 2.6}" ry="${r * .5}" fill="none" stroke="${fg}" opacity=".35" transform="rotate(-24 ${sunX} ${sunY + 100})"/>`);
-        shapes.push(circle(sunX, sunY + 100, r, "url(#planet)"));
-        for (let j = 0; j < 9; j++) shapes.push(circle(sunX + int(-r / 2, r / 2), sunY + 100 + int(-r / 2, r / 2), int(4, r / 9), bg, .17));
-        shapes.push(circle(int(140, 1000), int(60, 600), int(15, 35), mid));
+      // The theme's own layer stays on every card; the subject and horizon change.
+      const fx = int(220, 980), fy = int(130, 360);
+      if (s.id === "nebula") {
+        const band = L.subject % 2 === 0, tilt = int(-35, 35), k = int(5, 9);
+        for (let j = 0; j < k; j++) {
+          const t = j / (k - 1), cx = band ? Math.round(100 + t * 1000) + int(-80, 80) : int(50, 1150), cy = band ? Math.round(520 - t * 380) + int(-90, 90) : int(40, 620);
+          shapes.push(`<ellipse cx="${cx}" cy="${cy}" rx="${int(90, 340)}" ry="${int(35, 150)}" fill="${[mid, fg, glow][j % 3]}" opacity="${rand(.18, .34).toFixed(2)}" filter="url(#soft)" transform="rotate(${tilt + int(-15, 15)} ${cx} ${cy})"/>`);
+        }
       }
-      shapes.push(path(`M0 700V${int(560, 640)}L200 590L${int(350, 600)} 500L800 600L1200 540V700Z`, bg));
+      if (s.id === "aurora") for (let j = 0, k = int(3, 6); j < k; j++) shapes.push(path(`M-100 ${int(0, 300)}Q${int(150, 500)} ${int(300, 620)} ${int(500, 800)} ${int(120, 260)}T1300 ${int(30, 380)}`, "none", `stroke="${j % 2 ? glow : fg}" stroke-width="${int(15, 70)}" opacity="${rand(.16, .3).toFixed(2)}" filter="url(#soft)"`));
+      if (s.id === "orbit") for (let j = 0; j < 3; j++) shapes.push(`<ellipse cx="${fx}" cy="${fy}" rx="${int(220, 520)}" ry="${int(40, 120)}" fill="none" stroke="${fg}" stroke-width="1.2" opacity=".3" transform="rotate(${int(-30, 30)} ${fx} ${fy})"/>`);
+      for (let j = 0, k = int(45, 110); j < k; j++) shapes.push(circle(int(0, 1200), int(0, 650), rand(.4, j % 9 ? 1.8 : 3.2).toFixed(1), glow, rand(.25, .85).toFixed(2)));
+      const subjects = [
+        // A glowing core
+        () => circle(fx, fy, int(170, 260), "url(#core)") + circle(fx, fy, int(6, 12), glow, .9),
+        // A ringed planet; the ring's near half is drawn over it
+        () => {
+          const r = int(55, 105), rx = Math.round(r * 2.3), ry = Math.round(r * .45);
+          const ring = `fill="none" stroke="${glow}" stroke-width="${int(3, 7)}" opacity=".6" transform="rotate(${int(-28, 28)} ${fx} ${fy})"`;
+          return `<ellipse cx="${fx}" cy="${fy}" rx="${rx}" ry="${ry}" ${ring}/>` + circle(fx, fy, r, "url(#planet)") + `<path d="M${fx - rx} ${fy}A${rx} ${ry} 0 0 0 ${fx + rx} ${fy}" ${ring}/>`;
+        },
+        // A crescent moon
+        () => {
+          const r = int(48, 85), dx = Math.round(r * rand(.3, .55));
+          return `<mask id="cut"><rect width="1200" height="700" fill="#fff"/><circle cx="${fx + dx}" cy="${fy - Math.round(dx / 3)}" r="${r}" fill="#000"/></mask>` +
+            circle(fx, fy, Math.round(r * 1.6), glow, .08) + `<circle cx="${fx}" cy="${fy}" r="${r}" fill="${glow}" mask="url(#cut)"/>`;
+        },
+        // A spiral galaxy
+        () => {
+          const a = int(0, 180);
+          let g = "";
+          for (let j = 0; j < 4; j++) g += `<ellipse cx="${fx}" cy="${fy}" rx="${200 - j * 42}" ry="${62 - j * 12}" fill="${j % 2 ? fg : glow}" opacity="${(.16 + j * .07).toFixed(2)}" filter="url(#soft)" transform="rotate(${a + j * 34} ${fx} ${fy})"/>`;
+          return g + circle(fx, fy, int(10, 18), glow, .95);
+        },
+        // A comet
+        () => {
+          const len = int(260, 480), ang = rand(.25, .6), x2 = Math.round(fx - len * Math.cos(ang)), y2 = Math.round(fy - len * Math.sin(ang));
+          return `<linearGradient id="tail" gradientUnits="userSpaceOnUse" x1="${fx}" y1="${fy}" x2="${x2}" y2="${y2}"><stop stop-color="${glow}" stop-opacity=".9"/><stop offset="1" stop-color="${glow}" stop-opacity="0"/></linearGradient>` +
+            `<path d="M${fx} ${fy}L${x2} ${y2}" stroke="url(#tail)" stroke-width="${int(5, 10)}" stroke-linecap="round"/>` + circle(fx, fy, 26, glow, .18) + circle(fx, fy, int(6, 10), glow);
+        },
+        // A giant planet rising at one edge, with a small moon
+        () => { const r = int(240, 330); return circle(rand(0, 1) > .5 ? int(-20, 200) : int(1000, 1220), Math.round(700 + r * .05), r, "url(#planet)", .95) + circle(fx, fy, int(14, 26), fg); },
+      ];
+      const horizons = [
+        // Peaks
+        () => path(`M0 700V${int(560, 640)}L${int(120, 260)} ${int(560, 610)}L${int(350, 600)} ${int(460, 530)}L${int(700, 860)} ${int(570, 620)}L${int(950, 1080)} ${int(510, 580)}L1200 ${int(550, 620)}V700Z`, bg),
+        // Rolling hills in two layers
+        () => path(`M0 700V${int(560, 620)}Q${int(250, 450)} ${int(470, 540)} 650 ${int(560, 600)}T1200 ${int(540, 610)}V700Z`, mid, 'opacity=".55"') +
+          path(`M0 700V${int(600, 650)}Q${int(300, 600)} ${int(540, 590)} 800 ${int(610, 640)}T1200 ${int(600, 650)}V700Z`, bg),
+        // A still lake catching the light
+        () => {
+          let g = path("M0 590H1200V700H0Z", bg, 'opacity=".88"');
+          for (let j = 0; j < 7; j++) { const x = fx + int(-120, 120); g += path(`M${x - int(20, 90)} ${int(600, 690)}h${int(40, 180)}`, "none", `stroke="${glow}" stroke-width="2" opacity="${rand(.15, .45).toFixed(2)}"`); }
+          return g;
+        },
+        // Open sky
+        () => "",
+      ];
+      shapes.push(subjects[L.subject](), horizons[L.horizon]());
     } else if (["metro", "blueprint"].includes(s.id)) {
       shapes.push(circle(sunX, sunY, int(25, 55), glow, .75));
       if (s.id === "blueprint") for (let x = 0; x < 1200; x += 32) shapes.push(path(`M${x} 0V700M0 ${x}H1200`, "none", `stroke="${fg}" opacity=".1"`));
@@ -81,7 +154,8 @@
       }
       if (s.id !== "collage") for (let j = 0; j < 6; j++) shapes.push(path(`M${150 + j * 24} 70v540`, "none", `stroke="${bg}" stroke-width="2" opacity=".7"`));
     }
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="${wallpaper ? 1000 : 850}" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="${bg}"/><stop offset="1" stop-color="${mid}"/></linearGradient><linearGradient id="planet" x2="1" y2=".6"><stop stop-color="${glow}"/><stop offset=".55" stop-color="${fg}"/><stop offset="1" stop-color="${bg}"/></linearGradient><filter id="soft"><feGaussianBlur stdDeviation="18"/></filter></defs><path fill="url(#sky)" d="M0 0H1200V700H0Z"/>${shapes.join("")}</svg>`;
+    const sky = ['x2="0" y2="1"', 'x2="1" y2="1"', 'x1="1" x2="0" y2="1"', 'x2=".35" y2="1"'][L.sky];
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="${wallpaper ? 1000 : 850}" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="sky" ${sky}><stop stop-color="${bg}"/><stop offset="1" stop-color="${mid}"/></linearGradient><linearGradient id="planet" x2="1" y2=".6"><stop stop-color="${glow}"/><stop offset=".55" stop-color="${fg}"/><stop offset="1" stop-color="${bg}"/></linearGradient><radialGradient id="core"><stop stop-color="${glow}" stop-opacity=".55"/><stop offset=".45" stop-color="${fg}" stop-opacity=".18"/><stop offset="1" stop-color="${fg}" stop-opacity="0"/></radialGradient><filter id="soft"><feGaussianBlur stdDeviation="18"/></filter></defs><path fill="url(#sky)" d="M0 0H1200V700H0Z"/><g${L.mirror ? ' transform="matrix(-1 0 0 1 1200 0)"' : ""}>${shapes.join("")}</g></svg>`;
     const result = { url: "data:image/svg+xml," + encodeURIComponent(svg), title: s.name + " · composition " + (seed + 1), creator: "Better Canvas", license: "Original artwork" };
     if (cache.size > 1024) cache.clear();
     cache.set(key, result);
@@ -91,23 +165,29 @@
   // when it's painted. Storing the data URIs put up to 1.2 MB in bcSettings, and
   // every settings write and every frame load carried it.
   BC.sceneArtData = artwork;
+  BC.sceneLayout = layout;
   BC.sceneArt = function (id, seed, wallpaper = false) {
     const s = byId[id] || byId.woodland, n = Math.max(0, seed | 0);
     return { url: "bc-scene:" + s.id + "#" + n + (wallpaper ? ":wall" : ""), title: s.name + " · composition " + (n + 1),
       creator: "Better Canvas", license: "Original artwork" };
   };
-  // Swap data URIs saved by 3.3.1 and earlier for their references.
+  // Swap data URIs saved by 3.3.1 and earlier for their references. Those came
+  // from an older version of the drawings, so they're recognised by the
+  // generator's markup and the composition title rather than drawn again.
+  const drawn = (url, height) => {
+    if (typeof url !== "string" || !url.startsWith("data:image/svg+xml,")) return false;
+    try {
+      return decodeURIComponent(url.slice(19)).startsWith('<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="' + height + '" viewBox="0 0 1200 700"');
+    } catch (_) { return false; }
+  };
   BC.compactSceneArt = function (settings) {
     const fix = (s) => {
-      const exp = s && s.theming && s.theming.experience;
-      if (!exp || !byId[exp]) return;
-      const svg = (url) => typeof url === "string" && url.startsWith("data:image/svg+xml");
-      for (const img of (s.dashboard && Array.isArray(s.dashboard.themeImages) && s.dashboard.themeImages) || []) {
-        const m = img && svg(img.url) && / · composition (\d+)$/.exec(img.title || "");
-        if (m && artwork(exp, +m[1] - 1).url === img.url) img.url = BC.sceneArt(exp, +m[1] - 1).url;
+      for (const img of (s && s.dashboard && Array.isArray(s.dashboard.themeImages) && s.dashboard.themeImages) || []) {
+        const m = img && img.creator === "Better Canvas" && /^(.+) · composition (\d+)$/.exec(img.title || "");
+        if (m && byName[m[1]] && drawn(img.url, 850)) img.url = BC.sceneArt(byName[m[1]].id, +m[2] - 1).url;
       }
-      const bg = s.cosmetics && s.cosmetics.background;
-      if (bg && svg(bg.image) && bg.image === artwork(exp, 731, true).url) bg.image = BC.sceneArt(exp, 731, true).url;
+      const exp = s && s.theming && s.theming.experience, bg = s && s.cosmetics && s.cosmetics.background;
+      if (exp && byId[exp] && bg && drawn(bg.image, 1000)) bg.image = BC.sceneArt(exp, 731, true).url;
     };
     if (!settings) return settings;
     fix(settings);
