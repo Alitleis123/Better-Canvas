@@ -144,12 +144,13 @@
 
   // The tint paints the accent through the logo's alpha, so it needs a logo with
   // some transparency: an opaque JPEG became a solid block, and a page without
-  // the image variable lost its logo. Each image is sampled once.
+  // the image variable lost its logo. Each image is sampled once. The read skips
+  // the cache: Chromium would reuse Canvas's plain copy, which S3 serves without
+  // its CORS header, and the read would fail.
   const logoChecks = new Map();
   function hasTransparency(url) {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
+    return fetch(url, { cache: "no-store" }).then((r) => r.ok ? r.blob() : Promise.reject()).then((blob) => new Promise((resolve) => {
+      const img = new Image(), file = new FileReader();
       img.onload = () => {
         try {
           const c = document.createElement("canvas"), g = c.getContext("2d");
@@ -161,9 +162,10 @@
           resolve(clear > a.length / 4 * .05);
         } catch (_) { resolve(false); }
       };
-      img.onerror = () => resolve(false);
-      img.src = url;
-    });
+      img.onerror = file.onerror = () => resolve(false);
+      file.onload = () => { img.src = file.result; };
+      file.readAsDataURL(blob);
+    })).catch(() => false);
   }
   function syncLogoTint(settings) {
     const root = document.documentElement, t = settings.theming;

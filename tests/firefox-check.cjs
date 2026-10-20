@@ -91,6 +91,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await until(() => document.documentElement.classList.contains("bc-dark"), "Dark mode did not survive a reload");
     await until(wallpaper, "Wallpaper did not survive a reload");
     check("Applying a theme saves through the background and survives a reload in dark mode");
+    await until(() => document.documentElement.hasAttribute("data-bc-logo-tint"), "The scene theme did not tint the cross-origin school logo");
+    check("A scene theme tints a cross-origin SVG school logo from a server that sends CORS headers only when asked");
     const sizes = await run(() => Promise.all(["", "-wallpaper"].map((suffix) => new Promise((resolve) => {
       const url = /url\("([^"]+)"\)/.exec(getComputedStyle(document.querySelector("#bc-bg-layer")).backgroundImage)[1].replace("-wallpaper", suffix);
       const img = new Image(); img.onload = () => resolve([img.naturalWidth, img.naturalHeight]); img.onerror = () => resolve(null); img.src = url;
