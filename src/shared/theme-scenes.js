@@ -23,12 +23,13 @@
   // What changes from one card to the next. Moving blurred clouds around wasn't
   // enough: every card still read as the same picture. Each seed also shifts the
   // hue within the theme's family, may mirror the layout and tilts the sky, and
-  // the space scenes get a different subject and horizon. Neighbouring cards
-  // always differ in subject and hue, and no two of the first 48 match.
+  // the space scenes get a different subject and horizon. Courses pick seeds by
+  // a hash of their id, not by position, so no two of the first 48 seeds share
+  // both subject and hue; the second 24 offset the hue to keep it that way.
   const HUES = [0, 22, -22, 11, -11, 32, -32, 6];
   function layout(seed) {
     const n = Math.max(0, seed | 0);
-    return { hue: HUES[n % 8], subject: n % 6, horizon: Math.floor(n / 6) % 4,
+    return { hue: HUES[(n + 3 * Math.floor(n / 24)) % 8], subject: n % 6, horizon: Math.floor(n / 6) % 4,
       mirror: (Math.floor(n / 3) + Math.floor(n / 24)) % 2 === 1, sky: n % 4 };
   }
   function shiftHue(hex, deg) {

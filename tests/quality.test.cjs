@@ -668,10 +668,8 @@ test("scene compositions differ from card to card and old saved drawings still c
   const { BC } = ctx;
   const layouts = Array.from({ length: 48 }, (_, i) => BC.sceneLayout(i));
   assert.equal(new Set(layouts.map((l) => [l.hue, l.subject, l.horizon, l.mirror].join())).size, 48);
-  for (let i = 1; i < 48; i++) {
-    assert.notEqual(layouts[i].subject, layouts[i - 1].subject, "seed " + i);
-    assert.notEqual(layouts[i].hue, layouts[i - 1].hue, "seed " + i);
-  }
+  // Courses pick seeds by a hash, so any two cards may sit side by side.
+  assert.equal(new Set(layouts.map((l) => l.subject + "/" + l.hue)).size, 48, "no two seeds share subject and hue");
   // Cards shift the theme's hue; the wallpaper keeps its exact colours.
   assert.equal(decodeURIComponent(BC.sceneArtData("nebula", 1).url).includes("#653b96"), false);
   assert.equal(decodeURIComponent(BC.sceneArtData("nebula", 731, true).url).includes("#653b96"), true);
