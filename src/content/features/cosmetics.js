@@ -97,6 +97,8 @@
       ${s} .ic-app-header__menu-list-link .menu-item__text { color: var(--bc-text) !important; }
       ${s} .ic-app-header__menu-list-item.ic-app-header__menu-list-item--active > a,
       ${s} .ic-app-header__menu-list-item > a:hover { background: var(--bc-accent-weak) !important; box-shadow: inset 3px 0 var(--bc-accent); }
+      /* Canvas pins this header. As a floating panel it would hang over the cards. */
+      ${s} .ic-Dashboard-header { position: static !important; }
       ${s} .ic-Dashboard-header__layout { background: var(--bc-scene-panel) !important; padding: 24px !important; margin: 4px 0 24px;
         border: 1px solid var(--bc-scene-line) !important; border-radius: ${radius}px; box-shadow: var(--bc-scene-shadow) !important; }
       ${s} .ic-Dashboard-header__title { color: var(--bc-text) !important; font-size: clamp(28px, 3vw, 42px); letter-spacing: -.045em; font-weight: ${editorial ? 400 : 650}; }

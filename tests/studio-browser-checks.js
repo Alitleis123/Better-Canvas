@@ -23,6 +23,9 @@
   check(BC.storage.current.cosmetics.motion === "rain", "Apply saves the selected full theme");
   const cards = [...document.querySelectorAll(".ic-DashboardCard__header_image")];
   check(new Set(cards.map((n) => getComputedStyle(n).backgroundImage + "|" + getComputedStyle(n).backgroundPosition)).size === 32, "32 course cards have distinct anime scenes");
+  scrollTo(0, 600);
+  check(document.querySelector(".ic-Dashboard-header").getBoundingClientRect().bottom < 0, "The scene dashboard header scrolls away with the page");
+  scrollTo(0, 0);
   const bg = document.querySelector("#bc-bg-layer");
   check(getComputedStyle(bg).position === "fixed" && getComputedStyle(bg).backgroundImage.includes("anime-night-wallpaper"), "Full-size wallpaper stays fixed and retains its image");
   check(getComputedStyle(bg, "::after").animationName === "bc-scene-drift", "Wallpaper motion runs");
