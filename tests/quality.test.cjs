@@ -695,24 +695,43 @@ test("scene compositions differ from card to card and old saved drawings still c
   assert.equal(merged.cosmetics.background.image, "bc-scene:nebula#731:wall");
 });
 
-test("scene themes draw the school logo in the accent on a clear tile unless the logo is hidden or replaced", () => {
-  const { domContext, load: loadDom } = require("./audit-helpers.cjs");
+test("scene themes tint only a transparent school logo, on a layer that keeps the link's focus ring", async () => {
+  const { domContext, load: loadDom, settle } = require("./audit-helpers.cjs");
   const { dom, context } = domContext("<body></body>");
   try {
     loadDom(context, "src/shared/defaults.js", "src/content/core/util.js", "src/shared/themes.js", "src/shared/theme-library.js", "src/shared/theme-scenes.js", "src/shared/theme-media.js");
-    const BC = context.BC, styles = {};
+    const BC = context.BC, styles = {}, sampled = [];
     BC.injector = { setStyle(id, css) { styles[id] = css; }, removeNode() {}, ensureNode(id, host, factory) { return factory(); } };
     BC.registry = { register(f) { BC.feature = f; } };
-    loadDom(context, "src/content/features/cosmetics.js");
-    const s = BC.cloneDefaults();
+    BC.testLogo = (url) => { sampled.push(url); return Promise.resolve(!url.endsWith(".jpg")); };
+    vm.runInContext(fs.readFileSync(path.join(root, "src/content/features/cosmetics.js"), "utf8")
+      .replace("function hasTransparency(url) {", "function hasTransparency(url) { return BC.testLogo(url); }\n  function realHasTransparency(url) {"), context);
+    const doc = dom.window.document, html = doc.documentElement, s = BC.cloneDefaults();
     BC.applyTheme(s, BC.PRESET_THEMES.find((p) => p.id === "scene-nebula"));
+    BC.requestApply = () => BC.feature.apply(s);
+    const css = () => styles["bc-experience"];
+
     BC.feature.apply(s);
-    assert.match(styles["bc-experience"], /--ic-brand-global-nav-logo-bgd: transparent/);
-    assert.match(styles["bc-experience"], /\.ic-app-header__logomark \{ background: var\(--bc-accent\) !important;[^}]*\bmask: var\(--ic-brand-header-image, linear-gradient\(transparent, transparent\)\) center \/ contain no-repeat;/);
+    assert.match(css(), /--ic-brand-global-nav-logo-bgd: transparent/);
+    assert.match(css(), /\[data-bc-logo-tint\] \.ic-app-header__logomark::before \{[^}]*\bmask: var\(--ic-brand-header-image\) center \/ contain no-repeat;/);
+    assert.doesNotMatch(css(), /\.ic-app-header__logomark \{[^}]*mask/, "the focusable link itself is never masked");
+    assert.match(css(), /@media \(forced-colors: active\) \{[^{]*\.ic-app-header__logomark::before \{ forced-color-adjust: none; background: CanvasText; \}/);
+    assert.equal(html.hasAttribute("data-bc-logo-tint"), false, "no image variable, no tint");
+
+    html.style.setProperty("--ic-brand-header-image", "url('https://uploads.test/logo.png')");
+    BC.feature.apply(s); await settle(); await settle();
+    assert.equal(html.hasAttribute("data-bc-logo-tint"), true);
+    BC.feature.apply(s);
+    assert.deepEqual(copy(sampled), ["https://uploads.test/logo.png"], "each image is sampled once");
+
     for (const mode of ["hide", "replace", "text"]) {
       s.theming.logo.mode = mode;
       BC.feature.apply(s);
-      assert.doesNotMatch(styles["bc-experience"], /\.ic-app-header__logomark \{/, mode);
+      assert.equal(html.hasAttribute("data-bc-logo-tint"), false, mode);
     }
+    s.theming.logo.mode = "default";
+    html.style.setProperty("--ic-brand-header-image", "url(https://uploads.test/logo.jpg)");
+    BC.feature.apply(s); await settle(); await settle();
+    assert.equal(html.hasAttribute("data-bc-logo-tint"), false, "an opaque logo keeps its own colours");
   } finally { dom.window.close(); }
 });

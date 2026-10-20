@@ -72,7 +72,6 @@
     const radius = Math.max(0, Math.min(32, Number(t.radius) || 0));
     const editorial = ["paper", "dunes", "gallery"].includes(scene.id);
     const contrast = t.highContrast;
-    const logoMode = (t.logo && t.logo.mode) || "default";
     return `
       ${s} { --bc-scene-panel: color-mix(in srgb, var(--bc-surface-2) ${contrast ? 100 : 94}%, transparent);
         --bc-scene-line: color-mix(in srgb, var(--bc-accent) 25%, var(--bc-border));
@@ -85,12 +84,14 @@
         border-right: 1px solid var(--bc-scene-line); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
         --ic-brand-global-nav-bgd: transparent; --ic-brand-global-nav-logo-bgd: transparent; --ic-brand-global-nav-menu-item__text-color: var(--bc-text);
         --ic-brand-global-nav-ic-icon-svg-fill: var(--bc-accent); }
-      ${logoMode === "default" ? `${s} .ic-app-header__logomark-container { background: transparent !important; }
-      /* The school's logo, drawn in the accent through its own shape. A missing
-         image variable falls back to a clear mask, never a solid block. */
-      ${s} .ic-app-header__logomark { background: var(--bc-accent) !important;
-        -webkit-mask: var(--ic-brand-header-image, linear-gradient(transparent, transparent)) center / contain no-repeat;
-        mask: var(--ic-brand-header-image, linear-gradient(transparent, transparent)) center / contain no-repeat; }` : ""}
+      ${s} .ic-app-header__logomark-container { background: transparent !important; }
+      /* The school's logo drawn in the accent through its own transparency, once
+         syncLogoTint has seen it has some. The mask is on a layer, not the link,
+         which keeps its focus ring; contrast themes get their text colour. */
+      ${s}[data-bc-logo-tint] .ic-app-header__logomark { position: relative; background-image: none !important; }
+      ${s}[data-bc-logo-tint] .ic-app-header__logomark::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+        background: var(--bc-accent); -webkit-mask: var(--ic-brand-header-image) center / contain no-repeat; mask: var(--ic-brand-header-image) center / contain no-repeat; }
+      @media (forced-colors: active) { ${s}[data-bc-logo-tint] .ic-app-header__logomark::before { forced-color-adjust: none; background: CanvasText; } }
       ${s} .ic-app-header__menu-list-item > a { margin: 3px 7px; border-radius: ${Math.min(radius, 12)}px; color: var(--bc-text) !important; }
       ${s} .ic-app-header__menu-list-item svg { fill: var(--bc-accent) !important; }
       ${s} .ic-app-header__menu-list-link .menu-item__text { color: var(--bc-text) !important; }
@@ -139,8 +140,48 @@
     return true;
   }
 
+  // The tint paints the accent through the logo's alpha, so it needs a logo with
+  // some transparency: an opaque JPEG became a solid block, and a page without
+  // the image variable lost its logo. Each image is sampled once.
+  const logoChecks = new Map();
+  function hasTransparency(url) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        try {
+          const c = document.createElement("canvas"), g = c.getContext("2d");
+          c.width = c.height = 48;
+          g.drawImage(img, 0, 0, 48, 48);
+          const a = g.getImageData(0, 0, 48, 48).data;
+          let clear = 0;
+          for (let i = 3; i < a.length; i += 4) if (a[i] < 200) clear++;
+          resolve(clear > a.length / 4 * .05);
+        } catch (_) { resolve(false); }
+      };
+      img.onerror = () => resolve(false);
+      img.src = url;
+    });
+  }
+  function syncLogoTint(settings) {
+    const root = document.documentElement, t = settings.theming;
+    const wanted = !!(BC.themeScenes && BC.themeScenes[t.experience]) && (!t.logo || !t.logo.mode || t.logo.mode === "default");
+    const m = wanted && /^url\(\s*(["']?)(.+?)\1\s*\)$/.exec(getComputedStyle(root).getPropertyValue("--ic-brand-header-image").trim());
+    let tint = false;
+    if (m) {
+      const url = new URL(m[2], location.href).href;
+      if (!logoChecks.has(url)) {
+        logoChecks.set(url, null);
+        hasTransparency(url).then((ok) => { logoChecks.set(url, ok); if (ok && BC.requestApply) BC.requestApply(); });
+      }
+      tint = logoChecks.get(url) === true;
+    }
+    if (root.hasAttribute("data-bc-logo-tint") !== tint) root.toggleAttribute("data-bc-logo-tint", tint);
+  }
+
   function apply(settings) {
     const cos = settings.cosmetics || {};
+    syncLogoTint(settings);
     const experience = BC.themeScenes && BC.themeScenes[settings.theming.experience] ? settings.theming.experience : "";
     const root = document.documentElement;
     if (experience) { if (root.getAttribute("data-bc-experience") !== experience) root.setAttribute("data-bc-experience", experience); }
@@ -162,5 +203,5 @@
   }
 
   BC.registry.register({ id: "cosmetics", styles: ["bc-bg", "bc-custom-css", "bc-experience"], nodes: ["bc-bg"], apply,
-    unmount() { stopMotion(); document.documentElement.removeAttribute("data-bc-experience"); } });
+    unmount() { stopMotion(); document.documentElement.removeAttribute("data-bc-experience"); document.documentElement.removeAttribute("data-bc-logo-tint"); } });
 })();
