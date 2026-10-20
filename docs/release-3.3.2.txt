@@ -21,7 +21,7 @@ Visible changes
 - Grade Tools shows Canvas's current grade, labels its own estimate, and keeps the final-exam inputs through rebuilds.
 - Scene themes store short references instead of up to 1.2 MB of drawings in settings. Saved data URIs are converted on load.
 - Scene theme cards each get their own composition. Cards shift the theme's hue and some are mirrored, and space themes change subject (planet, crescent moon, galaxy, comet, glowing core, rising planet) and horizon. Cosmic Bloom used to move blurred clouds around one picture.
-- Scene themes draw the school logo in the accent colour on a clear tile instead of the school's black one. Hide, image and text logos are unchanged.
+- Scene themes draw the school logo in the accent colour on a clear tile instead of the school's black one. A logo with no transparency keeps its own colours, and keyboard focus on the logo stays visible. Hide, image and text logos are unchanged.
 - Dark mode no longer fades buttons on rescans, darkens new content before it paints, keeps equation images readable and leaves the rich-content editor light. Dark text stays on mid-tone chips and cells, and pinned links pass 4.5:1.
 - Text on Canvas primary buttons and the skip link uses the accent's contrast colour, so a light accent no longer puts white text on a light fill.
 - Color-blind modes shift confusable colours toward ones you can tell apart instead of simulating color blindness.
