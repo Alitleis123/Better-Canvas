@@ -72,6 +72,7 @@
     const radius = Math.max(0, Math.min(32, Number(t.radius) || 0));
     const editorial = ["paper", "dunes", "gallery"].includes(scene.id);
     const contrast = t.highContrast;
+    const logoMode = (t.logo && t.logo.mode) || "default";
     return `
       ${s} { --bc-scene-panel: color-mix(in srgb, var(--bc-surface-2) ${contrast ? 100 : 94}%, transparent);
         --bc-scene-line: color-mix(in srgb, var(--bc-accent) 25%, var(--bc-border));
@@ -82,8 +83,14 @@
       ${s} body { color: var(--bc-text) !important; }
       ${s} .ic-app-header { background: color-mix(in srgb, var(--bc-surface-1) 92%, transparent) !important;
         border-right: 1px solid var(--bc-scene-line); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-        --ic-brand-global-nav-bgd: transparent; --ic-brand-global-nav-menu-item__text-color: var(--bc-text);
+        --ic-brand-global-nav-bgd: transparent; --ic-brand-global-nav-logo-bgd: transparent; --ic-brand-global-nav-menu-item__text-color: var(--bc-text);
         --ic-brand-global-nav-ic-icon-svg-fill: var(--bc-accent); }
+      ${logoMode === "default" ? `${s} .ic-app-header__logomark-container { background: transparent !important; }
+      /* The school's logo, drawn in the accent through its own shape. A missing
+         image variable falls back to a clear mask, never a solid block. */
+      ${s} .ic-app-header__logomark { background: var(--bc-accent) !important;
+        -webkit-mask: var(--ic-brand-header-image, linear-gradient(transparent, transparent)) center / contain no-repeat;
+        mask: var(--ic-brand-header-image, linear-gradient(transparent, transparent)) center / contain no-repeat; }` : ""}
       ${s} .ic-app-header__menu-list-item > a { margin: 3px 7px; border-radius: ${Math.min(radius, 12)}px; color: var(--bc-text) !important; }
       ${s} .ic-app-header__menu-list-item svg { fill: var(--bc-accent) !important; }
       ${s} .ic-app-header__menu-list-link .menu-item__text { color: var(--bc-text) !important; }

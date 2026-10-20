@@ -1259,7 +1259,7 @@
     };
     return [
       sec("Main menu", [
-        row({ label: "School logo", hint: "The logo at the top of the menu.",
+        row({ label: "School logo", hint: "The logo at the top of the menu. Scene themes draw it in the accent colour.",
           control: C.segmented({ ariaLabel: "School logo", get: () => logo.mode, set: putLogo((x, v) => { x.mode = v; }),
             options: [{ value: "default", label: "Show" }, { value: "hide", label: "Hide" }, { value: "replace", label: "Image" }, { value: "text", label: "Text" }] }) }),
         row({ label: "Image URL", showWhen: (st) => st.theming.logo.mode === "replace",

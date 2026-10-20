@@ -695,3 +695,24 @@ test("scene compositions differ from card to card and old saved drawings still c
   assert.equal(merged.cosmetics.background.image, "bc-scene:nebula#731:wall");
 });
 
+test("scene themes draw the school logo in the accent on a clear tile unless the logo is hidden or replaced", () => {
+  const { domContext, load: loadDom } = require("./audit-helpers.cjs");
+  const { dom, context } = domContext("<body></body>");
+  try {
+    loadDom(context, "src/shared/defaults.js", "src/content/core/util.js", "src/shared/themes.js", "src/shared/theme-library.js", "src/shared/theme-scenes.js", "src/shared/theme-media.js");
+    const BC = context.BC, styles = {};
+    BC.injector = { setStyle(id, css) { styles[id] = css; }, removeNode() {}, ensureNode(id, host, factory) { return factory(); } };
+    BC.registry = { register(f) { BC.feature = f; } };
+    loadDom(context, "src/content/features/cosmetics.js");
+    const s = BC.cloneDefaults();
+    BC.applyTheme(s, BC.PRESET_THEMES.find((p) => p.id === "scene-nebula"));
+    BC.feature.apply(s);
+    assert.match(styles["bc-experience"], /--ic-brand-global-nav-logo-bgd: transparent/);
+    assert.match(styles["bc-experience"], /\.ic-app-header__logomark \{ background: var\(--bc-accent\) !important;[^}]*\bmask: var\(--ic-brand-header-image, linear-gradient\(transparent, transparent\)\) center \/ contain no-repeat;/);
+    for (const mode of ["hide", "replace", "text"]) {
+      s.theming.logo.mode = mode;
+      BC.feature.apply(s);
+      assert.doesNotMatch(styles["bc-experience"], /\.ic-app-header__logomark \{/, mode);
+    }
+  } finally { dom.window.close(); }
+});
