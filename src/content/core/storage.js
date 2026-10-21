@@ -175,6 +175,9 @@
   function acceptSettings(value, before, edited) {
     savedSettings = JSON.stringify(value);
     if (!draft) current = BC.mergeSettingsEdits(before, edited, value);
+    // During a theme preview the drawer hears about the commit now, before a
+    // Cancel can put back its older state and look like an unsaved edit.
+    else for (const cb of listeners) BC.util.guard(() => cb(JSON.parse(savedSettings)), "storage");
     refresh(KEY);
     return value;
   }

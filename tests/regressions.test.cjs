@@ -180,12 +180,15 @@ test("a commit from this tab during a theme preview reaches the drawer, so later
   const draft = copy(state);
   draft.cosmetics.motion = "rain";
   a.storage.adopt(draft, true);
-  // Theme rotation commits while the preview shows.
+  // Theme rotation commits while the preview shows, and Cancel comes before the
+  // read that follows the commit returns.
+  a.holdReads = true;
   await a.storage.update((s) => { s.cosmetics.motion = "snow"; });
-  await settle();
   assert.equal(a.storage.current.cosmetics.motion, "rain");
   assert.equal(state.cosmetics.motion, "snow");
   a.storage.adopt(state, false);
+  a.holdReads = false;
+  mock.reads.splice(0).forEach((release) => release());
   await settle();
   const other = copy(mock.persisted.bcSettings);
   other.theming.lineHeight = 1.9;
