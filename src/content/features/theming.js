@@ -40,9 +40,12 @@
     :root[data-bc-focus="bold"] *:focus-visible { outline: 3px solid var(--bc-accent, #4f46e5) !important; outline-offset: 2px; }
     :root[data-bc-focus="high-contrast"] *:focus-visible { outline: 3px solid #ffeb3b !important; outline-offset: 2px; box-shadow: 0 0 0 4px #000 !important; }
 
-    /* Cursor */
-    :root[data-bc-cursor="large"] { cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><polygon points='0,0 0,28 8,20 12,28 16,26 12,18 22,18' fill='black' stroke='white' stroke-width='2'/></svg>") 0 0, auto !important; }
-    :root[data-bc-cursor="precise"], :root[data-bc-cursor="precise"] * { cursor: crosshair !important; }
+    /* Cursor, drawn by BC.tokens.cursor into --bc-cursor. Links keep their hand
+       and text fields their I-beam, except under the crosshair. */
+    :root:is([data-bc-cursor="arrow"], [data-bc-cursor="dot"], [data-bc-cursor="ring"]) { cursor: var(--bc-cursor) !important; }
+    :root:is([data-bc-cursor="arrow"], [data-bc-cursor="dot"], [data-bc-cursor="ring"]) :is(textarea, [contenteditable]:not([contenteditable="false"]),
+      input:is(:not([type]), [type="text"], [type="search"], [type="email"], [type="url"], [type="password"], [type="number"], [type="tel"])) { cursor: text; }
+    :root[data-bc-cursor="precise"], :root[data-bc-cursor="precise"] * { cursor: var(--bc-cursor) !important; }
 
     /* High contrast (its contrast() filter is set inline with the colour-blind one) */
     :root[data-bc-hc="1"] * { text-shadow: none !important; }
@@ -73,6 +76,7 @@
   let lastSig = null;
   let lastCss = "";
   let appliedFilter = "";      // the root `filter` we last wrote
+  let appliedCursor = "";      // and the --bc-cursor value
 
   function buildCss(settings) {
     const t = settings.theming;
@@ -157,7 +161,12 @@
     attr("data-bc-density", t.density || "default");
     attr("data-bc-radius", String(t.radius | 0));
     attr("data-bc-focus", t.focusRing || "default");
-    attr("data-bc-cursor", t.cursor || "default");
+    const cursor = BC.tokens.cursor(t);
+    attr("data-bc-cursor", cursor.shape);
+    if (cursor.css !== appliedCursor) {
+      if (cursor.css) doc.style.setProperty("--bc-cursor", cursor.css); else doc.style.removeProperty("--bc-cursor");
+      appliedCursor = cursor.css;
+    }
     attr("data-bc-hc", t.highContrast ? "1" : "0");
     attr("data-bc-motion", (t.reducedMotion || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)) ? "0" : "1");
     attr("data-bc-rounded", t.roundedUI ? "1" : "0");
@@ -231,6 +240,6 @@
     // Teardown removes our stylesheets, so the memo has to be invalidated or a
     // re-enable would skip rebuilding them. (The root-level inline state is cleared
     // centrally in content.js's teardown.)
-    unmount() { lastSig = null; appliedFilter = ""; BC.darkEngine.stop(); },
+    unmount() { lastSig = null; appliedFilter = ""; appliedCursor = ""; BC.darkEngine.stop(); },
   });
 })();

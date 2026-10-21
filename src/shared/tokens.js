@@ -368,6 +368,28 @@
 }`;
     },
 
+    // The Cursor setting as a CSS cursor value, drawn in the user's colour with a
+    // black or white edge, whichever stands out. "" keeps the system pointer.
+    cursor(theming) {
+      const t = theming || {};
+      const shape = t.cursor === "large" ? "arrow" : ["arrow", "dot", "ring", "precise"].includes(t.cursor) ? t.cursor : "default";
+      if (shape === "default") return { shape, css: "" };
+      const size = Math.round(Math.min(48, Math.max(16, Number(t.cursorSize) || 32)));
+      const fill = BC.color.normalizeHex(t.cursorColor) || "#000000";
+      const edge = BC.color.contrastText(fill) === "#ffffff" ? "#ffffff" : "#000000";
+      const cross = "M16 2v10M16 20v10M2 16h10M20 16h10";
+      const art = {
+        arrow: `<polygon points='2,2 2,29 9,22 13,30 17,28 13,20 22,20' fill='${fill}' stroke='${edge}' stroke-width='2' stroke-linejoin='round'/>`,
+        dot: `<circle cx='16' cy='16' r='8' fill='${fill}' stroke='${edge}' stroke-width='2'/>`,
+        ring: `<circle cx='16' cy='16' r='10' fill='none' stroke='${edge}' stroke-width='6'/><circle cx='16' cy='16' r='10' fill='none' stroke='${fill}' stroke-width='3'/>`,
+        precise: `<path d='${cross}' stroke='${edge}' stroke-width='5' stroke-linecap='round'/><path d='${cross}' stroke='${fill}' stroke-width='2.5' stroke-linecap='round'/>`,
+      }[shape];
+      const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${size}' height='${size}' viewBox='0 0 32 32'>${art}</svg>`;
+      const hot = shape === "arrow" ? Math.round(size / 16) : Math.round(size / 2);
+      const src = "data:image/svg+xml," + encodeURIComponent(svg);
+      return { shape, src, css: `url("${src}") ${hot} ${hot}, ${shape === "precise" ? "crosshair" : "auto"}` };
+    },
+
     // Memo key so theming.js can skip rebuilding a multi-KB string on every tick.
     signature(theming) {
       const t = theming || {};

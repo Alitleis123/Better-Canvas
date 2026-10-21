@@ -159,6 +159,7 @@
     // reload.
     doc.style.filter = "";
     doc.style.removeProperty("--bc-anim-speed");
+    doc.style.removeProperty("--bc-cursor");
     doc.style.removeProperty("--bc-sidebar-w");
     for (const a of ROOT_ATTRS) doc.removeAttribute(a);
   }

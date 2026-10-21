@@ -79,6 +79,13 @@
   check(root.querySelector(".bcs-study-flip").textContent === "Mitochondria", "Flashcard reveals the answer");
   click("Show again later"); root.querySelector(".bcs-study-flip").click(); click("Got it");
   check(root.querySelector(".bcs-locker-editor").textContent.includes("Set complete"), "Review-again queue completes after learning the card");
+  BC.SettingsUI.goto("theming");
+  root.querySelector('[aria-label="Cursor"] [data-value="dot"]').click();
+  await until(() => document.documentElement.getAttribute("data-bc-cursor") === "dot" && getComputedStyle(document.documentElement).cursor.startsWith('url("data:image/svg+xml') && getComputedStyle(document.querySelector("a")).cursor === "pointer", "A drawn cursor applies to the page and links keep their hand");
+  check(root.querySelector(".bcs-cursor-pad").style.cursor.startsWith("url(") && root.querySelectorAll('[aria-label="Cursor"] img').length === 5, "Cursor cards and the Try it box show the cursor");
+  root.querySelector('[aria-label="Cursor"] [data-value="default"]').click();
+  await until(() => document.documentElement.getAttribute("data-bc-cursor") === "default" && getComputedStyle(document.documentElement).cursor === "auto", "The system cursor setting clears it");
+  check(root.querySelectorAll('[aria-label="Focus ring"] .bcs-ring-demo').length === 3, "Focus ring choices each show the ring on a sample button");
   for (const id of ["themes", "theming", "cosmetics", "dashboard", "widgets", "todo", "navigation", "accessibility", "locker", "grades", "calendar", "files", "announcements", "productivity", "notifications", "shortcuts", "instructor", "insights", "about"]) {
     BC.SettingsUI.goto(id); check(root.querySelector(".bcs-main").childElementCount > 0, id + " section renders");
   }

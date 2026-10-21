@@ -13,6 +13,26 @@ function context() {
   return ctx;
 }
 
+test("cursor settings draw the chosen shape, read the old Large value and survive theme changes", () => {
+  const ctx = context();
+  for (const file of ["src/content/core/color.js", "src/shared/tokens.js"]) vm.runInContext(fs.readFileSync(path.join(root, file), "utf8"), ctx);
+  const { BC } = ctx;
+  assert.deepEqual(copy(BC.tokens.cursor({ cursor: "default" })), { shape: "default", css: "" });
+  const legacy = BC.tokens.cursor({ cursor: "large" });
+  assert.equal(legacy.shape, "arrow");
+  assert.match(legacy.css, /^url\("data:image\/svg\+xml,[^"]+"\) 2 2, auto$/);
+  const ring = BC.tokens.cursor({ cursor: "ring", cursorSize: 99, cursorColor: "#fff" });
+  assert.match(decodeURIComponent(ring.src), /width='48'.*stroke='#000000'.*stroke='#ffffff'/);
+  assert.match(ring.css, / 24 24, auto$/);
+  assert.match(BC.tokens.cursor({ cursor: "precise" }).css, /, crosshair$/);
+  assert.equal(BC.tokens.cursor({ cursor: "<script>" }).shape, "default");
+  assert.doesNotMatch(decodeURIComponent(BC.tokens.cursor({ cursor: "dot", cursorColor: "red'/><script>" }).src), /script|red/);
+  const state = BC.cloneDefaults();
+  Object.assign(state.theming, { cursor: "dot", cursorSize: 40, cursorColor: "#db2777", focusRing: "bold" });
+  BC.applyTheme(state, BC.PRESET_THEMES.find((p) => p.id === "rose"));
+  assert.deepEqual([state.theming.cursor, state.theming.cursorSize, state.theming.cursorColor, state.theming.focusRing], ["dot", 40, "#db2777", "bold"]);
+});
+
 test("switching themes replaces image overrides, preserves course data and rotation", () => {
   const { BC } = context(), state = BC.cloneDefaults();
   state.dashboard.courses = { "1": { nickname: "Biology", hidden: true, note: "Keep", bgImage: "https://old.example/image.jpg" } };

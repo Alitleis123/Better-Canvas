@@ -167,7 +167,9 @@
       letterSpacing: 0,            // px
       density: "default",          // compact | default | spacious | cozy
       radius: 8,                   // global corner radius
-      cursor: "default",           // default | large | precise
+      cursor: "default",           // default | arrow | dot | ring | precise ("large", before 3.3.2, is arrow)
+      cursorSize: 32,              // px, 16-48, for the drawn cursors
+      cursorColor: "#000000",
       focusRing: "default",        // default | bold | high-contrast
       colorBlind: "off",           // off | protanopia | deuteranopia | tritanopia
       highContrast: false,

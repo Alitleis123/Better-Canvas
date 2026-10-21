@@ -28,7 +28,7 @@ A customizable study workspace for Instructure Canvas — free forever, settings
 - Density (Compact/Default/Spacious/Cozy), global corner-radius slider, rounded-vs-square UI toggle, sidebar-width control.
 - **Color-blind modes** (Protanopia/Deuteranopia/Tritanopia). SVG filters shift colors you may confuse toward ones you can tell apart.
 - **High-contrast**, **reduced-motion**, master **animation-speed slider**.
-- Cursor styles (default/large/precise), focus-ring styles.
+- Cursor styles (system, arrow, dot, ring, crosshair) with size and colour, and focus-ring styles, each with a picture of what it looks like.
 - Institution logo: hide / replace with image / replace with text.
 
 ### Dashboard

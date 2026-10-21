@@ -316,10 +316,42 @@
 
   // ---- Appearance ---------------------------------------------------------
 
+  // A sample button wearing each focus ring, drawn rather than focused.
+  function ringPreview(style) {
+    return el("span", { class: "bcs-ring-demo bcs-ring-demo--" + style }, [el("span", { text: "Submit" })]);
+  }
+
+  // Cards for each cursor shape, drawn in the chosen colour, so they follow the
+  // colour picker. The system card is a plain white arrow.
+  function cursorPicker(store) {
+    const art = (shape) => {
+      const img = el("img", { class: "bcs-cursor-demo", alt: "" });
+      const paint = (s) => {
+        const src = BC.tokens.cursor(shape === "default" ? { cursor: "arrow", cursorColor: "#ffffff" } : { ...s.theming, cursor: shape, cursorSize: 32 }).src;
+        if (img.getAttribute("src") !== src) img.src = src;
+      };
+      paint(store.get());
+      return S().bindings.add(img, paint);
+    };
+    return S().choice({ ariaLabel: "Cursor", get: () => BC.tokens.cursor(store.get().theming).shape,
+      set: (v) => store.set((s) => { s.theming.cursor = v; }),
+      options: [["default", "System", "Your computer's own pointer."], ["arrow", "Arrow"], ["dot", "Dot"], ["ring", "Ring"],
+        ["precise", "Crosshair", "On everything, links too."]].map(([value, label, description]) => ({ value, label, description, preview: () => art(value) })) });
+  }
+
+  // Shows the chosen cursor even where Better Canvas doesn't set it, like the options page.
+  function cursorPad(store) {
+    const pad = el("div", { class: "bcs-cursor-pad", text: "Point here to try it" });
+    const paint = (s) => { pad.style.cursor = BC.tokens.cursor(s.theming).css || "auto"; };
+    paint(store.get());
+    return S().bindings.add(pad, paint);
+  }
+
   function renderTheming(store) {
     const C = S();
     const t = store.get().theming;
     const put = (fn) => (v) => store.set((x) => fn(x.theming, v));
+    const drawn = (s) => BC.tokens.cursor(s.theming).shape !== "default";
     return [
       sec("Mode", [
         row({ label: "Dark mode", hint: "Auto follows your system. Schedule switches at the times below.",
@@ -366,10 +398,19 @@
           control: C.number({ ariaLabel: "Sidebar width", min: 0, max: 400, suffix: "px", get: () => t.sidebarWidth, set: put((x, v) => { x.sidebarWidth = Math.max(0, v | 0); }) }) }),
       ]),
       sec("Visibility", [
-        row({ label: "Focus ring", control: C.segmented({ ariaLabel: "Focus ring", get: () => t.focusRing, set: put((x, v) => { x.focusRing = v; }),
-          options: [{ value: "default", label: "Default" }, { value: "bold", label: "Bold" }, { value: "high-contrast", label: "High contrast" }] }) }),
-        row({ label: "Cursor", control: C.segmented({ ariaLabel: "Cursor", get: () => t.cursor, set: put((x, v) => { x.cursor = v; }),
-          options: [{ value: "default", label: "Default" }, { value: "large", label: "Large" }, { value: "precise", label: "Crosshair" }] }) }),
+        row({ label: "Focus ring", hint: "The outline on the link or button you reach with the Tab key.", stacked: true,
+          control: C.choice({ ariaLabel: "Focus ring", get: () => t.focusRing, set: put((x, v) => { x.focusRing = v; }),
+            options: [
+              { value: "default", label: "Canvas", description: "Canvas's own outline.", preview: () => ringPreview("default") },
+              { value: "bold", label: "Bold", description: "Thicker, in your accent color.", preview: () => ringPreview("bold") },
+              { value: "high-contrast", label: "High contrast", description: "Yellow on a black edge.", preview: () => ringPreview("high-contrast") },
+            ] }) }),
+        row({ label: "Cursor", hint: "Links keep their hand and text boxes their I-beam, except under the crosshair.", stacked: true, control: cursorPicker(store) }),
+        row({ label: "Cursor size", hint: "Above 32px, the browser uses its own pointer near the edges of the page.", showWhen: drawn,
+          control: C.slider({ ariaLabel: "Cursor size", min: 16, max: 48, step: 2, format: (v) => v + "px", get: () => t.cursorSize, set: put((x, v) => { x.cursorSize = v; }) }) }),
+        row({ label: "Cursor color", showWhen: drawn,
+          control: C.color({ ariaLabel: "Cursor color", presets: ["#000000", "#ffffff", ...ACCENTS], get: () => t.cursorColor, set: put((x, v) => { x.cursorColor = v; }) }) }),
+        row({ label: "Try it", showWhen: drawn, stacked: true, control: cursorPad(store) }),
         row({ label: "Color-blind filter", hint: "Shifts colors you may confuse toward ones you can tell apart.", control: C.select({ ariaLabel: "Color-blind filter", get: () => t.colorBlind, set: put((x, v) => { x.colorBlind = v; }),
           options: [{ value: "off", label: "Off" }, { value: "protanopia", label: "Protanopia" }, { value: "deuteranopia", label: "Deuteranopia" }, { value: "tritanopia", label: "Tritanopia" }] }) }),
         row({ label: "High contrast", control: C.switch({ ariaLabel: "High contrast", get: () => t.highContrast, set: put((x, v) => { x.highContrast = v; }) }) }),
@@ -1973,6 +2014,13 @@
 
 /* choice cards (To Do style) */
 .bcs-choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(124px, 1fr)); gap: 10px; width: 100%; }
+.bcs-ring-demo { display: flex; align-items: center; justify-content: center; height: 100%; }
+.bcs-ring-demo span { padding: 6px 14px; border-radius: 6px; background: var(--bc-surface-2, #fff); border: 1px solid var(--bc-border, #e4e4e7); font-size: 12px; font-weight: 600; color: var(--bc-text, #18181b); }
+.bcs-ring-demo--default span { outline: 2px solid var(--ic-brand-primary, #0374b5); outline-offset: 1px; }
+.bcs-ring-demo--bold span { outline: 3px solid var(--bc-accent, #4f46e5); outline-offset: 2px; }
+.bcs-ring-demo--high-contrast span { outline: 3px solid #ffeb3b; outline-offset: 2px; box-shadow: 0 0 0 4px #000; }
+.bcs-cursor-demo { display: block; width: 32px; height: 32px; margin: 20px auto 0; }
+.bcs-cursor-pad { display: grid; place-items: center; width: 100%; min-height: 80px; border: 1px dashed var(--bc-border-strong, #d4d4d8); border-radius: var(--bc-radius, 8px); color: var(--bc-muted, #6b6b74); font-size: var(--bc-text-xs, 12px); }
 .bcs-choice__card {
   position: relative; display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 6px 6px 12px;
   border: 1px solid var(--bc-border, #e4e4e7); border-radius: var(--bc-radius-lg, 12px); background: var(--bc-surface-2, #fff);
