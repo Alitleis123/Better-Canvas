@@ -888,6 +888,7 @@
         widget("To Do", "todo"),
         widget("Coming Up", "comingUp"),
         widget("Recent Feedback", "recentFeedback"),
+        widget("View Grades", "viewGrades"),
         widget("GPA estimate", "gpa"),
         sw("Hide the whole sidebar", "hideSidebar"),
       ]),
@@ -991,7 +992,7 @@
     const state = store.get(), C = S();
     const dash = (s) => s.dashboard.enabled;
     const widget = (label, key) => row({ label, enabledWhen: dash, control: C.switch({ ariaLabel: label + " widget", get: () => state.dashboard.widgets[key], set: (v) => store.set((s) => { s.dashboard.widgets[key] = v; }) }) });
-    return [sec("Dashboard widgets", [widget("To Do", "todo"), widget("Coming Up", "comingUp"), widget("Recent Feedback", "recentFeedback"), widget("GPA estimate", "gpa"),
+    return [sec("Dashboard widgets", [widget("To Do", "todo"), widget("Coming Up", "comingUp"), widget("Recent Feedback", "recentFeedback"), widget("View Grades", "viewGrades"), widget("GPA estimate", "gpa"),
       row({ label: "Mini calendar", control: C.switch({ ariaLabel: "Mini calendar widget", get: () => state.calendar.miniOnDashboard, set: (v) => store.set((s) => { s.calendar.miniOnDashboard = v; }) }) }),
       row({ label: "Hide sidebar", enabledWhen: dash, control: C.switch({ ariaLabel: "Hide sidebar", get: () => state.dashboard.hideSidebar, set: (v) => store.set((s) => { s.dashboard.hideSidebar = v; }) }) }),
     ], { description: "Most of these need dashboard customization, under Edit Canvas > Dashboard." }), sec("On the page", [row({ label: "Sticky notes", hint: "Attach a note to the page you are studying.", control: C.switch({ ariaLabel: "Sticky notes", get: () => state.productivity.stickyNotes, set: (v) => store.set((s) => { s.productivity.stickyNotes = v; }) }) }),

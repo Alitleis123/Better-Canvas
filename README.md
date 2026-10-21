@@ -38,7 +38,7 @@ A customizable study workspace for Instructure Canvas — free forever, settings
 - Course search bar, hover-lift animation.
 - **Semester progress bar** — "Week 9 of 15 · 43 days left" from your term dates.
 - Auto-hide concluded courses.
-- Widgets: To Do, Coming Up, Recent Feedback, and an estimated-**GPA** card.
+- Widgets: To Do, Coming Up, Recent Feedback, View Grades, and an estimated-**GPA** card.
 
 ### Planner / To Do
 Three modes:

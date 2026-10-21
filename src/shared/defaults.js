@@ -102,6 +102,7 @@
         todo: true,
         comingUp: true,
         recentFeedback: true,
+        viewGrades: true,
         gpa: false,
       },
       hideSidebar: false,

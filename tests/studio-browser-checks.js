@@ -89,6 +89,24 @@
   for (const id of ["themes", "theming", "cosmetics", "dashboard", "widgets", "todo", "navigation", "accessibility", "locker", "grades", "calendar", "files", "announcements", "productivity", "notifications", "shortcuts", "instructor", "insights", "about"]) {
     BC.SettingsUI.goto(id); check(root.querySelector(".bcs-main").childElementCount > 0, id + " section renders");
   }
+  // Canvas's own sidebar markup (users/dashboard_sidebar.html.erb, shared/_event_list.html.erb)
+  // and the newer header's View Grades button.
+  document.querySelector("#right-side").insertAdjacentHTML("beforeend", '<div class="events_list coming_up" id="t-up"><h2>Coming Up</h2></div>' +
+    '<div class="events_list recent_feedback" id="t-feedback"><h2>Recent Feedback</h2></div><div id="t-grades"><a href="/grades" class="Button button-sidebar-wide">View Grades</a></div>' +
+    '<div id="t-teacher"><button type="button" id="start_new_course" class="btn button-sidebar-wide">Start a New Course</button><a href="/grades" class="Button button-sidebar-wide" id="t-teacher-grades">View Grades</a></div>');
+  document.querySelector(".ic-Dashboard-header__layout").insertAdjacentHTML("beforeend", '<span id="t-header"><a id="ic-Dashboard-header__view_grades_button" href="/grades">View Grades</a></span>');
+  const shown = (...ids) => ids.map((id) => getComputedStyle(document.getElementById(id)).display !== "none").join();
+  const widget = (label) => root.querySelector('[aria-label="' + label + ' widget"]').click();
+  BC.SettingsUI.goto("widgets");
+  widget("Coming Up");
+  await until(() => shown("t-up", "t-feedback") === "false,true", "Hiding Coming Up leaves Recent Feedback");
+  widget("Coming Up"); widget("Recent Feedback");
+  await until(() => shown("t-up", "t-feedback") === "true,false", "Hiding Recent Feedback leaves Coming Up");
+  widget("Recent Feedback"); widget("View Grades");
+  await until(() => shown("t-grades", "t-header", "t-teacher-grades", "t-teacher", "t-up", "t-feedback") === "false,false,false,true,true,true", "Hiding View Grades removes its sidebar and header buttons and nothing else");
+  widget("View Grades");
+  await until(() => shown("t-grades", "t-header", "t-teacher-grades") === "true,true,true", "View Grades comes back");
+  for (const id of ["t-up", "t-feedback", "t-grades", "t-teacher", "t-header"]) document.getElementById(id).remove();
   BC.SettingsUI.goto("todo");
   root.querySelector('[aria-label="To Do list style"] [data-value="custom"]').click();
   for (const shape of ["ring", "rainbow", "bar", "heart", "cloud", "off"]) {

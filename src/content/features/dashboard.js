@@ -68,8 +68,15 @@
   function widgetsCss(w) {
     const rules = [];
     if (!w.todo)           rules.push(`.Sidebar__TodoListContainer, .ToDoSidebar { display: none !important; }`);
-    if (!w.comingUp)       rules.push(`.events_list, .coming_up { display: none !important; }`);
+    // Canvas draws both lists from one template, as .events_list.coming_up and
+    // .events_list.recent_feedback, so hiding .events_list took Recent Feedback too.
+    if (!w.comingUp)       rules.push(`.coming_up { display: none !important; }`);
     if (!w.recentFeedback) rules.push(`.recent_feedback { display: none !important; }`);
+    // The sidebar button, or the header button on Canvas's newer header. The sidebar
+    // wrapper goes too when the button is all it holds, or scene themes frame it as an empty card.
+    if (!w.viewGrades)     rules.push(`#ic-Dashboard-header__view_grades_button, :has(> #ic-Dashboard-header__view_grades_button),
+      #right-side a.button-sidebar-wide[href$="/grades"],
+      #right-side > div:has(> a.button-sidebar-wide[href$="/grades"]):not(:has(> :not(a[href$="/grades"]))) { display: none !important; }`);
     return rules.join("\n");
   }
 
