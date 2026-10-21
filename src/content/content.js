@@ -2,7 +2,7 @@
  * Better Canvas — content entry point.
  * Confirms Canvas, applies every feature (idempotent apply(settings, ctx)),
  * survives Canvas SPA re-renders via the observer, registers shortcuts
- * and command-palette entries, and responds to popup/options messages.
+ * and command-palette entries, and responds to toolbar icon and options messages.
  */
 (function () {
   "use strict";
@@ -199,7 +199,7 @@
     requestAnimationFrame(() => { rafPending = false; BC.applyAll(BC.storage.current); });
   };
 
-  // Messages from popup / options page
+  // Messages from the toolbar icon and the options page
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg || !msg.type) return;
     if (msg.type === "bc:ping") {

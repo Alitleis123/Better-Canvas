@@ -17,7 +17,7 @@
   const BC = (globalThis.BC = globalThis.BC || {});
 
   // Every value is a token, with a literal fallback so the kit still renders if it
-  // paints before theming has emitted them (or in the popup / options page).
+  // paints before theming has emitted them (or in the options page).
   const SHEET = `
 :host { all: initial; display: block; }
 .bc-root {
@@ -385,7 +385,7 @@
     injected = true;
     if (BC.injector) BC.injector.setStyle("bc-ui", SHEET);
     else if (document.head && !document.querySelector('style[data-better-canvas="bc-ui"]')) {
-      // Standalone documents (options page, popup) have no injector.
+      // Standalone documents (the options page) have no injector.
       const tag = document.createElement("style");
       tag.setAttribute("data-better-canvas", "bc-ui");
       tag.textContent = SHEET;

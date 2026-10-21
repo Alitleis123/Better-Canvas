@@ -321,7 +321,7 @@ async function commitLocker(msg) {
   return { ok: true };
 }
 
-// Popup-triggered re-sync.
+// Messages from Canvas tabs and the options page.
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (sender?.id !== chrome.runtime.id) { sendResponse({ ok: false, error: "Untrusted message sender" }); return; }
   if (!msg || !msg.type) return;
@@ -375,6 +375,27 @@ function clearBadgeWithoutCanvas() {
   }, 1000);
 }
 try { chrome.tabs.onRemoved.addListener(clearBadgeWithoutCanvas); } catch (_) {}
+
+// The toolbar icon opens settings: the drawer on a Canvas page, the options page
+// anywhere else. On a school's own Canvas address that isn't allowed yet, the
+// options page offers to allow it. activeTab is what lets this read tab.url there.
+async function openSettings(tab) {
+  const opened = tab && tab.id != null && await new Promise((res) => {
+    try { chrome.tabs.sendMessage(tab.id, { type: "bc:openSettings" }, (r) => { void chrome.runtime.lastError; res(!!(r && r.ok)); }); }
+    catch (_) { res(false); }
+  });
+  if (opened) return;
+  let url = null;
+  try { url = new URL(tab.url); } catch (_) {}
+  if (url && /^https?:$/.test(url.protocol) && !/(^|\.)instructure\.com$/.test(url.hostname) &&
+      !(await chrome.permissions.contains({ origins: [url.origin + "/*"] }))) {
+    const query = new URLSearchParams({ enable: url.origin, tab: String(tab.id) });
+    chrome.tabs.create({ url: chrome.runtime.getURL("src/options/options.html?" + query) });
+    return;
+  }
+  chrome.runtime.openOptionsPage();
+}
+try { chrome.action.onClicked.addListener(openSettings); } catch (_) {}
 
 // Right-click context menu: quick-add task
 try {

@@ -24,6 +24,7 @@ Visible changes
 - Scene themes draw the school logo in the accent colour on a clear tile instead of the school's black one. A logo with no transparency keeps its own colours, and keyboard focus on the logo stays visible. Hide, image and text logos are unchanged.
 - Under scene themes the dashboard header scrolls with the page. Canvas pins it to the top, and as a floating panel it hung over the cards.
 - New icon: a glossy lavender-to-violet B on a dark purple disc, inside a ring of eight violet segments. Codex generated the B and a script drew the ring. Each size is cut from one 1024 px master.
+- The toolbar icon opens settings instead of a popup. On a Canvas page that's the settings drawer, and anywhere else it's the settings tab. On a school's own Canvas address the settings tab asks to allow it. The popup's version of that check never saw the address, because the extension had no access to the tab.
 - Dark mode no longer fades buttons on rescans, darkens new content before it paints, keeps equation images readable and leaves the rich-content editor light. Dark text stays on mid-tone chips and cells, and pinned links pass 4.5:1.
 - Text on Canvas primary buttons and the skip link uses the accent's contrast colour, so a light accent no longer puts white text on a light fill.
 - Color-blind modes shift confusable colours toward ones you can tell apart instead of simulating color blindness.

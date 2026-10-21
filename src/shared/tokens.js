@@ -1,9 +1,9 @@
 /*
  * Better Canvas — the single design-token emitter.
  *
- * This lives in shared/ because four separate documents need byte-identical
- * tokens: the Canvas page (via theming.js), the settings drawer's shadow root,
- * the standalone options page, and the toolbar popup. Only theming.js is a
+ * This lives in shared/ because three separate documents need byte-identical
+ * tokens: the Canvas page (via theming.js), the settings drawer's shadow root
+ * and the standalone options page. Only theming.js is a
  * content script, so the emitter cannot live there. Before this existed there
  * were four disconnected colour systems and three of them never saw the user's
  * theme at all.
@@ -238,8 +238,8 @@
     },
 
     // scope: selector for the light/base block (default ":root").
-    // mode: "both" (default) | "light" | "dark" — the popup and options page render
-    // a single mode, the Canvas page needs both.
+    // mode: "both" (default) | "light" | "dark" — the options page renders a
+    // single mode, the Canvas page needs both.
     css(theming, opts) {
       const o = opts || {};
       const scope = o.scope || ":root";

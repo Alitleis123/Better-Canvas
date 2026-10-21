@@ -483,6 +483,33 @@ test("the toolbar count clears once no Canvas tab is left", async () => {
   assert.equal(badge.at(-1), "");
 });
 
+test("the toolbar icon opens settings in a Canvas tab, the options page elsewhere, and offers a school's own address", async () => {
+  const listeners = {}, calls = [];
+  let answer, granted = [];
+  const event = (name) => ({ addListener: (fn) => { listeners[name] = fn; } });
+  const context = vm.createContext({ console, structuredClone, queueMicrotask, crypto: require("node:crypto").webcrypto, TextEncoder,
+    URL, URLSearchParams, setTimeout, clearTimeout, chrome: {
+      runtime: { id: "test", onInstalled: event("installed"), onStartup: event("startup"), onMessage: event("message"),
+        getURL: (file) => "chrome-extension://test/" + file, openOptionsPage: () => calls.push("options") },
+      permissions: { getAll: async () => ({ origins: granted }), contains: async (q) => granted.includes(q.origins[0]) },
+      tabs: { onRemoved: event("removed"), query: async () => [], create: (o) => calls.push(o.url),
+        sendMessage: (id, msg, cb) => { calls.push(msg.type + " " + id); cb(answer); } },
+      action: { onClicked: event("action"), setBadgeText: async () => {}, setBadgeBackgroundColor() {} },
+      contextMenus: { onClicked: event("menu") }, storage: { local: {} },
+    } });
+  load(context, "src/background/service-worker.js");
+  const click = async (tab) => { calls.length = 0; await listeners.action(tab); return [...calls]; };
+  answer = { ok: true };
+  assert.deepEqual(await click({ id: 1, url: "https://school.instructure.com/" }), ["bc:openSettings 1"]);
+  answer = undefined;
+  assert.deepEqual(await click({ id: 2, url: "https://www.instructure.com/" }), ["bc:openSettings 2", "options"]);
+  assert.deepEqual(await click({ id: 3, url: "chrome://newtab/" }), ["bc:openSettings 3", "options"]);
+  assert.deepEqual(await click({ id: 4, url: "https://canvas.school.edu/courses/1" }),
+    ["bc:openSettings 4", "chrome-extension://test/src/options/options.html?enable=https%3A%2F%2Fcanvas.school.edu&tab=4"]);
+  granted = ["https://canvas.school.edu/*"];
+  assert.deepEqual(await click({ id: 5, url: "https://canvas.school.edu/" }), ["bc:openSettings 5", "options"]);
+});
+
 test("review round 1: loose version files are refused and undo bursts stop at history boundaries", () => {
   const context = vm.createContext({ console, setTimeout, clearTimeout, structuredClone, navigator: { platform: "Win32" } });
   load(context, "src/shared/defaults.js", "src/content/core/util.js", "src/shared/settings/index.js");

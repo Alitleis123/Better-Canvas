@@ -55,6 +55,38 @@
     if (root.classList.contains("bc-dark") !== dark) root.classList.toggle("bc-dark", dark);
   }
 
+  // The toolbar icon sends a site's address here when Better Canvas isn't allowed
+  // on it, which is how a school's own Canvas domain gets turned on.
+  function offerSite() {
+    const params = new URLSearchParams(location.search);
+    let site;
+    try { site = new URL(params.get("enable")); } catch (_) { return; }
+    if (!/^https?:$/.test(site.protocol)) return;
+    const tabId = Number(params.get("tab"));
+    const bar = document.createElement("div");
+    bar.className = "bc-site-offer";
+    bar.setAttribute("role", "status");
+    const text = document.createElement("span");
+    text.textContent = "Is " + site.hostname + " your school's Canvas? Better Canvas runs on instructure.com addresses until you allow another one.";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Allow on " + site.hostname;
+    button.addEventListener("click", () => {
+      chrome.permissions.request({ origins: [site.origin + "/*"] }, (granted) => {
+        if (chrome.runtime.lastError || !granted) return;
+        chrome.runtime.sendMessage({ type: "bc:syncRegistration" }, () => {
+          void chrome.runtime.lastError;
+          if (tabId > 0) chrome.tabs.reload(tabId, () => void chrome.runtime.lastError);
+          text.textContent = "Better Canvas is on for " + site.hostname + ". Its tab has been reloaded.";
+          button.remove();
+        });
+      });
+    });
+    bar.append(text, button);
+    document.body.prepend(bar);
+  }
+  offerSite();
+
   let current = BC.cloneDefaults();
   const adapter = {
     getState() { return current; },

@@ -1,7 +1,7 @@
 /*
  * Better Canvas — default settings schema.
  * Single source of truth. Loaded as a classic script by every surface
- * (content scripts, popup, options) and attaches to globalThis.BC.
+ * (content scripts, options) and attaches to globalThis.BC.
  */
 (function () {
   "use strict";
@@ -405,7 +405,7 @@
         link.id = id; used.add(id);
       });
     }
-    // Loaded only where the scene drawings are (not the popup or subframes).
+    // Loaded only where the scene drawings are (not subframes).
     if (BC.compactSceneArt) BC.compactSceneArt(settings);
     return settings;
   };

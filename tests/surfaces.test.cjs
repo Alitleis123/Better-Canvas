@@ -23,44 +23,65 @@ async function surface(name, fail = false) {
   return { db, data, writes, dom, context, adapter, fail: (value) => db.fail(value ? "Quota exceeded" : null) };
 }
 
-for (const name of ["options", "popup"]) {
-  test(name + " first upgrade commits legacy history and planner metadata before edits", async () => {
-    const s = await surface(name);
-    try {
-      assert.equal(s.writes[0].bcSettings.version, 5);
-      assert.equal(s.writes[0].bcLocal.gradeHistory[7][0].score, 93);
-      assert.equal(s.writes[0].bcLocal.todo.stars.a, true);
-      if (name === "options") await s.adapter.save(s.context.BC.cloneDefaults());
-      else s.dom.window.document.getElementById("enabled").dispatchEvent(new s.dom.window.Event("change"));
-      await settle();
-      assert.equal(s.data.bcLocal.gradeHistory[7][0].score, 93);
-      assert.equal(s.data.bcLocal.todo.stars.a, true);
-    } finally { s.dom.window.close(); }
-  });
-  test(name + " migration failure shows an error and prevents editing", async () => {
-    const s = await surface(name, true);
-    try {
-      assert.match(s.dom.window.document.querySelector('[role="alert"]').textContent, /Quota exceeded/);
-      assert.equal(s.data.bcSettings.version, 2);
-      if (name === "options") assert.equal(s.adapter, undefined);
-      else assert.equal(s.dom.window.document.getElementById("enabled").disabled, true);
-    } finally { s.dom.window.close(); }
-  });
-}
+test("options first upgrade commits legacy history and planner metadata before edits", async () => {
+  const s = await surface("options");
+  try {
+    assert.equal(s.writes[0].bcSettings.version, 5);
+    assert.equal(s.writes[0].bcLocal.gradeHistory[7][0].score, 93);
+    assert.equal(s.writes[0].bcLocal.todo.stars.a, true);
+    await s.adapter.save(s.context.BC.cloneDefaults());
+    await settle();
+    assert.equal(s.data.bcLocal.gradeHistory[7][0].score, 93);
+    assert.equal(s.data.bcLocal.todo.stars.a, true);
+  } finally { s.dom.window.close(); }
+});
+test("options migration failure shows an error and prevents editing", async () => {
+  const s = await surface("options", true);
+  try {
+    assert.match(s.dom.window.document.querySelector('[role="alert"]').textContent, /Quota exceeded/);
+    assert.equal(s.data.bcSettings.version, 2);
+    assert.equal(s.adapter, undefined);
+  } finally { s.dom.window.close(); }
+});
 
-test("options adapters reject callback failures and promise rejections; popup reports failed saves", async () => {
-  const options = await surface("options"), popup = await surface("popup");
+test("options page offers to allow the address the toolbar icon sent, then reloads that tab", async () => {
+  const db = require("./storage-harness.cjs").database();
+  const chrome = db.client().chrome, calls = [], send = chrome.runtime.sendMessage;
+  chrome.runtime.sendMessage = (message, callback) => {
+    if (message.type !== "bc:syncRegistration") return send(message, callback);
+    calls.push(message.type); callback({ ok: true });
+  };
+  chrome.permissions = { request: (query, callback) => { calls.push(query.origins); callback(true); } };
+  chrome.tabs = { query: async () => [], reload: (id, callback) => { calls.push("reload " + id); callback(); } };
+  const html = fs.readFileSync(path.join(root, "src/options/options.html"), "utf8");
+  for (const [search, offered] of [["?enable=javascript%3Aalert(1)&tab=7", false], ["?enable=https%3A%2F%2Fcanvas.school.edu%2Fcourses&tab=7", true]]) {
+    const { dom, context } = domContext(html, { chrome });
+    dom.reconfigure({ url: "http://bc-test.instructure.com/src/options/options.html" + search });
+    try {
+      load(context, "src/shared/defaults.js", "src/content/core/util.js", "src/content/core/storage.js");
+      context.BC.SettingsUI = { render() {} };
+      load(context, "src/options/options.js");
+      const bar = dom.window.document.querySelector(".bc-site-offer");
+      assert.equal(!!bar, offered);
+      if (!bar) continue;
+      assert.match(bar.textContent, /Is canvas\.school\.edu your school's Canvas\?/);
+      bar.querySelector("button").click();
+      assert.deepEqual(copy(calls), [["https://canvas.school.edu/*"], "bc:syncRegistration", "reload 7"]);
+      assert.equal(bar.querySelector("button"), null);
+      assert.match(bar.textContent, /on for canvas\.school\.edu/);
+    } finally { dom.window.close(); }
+  }
+});
+
+test("options adapters reject callback failures and promise rejections", async () => {
+  const options = await surface("options");
   try {
     options.fail(true);
     await assert.rejects(options.adapter.save(options.context.BC.cloneDefaults()), /Quota exceeded/);
     await assert.rejects(options.adapter.saveLocal({ notes: {} }), /Quota exceeded/);
     options.db.api.set = () => Promise.reject(new Error("Disk unavailable"));
     await assert.rejects(options.adapter.save(options.context.BC.cloneDefaults()), /Disk unavailable/);
-    popup.fail(true);
-    popup.dom.window.document.getElementById("enabled").dispatchEvent(new popup.dom.window.Event("change"));
-    for (let i = 0; i < 100 && !popup.dom.window.document.getElementById("save-error"); i++) await new Promise((resolve) => setTimeout(resolve, 5));
-    assert.match(popup.dom.window.document.getElementById("save-error").textContent, /Quota exceeded/);
-  } finally { options.dom.window.close(); popup.dom.window.close(); }
+  } finally { options.dom.window.close(); }
 });
 
 test("settings flush rejects failed saves so Apply and import can await persistence", async () => {

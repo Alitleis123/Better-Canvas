@@ -149,7 +149,7 @@ Three modes:
 3. Open any `*.instructure.com` page. Better Canvas runs automatically.
 
 ### Custom school domains
-For non-instructure.com Canvas (e.g. `canvas.yourschool.edu`), click the toolbar popup on that site and grant permission. The background service worker registers the content scripts on your origin.
+For non-instructure.com Canvas (e.g. `canvas.yourschool.edu`), click the toolbar icon on that site. The settings tab that opens asks to allow that address, and the background service worker then registers the content scripts on it.
 
 ---
 
@@ -181,8 +181,8 @@ src/
     theme-artwork.js                     photographic collections + licenses
     theme-scenes.js                      offline scene collections + wallpapers
     tokens.js                            the single design-token emitter, shared by the
-                                         page, the drawer's shadow root, the options
-                                         page and the popup (+ the readability guard)
+                                         page, the drawer's shadow root and the options
+                                         page (+ the readability guard)
     settings/
       state.js                           undo/redo store, subscribe, adapter
       components.js                      Switch/Select/Slider/Sortable/Tags/Links/Keybind…
@@ -222,8 +222,7 @@ src/
     frame.js           iframe-only dark mode (SpeedGrader, New Quizzes)
     content.js         entry: applies registered features, wires observer + shortcuts + palette
   background/
-    service-worker.js  register dynamic scripts on custom domains + badge + context menu
-  popup/               toolbar popup: enable/dark/dash toggles + Palette + Open settings
+    service-worker.js  register dynamic scripts on custom domains + badge + context menu + toolbar icon
   options/             standalone options page hosting the shared settings UI
 ```
 
@@ -250,7 +249,7 @@ src/
 - After editing source, run `build.ps1` and reload the unpacked extension, then refresh Canvas.
 - `build.ps1` runs `node --check` on every `.js` file before copying.
 - Install test dependencies with `npm ci`, then run `npm test` to run every `tests/*.test.cjs` suite.
-- Suites cover storage concurrency and targeted reads, sticky notes, locker lifecycle, grade rules and brute-force equivalence, grade input validation and slider batching, settings failures, popup/options migrations, frame bundles, quiz toggles, dashboard loaders, privacy/manifests, themes and studio artwork.
+- Suites cover storage concurrency and targeted reads, sticky notes, locker lifecycle, grade rules and brute-force equivalence, grade input validation and slider batching, settings failures, options migrations, frame bundles, quiz toggles, dashboard loaders, privacy/manifests, themes and studio artwork.
 - Run `node tests/headless-browser-check.cjs` after building. It requires a Playwright Chromium installation, `PLAYWRIGHT_BROWSERS_PATH` for its location and `BC_BROWSER_SCRATCH` for temporary browser files. It loads the unpacked Chromium extension and runs the studio browser checks against local synthetic pages.
 - Run `node tests/firefox-check.cjs` after building to load `dist/firefox` in a real Firefox through geckodriver. Set `BC_FIREFOX` to `firefox.exe`, `BC_GECKODRIVER` to `geckodriver.exe` and `BC_BROWSER_SCRATCH`. It resolves every host name to this machine, uses the same local synthetic pages, and checks the settings drawer, a theme save, the WebP artwork and quiz drafts.
 - `node tests/real-canvas-check.cjs` is opt-in. Set `BC_CANVAS_PAGES` to comma-separated `*.instructure.com` pages that open without a login, such as a public course syllabus. It only loads those pages, with dark mode off and then on, and reports extension errors, repeated failing requests and text contrast below WCAG AA.

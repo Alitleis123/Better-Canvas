@@ -206,21 +206,6 @@ test("reapplying an unchanged theme carries replacement intent and retains a fai
   } finally { a.close(); b.close(); }
 });
 
-for (const [control, pathParts, value] of [["enabled", ["enabled"], false], ["dashEnabled", ["dashboard", "enabled"], false], ["darkMode", ["theming", "darkMode"], "on"], ["notifsIn", ["notifications", "inPage"], false]]) {
-  test("popup " + control + " changes only its field after an options edit", async () => {
-    const db = database(), popup = await surface(db, "popup"), options = await surface(db, "options");
-    try {
-      options.store.set((d) => { d.dashboard.columns = 7; }); await options.store.flush();
-      const input = popup.doc.getElementById(control);
-      if (input.type === "checkbox") input.checked = value; else input.value = value;
-      input.dispatchEvent(new popup.dom.window.Event("change"));
-      for (let i = 0; i < 100 && pathParts.reduce((d, k) => d?.[k], db.data.bcSettings) !== value; i++) await new Promise((resolve) => setTimeout(resolve, 5));
-      assert.equal(pathParts.reduce((d, k) => d?.[k], db.data.bcSettings), value);
-      assert.equal(db.data.bcSettings.dashboard.columns, 7);
-    } finally { popup.close(); options.close(); }
-  });
-}
-
 test("studio and options rebase scalar, membership and id-keyed settings changes", async () => {
   const db = database({ bcSettings: { version: 5, todo: { tags: ["base"] } } });
   const a = await surface(db, "studio"), b = await surface(db, "options");
