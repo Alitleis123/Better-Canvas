@@ -12,7 +12,7 @@ A customizable study workspace for Instructure Canvas — free forever, settings
 
 ### Edit Canvas and locker
 - **Full-window editor** with grouped Themes, Appearance, Background, Dashboard, Widgets, To Do, Sidebar, and Accessibility controls. Responsive at laptop and phone widths.
-- **Read-only layout preview** uses course names from the current dashboard and clearly labeled sample tasks. Preview a theme, then Apply or Cancel; browsing never changes saved settings. Other controls save immediately and support Undo.
+- **Live preview** in Edit Canvas is a scaled copy of the Canvas page you opened it on, with your changes applied. Preview a theme, then Apply or Cancel; trying one never changes saved settings. Other controls save immediately and support Undo. The settings tab has no Canvas page to copy, so it shows a labeled sample.
 - **My locker** stores notes, bookmarks, folders, pinned items and flashcard sets on this device without an account. Includes autosave, search, JSON import/export and question/answer study sessions with a review-again queue.
 
 ### Appearance (30+ knobs)

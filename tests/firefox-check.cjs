@@ -79,11 +79,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       root.querySelector('.bcs-subnav [data-tab="themes"]').click();
     }, drawer);
     await until((drawer) => !!eval(drawer).querySelector('[aria-label="Preview theme Rainy After Hours"]'), "Theme gallery missing", drawer);
-    await run((drawer) => {
-      const root = eval(drawer);
-      root.querySelector('[aria-label="Preview theme Rainy After Hours"]').click();
-      [...root.querySelectorAll("button")].find((b) => b.textContent.trim() === "Apply theme").click();
-    }, drawer);
+    const mirror = drawer + ".querySelector('.bcs-mirror iframe.is-front')";
+    await until((mirror) => { const d = eval(mirror)?.contentDocument; return d?.querySelector("#content")?.textContent === "Local synthetic Canvas page" && !d.querySelector("script, [data-bc-node=bc-drawer]"); }, "The settings preview did not copy the page", mirror);
+    await run((drawer) => eval(drawer).querySelector('[aria-label="Preview theme Rainy After Hours"]').click(), drawer);
+    await until((mirror) => { const d = eval(mirror)?.contentDocument, layer = d?.querySelector("#bc-bg-layer"); return !!layer && d.defaultView.getComputedStyle(layer).backgroundImage.includes("anime-night-wallpaper.webp"); }, "The settings preview did not show the theme being tried", mirror);
+    check("The settings preview is a copy of the page and shows a theme before it's applied");
+    await run((drawer) => [...eval(drawer).querySelectorAll("button")].find((b) => b.textContent.trim() === "Apply theme").click(), drawer);
     const wallpaper = () => (getComputedStyle(document.querySelector("#bc-bg-layer") || document.body).backgroundImage || "").includes("anime-night-wallpaper.webp");
     await until(wallpaper, "Applied theme did not paint its wallpaper");
     await sleep(800);

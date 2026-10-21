@@ -9,6 +9,7 @@
 (function () {
   "use strict";
   if (window.top === window) return; // top document is handled by the full bundle
+  if (window.name === "bc-mirror") return; // the settings preview, a copy of a page that is already styled
   const BC = globalThis.BC;
   if (!BC || !BC.color || !BC.darkEngine || typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) return;
 

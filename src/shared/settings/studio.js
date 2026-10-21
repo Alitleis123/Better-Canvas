@@ -25,7 +25,187 @@
     node.appendChild(el("span", { text: total ? Math.round(pct) + "%" : "—" }));
     return node;
   };
-  BC.StudioPreview = function () {
+  // On a Canvas page the preview is a copy of that page. The page behind the
+  // workspace already shows every change, so copying its DOM into a frame and
+  // scaling it down shows exactly what a change does, without asking Canvas for
+  // any data.
+  // Left out: Better Canvas's own overlays, and anything that would run or fetch.
+  const LEAVE_OUT = '[data-bc-node="bc-drawer"],[data-bc-node="bc-pop-layer"],[data-bc-node^="bc-toast-host"],[data-bc-node^="bc-live-"],[data-bc-node="bc-dialog"],[data-bc-node="bc-sheet"],[data-bc-node="bc-tour"],[data-bc-node="bc-cp"],[data-better-canvas="bc-studio-open"],script,noscript,object,embed,link[rel~="preload"],link[rel~="modulepreload"],link[rel~="prefetch"]';
+  const OWN_STYLES = ":is(:root, head) > style[data-better-canvas]";
+  const sheetText = (sheet) => { try { return [...sheet.cssRules].map((r) => r.cssText).join("\n"); } catch (_) { return ""; } };
+  function adoptSheets(live, copy, doc) {
+    let text = "";
+    try { text = [...(live.adoptedStyleSheets || [])].map(sheetText).join("\n"); } catch (_) {}
+    if (text) (copy.querySelector("head") || copy).appendChild(doc.createElement("style")).textContent = text;
+  }
+  // importNode copies the tree but not shadow roots, CSS added through the CSSOM
+  // (Canvas's own components do that, so their <style> tags are empty), or canvas
+  // pixels. Both trees are walked in step to fill those in.
+  function graft(live, copy, doc) {
+    const a = document.createTreeWalker(live, NodeFilter.SHOW_ELEMENT), b = doc.createTreeWalker(copy, NodeFilter.SHOW_ELEMENT), drop = [];
+    for (let x = live.nodeType === 1 ? live : a.nextNode(), y = copy.nodeType === 1 ? copy : b.nextNode(); x && y; x = a.nextNode(), y = b.nextNode()) {
+      if (x.matches(LEAVE_OUT)) { drop.push(y); continue; }
+      if (x.localName === "style" && !x.textContent && x.sheet) y.textContent = sheetText(x.sheet);
+      else if (x.localName === "iframe") { y.removeAttribute("src"); y.removeAttribute("srcdoc"); }
+      // Lazy images never load in a frame without scripts. Ones the page already
+      // loaded come from the cache, and ones it hasn't stay unloaded here too.
+      else if (x.localName === "img" && x.complete && x.naturalWidth) y.removeAttribute("loading");
+      else if (x.localName === "canvas") try { y.getContext("2d").drawImage(x, 0, 0); } catch (_) {}
+      if (x.shadowRoot && !y.shadowRoot) {
+        let root;
+        try { root = y.attachShadow({ mode: "open" }); } catch (_) { continue; }
+        for (const n of x.shadowRoot.childNodes) root.appendChild(doc.importNode(n, true));
+        adoptSheets(x.shadowRoot, root, doc);
+        graft(x.shadowRoot, root, doc);
+      }
+    }
+    for (const n of drop) n.remove();
+  }
+  function syncAttributes(from, to) {
+    for (const a of [...to.attributes]) if (!from.hasAttribute(a.name)) to.removeAttribute(a.name);
+    for (const a of from.attributes) if (to.getAttribute(a.name) !== a.value) to.setAttribute(a.name, a.value);
+  }
+
+  // 0: nothing the preview shows, 1: only Better Canvas's style tags or the
+  // html/body attributes, which patch in place, 2: anything else, a full copy.
+  function change(r) {
+    const t = r.target.nodeType === 1 ? r.target : r.target.parentElement;
+    if (!t || t.closest(LEAVE_OUT)) return 0;
+    // Card motion pauses offscreen. The copy keeps the state it was taken with,
+    // which matches what it shows at its starting scroll position.
+    if (r.attributeName === "data-bc-motion-visible") return 0;
+    // Canvas rewrites some attributes with the value they already have.
+    if (r.type === "attributes" && r.oldValue === t.getAttribute(r.attributeName)) return 0;
+    if (r.type === "attributes") return t === document.documentElement || t === document.body ? 1 : 2;
+    if (t.matches(OWN_STYLES)) return 1;
+    const nodes = [...r.addedNodes, ...r.removedNodes];
+    if (nodes.every((n) => n.nodeType === 1 && n.matches(LEAVE_OUT))) return 0;
+    return nodes.every((n) => n.nodeType === 1 && n.matches("style[data-better-canvas]")) ? 1 : 2;
+  }
+
+  function pagePreview(show) {
+    const root = el("section", { class: "bcs-live-preview", "aria-label": "Preview of this page" });
+    const caption = el("span", { text: "Live preview · this page" });
+    const holder = el("div", { class: "bcs-mirror" });
+    // Two frames, so a new copy loads its stylesheets behind the one on screen.
+    const frames = [0, 1].map(() => el("iframe", { name: "bc-mirror", sandbox: "allow-same-origin", srcdoc: "<!doctype html><title>Preview</title>", tabindex: "-1", "aria-hidden": "true" }));
+    const loaded = new Map(frames.map((f) => [f, new Promise((resolve) => f.addEventListener("load", resolve, { once: true }))]));
+    const shield = el("div", { class: "bcs-mirror-shield", "aria-hidden": "true" });
+    holder.append(...frames, shield);
+    root.append(el("div", { class: "bcs-preview-toolbar" }, [caption, el("span", { class: "bc-spacer" }), el("span", { text: "Canvas" })]), holder);
+
+    let scale = 1, front = null, watching = false, epoch = 0, need = 0, timer = 0, first = 0, built = 0, busy = false, drafted = false, drag = null;
+    function fit() {
+      if (!holder.clientWidth) return;
+      scale = holder.clientWidth / innerWidth;
+      for (const f of frames) f.style.cssText = "width:" + innerWidth + "px;height:" + Math.ceil(holder.clientHeight / scale) + "px;transform:scale(" + scale + ")";
+    }
+    new ResizeObserver(fit).observe(holder);
+
+    const clear = (f) => { f.classList.remove("is-front"); f.contentDocument?.documentElement?.replaceChildren(); };
+    async function rebuild() {
+      const back = frames.find((f) => f !== front), mine = epoch;
+      await loaded.get(back);
+      if (mine !== epoch) return;
+      const doc = back.contentDocument;
+      const copy = doc.importNode(document.documentElement, true);
+      graft(document.documentElement, copy, doc);
+      adoptSheets(document, copy, doc);
+      copy.querySelector("body")?.setAttribute("inert", "");
+      doc.replaceChild(copy, doc.documentElement);
+      fit();
+      const links = [...doc.querySelectorAll('link[rel~="stylesheet"]')].map((l) => new Promise((resolve) => { l.addEventListener("load", resolve); l.addEventListener("error", resolve); }));
+      await Promise.race([Promise.all(links).then(() => { void doc.documentElement.offsetHeight; return doc.fonts.ready; }), new Promise((resolve) => setTimeout(resolve, 1500))]);
+      if (mine !== epoch) return;
+      const from = front ? front.contentWindow : window;
+      back.contentWindow.scrollTo(from.scrollX, from.scrollY);
+      back.classList.add("is-front");
+      if (front) clear(front);
+      front = back;
+    }
+    function patch() {
+      const doc = front.contentDocument, have = new Map([...doc.querySelectorAll(OWN_STYLES)].map((s) => [s.getAttribute("data-better-canvas"), s]));
+      for (const s of document.querySelectorAll(OWN_STYLES)) {
+        if (s.matches(LEAVE_OUT)) continue;
+        const key = s.getAttribute("data-better-canvas");
+        let tag = have.get(key);
+        have.delete(key);
+        if (!tag) { tag = doc.head.appendChild(doc.createElement("style")); tag.setAttribute("data-better-canvas", key); }
+        if (tag.textContent !== s.textContent) tag.textContent = s.textContent;
+      }
+      for (const tag of have.values()) tag.remove();
+      syncAttributes(document.documentElement, doc.documentElement);
+      syncAttributes(document.body, doc.body);
+      doc.body.setAttribute("inert", "");
+    }
+    // Style changes patch on the next task. A full copy waits for the page to
+    // settle, 150ms after the last change but never more than 600ms behind it,
+    // and comes at most once a second, so a page that keeps changing can't keep
+    // the copy rebuilding and its images reloading.
+    function want(level) {
+      need = Math.max(need, level);
+      if (busy) return;
+      const now = Date.now();
+      if (!timer) first = now;
+      clearTimeout(timer);
+      timer = setTimeout(run, need === 1 ? 0 : Math.max(now - first >= 600 ? 0 : 150, built + 1000 - now));
+    }
+    async function run() {
+      timer = 0;
+      if (!holder.isConnected) return stop();
+      const level = need;
+      need = 0;
+      if (level === 1 && front) return patch();
+      busy = true;
+      built = Date.now();
+      try { await rebuild(); } catch (e) { BC.diag?.push?.("page preview", e); } finally { busy = false; }
+      if (need && watching) want(need);
+    }
+    const observer = new MutationObserver((records) => {
+      let level = 0;
+      for (const r of records) if ((level = Math.max(level, change(r))) === 2) break;
+      if (level) want(level);
+    });
+    // Only while the preview is on screen. Closing the workspace drops both copies.
+    function start() {
+      if (watching) return;
+      watching = true;
+      observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeOldValue: true, characterData: true });
+      want(2);
+    }
+    function stop() {
+      watching = false;
+      epoch++;
+      observer.disconnect();
+      clearTimeout(timer);
+      timer = need = 0;
+      front = null;
+      for (const f of frames) clear(f);
+    }
+    new IntersectionObserver((entries) => entries.at(-1).isIntersecting ? start() : stop()).observe(holder);
+
+    // The copy can't be clicked or focused. Wheel and drag scroll it.
+    const pan = (dx, dy) => front?.contentWindow.scrollBy(dx / scale, dy / scale);
+    shield.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? holder.clientHeight : 1;
+      pan(e.deltaX * unit, e.deltaY * unit);
+    }, { passive: false });
+    shield.addEventListener("pointerdown", (e) => { if (e.button === 0) { drag = [e.clientX, e.clientY]; shield.setPointerCapture(e.pointerId); } });
+    shield.addEventListener("pointermove", (e) => { if (drag) { pan(drag[0] - e.clientX, drag[1] - e.clientY); drag = [e.clientX, e.clientY]; } });
+    shield.addEventListener("pointerup", () => { drag = null; });
+    shield.addEventListener("pointercancel", () => { drag = null; });
+
+    return { root, paint(settings, name) {
+      caption.textContent = name ? "Previewing " + name : "Live preview · this page";
+      // A theme being tried out isn't saved, so the page only shows it through
+      // here. Cancel, Apply or closing the workspace paints the saved state back.
+      if (name || drafted) { drafted = !!name; show(settings); }
+    } };
+  }
+
+  BC.StudioPreview = function (show) {
+    if (show && BC.detect?.isCanvas?.()) return pagePreview(show);
     const cards = [...document.querySelectorAll(".ic-DashboardCard")].map((n, i) => ({
       id: n.dataset.courseId || n.querySelector('a[href*="/courses/"]')?.getAttribute("href")?.match(/courses\/(\d+)/)?.[1] || String(i),
       name: n.querySelector(".ic-DashboardCard__header-title")?.textContent?.trim() || n.getAttribute("aria-label") || "Course " + (i + 1),
@@ -33,13 +213,13 @@
     })).slice(0, 12);
     if (!cards.length) for (let i = 0; i < 9; i++) cards.push({ id: String(i), name: ["Creative writing", "Visual storytelling", "Computer science", "World history", "Studio arts", "Statistics", "Literature", "Design systems", "Astronomy"][i], image: "" });
     const root = el("section", { class: "bcs-live-preview", "aria-label": "Canvas layout preview" });
-    const caption = el("span", { text: "Layout preview · sample tasks" });
+    const caption = el("span", { text: "Sample page · open settings on Canvas to preview your own" });
     const viewport = el("div", { class: "bcs-preview-canvas" });
     root.append(el("div", { class: "bcs-preview-toolbar" }, [caption, el("span", { class: "bc-spacer" }), el("span", { text: "Canvas" })]), viewport);
     let last = "";
     return { root, paint(settings, name) {
       const sig = JSON.stringify([settings.theming, settings.dashboard, settings.cosmetics, settings.todo, settings.calendar]);
-      caption.textContent = name ? "Previewing " + name : "Layout preview · sample tasks";
+      caption.textContent = name ? "Previewing " + name : "Sample page · open settings on Canvas to preview your own";
       if (sig === last) return; last = sig;
       const t = settings.theming, dark = BC.isDarkActive(settings), p = BC.color.themePalettes(t)[dark ? "dark" : "light"];
       viewport.style.cssText = "--pv-bg:" + p.bg + ";--pv-panel:" + p.bg2 + ";--pv-text:" + p.text + ";--pv-muted:" + p.muted + ";--pv-border:" + p.border + ";--bc-accent:" + (t.accentColor || p.accent) + ";--bc-border:" + p.border + ";--pv-radius:" + Math.min(24, t.radius) + "px;";
@@ -110,6 +290,10 @@
   .bcs-preview-toolbar {display:flex;gap:10px;padding:13px 16px;font-size:11px;color:var(--bc-text-muted);border-bottom:1px solid var(--bc-border)}
   .bcs-preview-canvas {position:relative;isolation:isolate;height:calc(100% - 42px);overflow:auto;display:flex;background-color:var(--pv-bg);color:var(--pv-text);font-size:10px;min-height:280px}
   .bcs-preview-wallpaper {position:absolute;inset:0;z-index:-1;pointer-events:none}
+  .bcs-mirror {position:relative;height:calc(100% - 42px);min-height:280px;overflow:hidden;background:var(--bc-surface-2)}
+  .bcs-mirror iframe {position:absolute;top:0;left:0;border:0;transform-origin:0 0}
+  .bcs-mirror iframe.is-front {z-index:1}
+  .bcs-mirror-shield {position:absolute;inset:0;z-index:2;cursor:grab;touch-action:none}.bcs-mirror-shield:active{cursor:grabbing}
   .bcs-preview-nav {width:34px;flex:none;display:flex;align-items:center;flex-direction:column;gap:27px;padding:15px 6px;background:color-mix(in srgb,var(--pv-panel) 90%,transparent)}
   .bcs-preview-nav .bc-icon {width:15px;height:15px}.bcs-preview-nav b{font-size:10px;color:var(--bc-accent)}
   .bcs-preview-page {padding:24px 16px;flex:1;min-width:0}

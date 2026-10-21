@@ -56,10 +56,15 @@ if (!scratch) throw Error("Set BC_BROWSER_SCRATCH to an approved temporary direc
     await coldPage.goto("http://bc-test.instructure.com:8076/extension-check?cold=1");
     await worker.evaluate(async () => {
       const [tab] = await chrome.tabs.query({ url: "http://bc-test.instructure.com:8076/extension-check?cold=1" });
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => BC.features.settingsPanel.open() });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => BC.features.settingsPanel.open("themes") });
     });
     await coldPage.waitForFunction(() => document.querySelector("#bc-drawer")?.shadowRoot?.querySelector(".bcs-app, .bc-app"), null, { timeout: 5000 });
-    await coldPage.close(); results.extension.push("Opening settings in a fresh tab loads and shows the workspace");
+    results.extension.push("Opening settings in a fresh tab loads and shows the workspace");
+    await coldPage.waitForFunction(() => {
+      const copy = document.querySelector("#bc-drawer").shadowRoot.querySelector(".bcs-mirror iframe.is-front")?.contentDocument;
+      return copy?.querySelector("#main")?.textContent === "Local synthetic Canvas page" && !copy.querySelector("script, [data-bc-node=bc-drawer]");
+    }, null, { timeout: 5000 });
+    await coldPage.close(); results.extension.push("From the content-script world, the settings preview is a copy of the page");
     const first = await inspect();
     for (const [key, value] of Object.entries({ count: 34, anime: 6, version: "3.3.2", top: true, buildVersion: "3.3.2" })) {
       assert.equal(first[key], value); results.extension.push(key + " = " + value);

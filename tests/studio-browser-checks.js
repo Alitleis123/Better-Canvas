@@ -4,6 +4,13 @@
   const results = [], check = (value, message) => { if (!value) throw Error(message); results.push(message); };
   const root = document.querySelector("#bc-drawer").shadowRoot;
   const wait = () => new Promise((resolve) => setTimeout(resolve, 420));
+  const until = async (test, message) => {
+    for (let i = 0; i < 60; i++) { const value = await test(); if (value) return check(value, message); await new Promise((resolve) => setTimeout(resolve, 100)); }
+    check(false, message);
+  };
+  const mirror = () => root.querySelector(".bcs-mirror iframe.is-front")?.contentDocument;
+  const saved = () => new Promise((resolve) => chrome.storage.local.get("bcSettings", (r) => resolve(JSON.stringify(r.bcSettings))));
+  const wallpaper = () => { const layer = mirror()?.querySelector("#bc-bg-layer"); return layer ? getComputedStyle(layer).backgroundImage : ""; };
   const click = (text) => {
     const button = [...root.querySelectorAll("button")].find((b) => b.textContent.trim() === text);
     if (!button) throw Error("Missing button: " + text); button.click();
@@ -13,12 +20,21 @@
     input.value = value; input.dispatchEvent(new Event("input", { bubbles: true }));
   };
   BC.SettingsUI.goto("themes");
-  const initial = JSON.stringify(BC.storage.current);
+  const initial = JSON.stringify(BC.storage.current), initialSaved = await saved();
+  await until(() => mirror()?.querySelectorAll(".ic-DashboardCard").length === 32 && !mirror().querySelector("script, #bc-drawer"), "Live preview is a copy of this page without its scripts or the workspace");
+  check(root.querySelector(".bcs-mirror iframe").getAttribute("sandbox") === "allow-same-origin" && root.querySelector(".bcs-mirror-shield"), "The copy can't run scripts or be clicked");
   root.querySelector('[aria-label="Preview theme Rainy After Hours"]').click();
-  check(JSON.stringify(BC.storage.current) === initial, "Preview leaves Canvas and saved settings unchanged");
+  check(await saved() === initialSaved && BC.storage.current.cosmetics.motion === "rain", "Preview shows a theme on Canvas without saving it");
+  await until(() => wallpaper().includes("anime-night-wallpaper"), "Live preview shows the theme being tried");
   check(!root.querySelector(".bcs-draft-bar").hidden, "Preview offers Apply and Cancel");
   click("Cancel");
-  check(JSON.stringify(BC.storage.current) === initial, "Cancel preserves the original theme");
+  check(JSON.stringify(BC.storage.current) === initial && await saved() === initialSaved, "Cancel puts the original theme back");
+  await until(() => !wallpaper().includes("anime-night-wallpaper"), "Live preview drops the cancelled theme");
+  BC.SettingsUI.goto("theming");
+  const lineHeight = root.querySelector('input[type="range"][aria-label="Line height"]');
+  lineHeight.value = lineHeight.max; lineHeight.dispatchEvent(new Event("input", { bubbles: true }));
+  await until(() => mirror() && getComputedStyle(mirror().body).lineHeight === getComputedStyle(document.body).lineHeight && mirror().querySelector('style[data-better-canvas="bc-theming"]').textContent === document.querySelector('style[data-better-canvas="bc-theming"]').textContent, "Live preview follows a slider as it moves");
+  BC.SettingsUI.goto("themes");
   root.querySelector('[aria-label="Preview theme Rainy After Hours"]').click(); click("Apply theme"); await wait();
   check(BC.storage.current.cosmetics.motion === "rain", "Apply saves the selected full theme");
   const cards = [...document.querySelectorAll(".ic-DashboardCard__header_image")];
@@ -56,7 +72,6 @@
   }
   root.querySelector('[aria-label="Progress shape"] [data-value="heart"]').click();
   root.querySelector('[aria-label="Due-date format"] [data-value="absolute"]').click();
-  check(root.querySelector(".bcs-preview-todo .bcs-progress-art svg path"), "Layout preview displays selected progress shape");
   BC.features.settingsPanel.close();
   check(!document.body.inert, "Closing the editor restores Canvas interaction");
   BC.api.plannerItems = async () => [{ plannable_type: "assignment", plannable_date: new Date(Date.now() + 86400000).toISOString(), plannable: { id: 81, title: "Sample essay", points_possible: 10 }, course_id: 100, html_url: "/courses/100/assignments/81", planner_override: { marked_complete: false } }];
@@ -68,7 +83,9 @@
     const image = new Image(); image.onload = () => resolve(image.naturalWidth >= 1000); image.onerror = () => resolve(false); image.src = BC.themeMedia.resolve(url);
   })));
   check(loaded.every(Boolean), "Both atlases and high-resolution wallpapers decode");
-  BC.features.settingsPanel.open("themes");
+  BC.features.settingsPanel.open("todo");
+  await until(() => mirror()?.querySelector('[data-bc-node="bc-todo-widget"]')?.shadowRoot?.querySelector(".bcs-progress-art svg path"), "Live preview copies the planner widget with its heart progress");
+  BC.SettingsUI.goto("themes");
   check(!auditErrors.length, "No browser runtime errors");
   window.bcStudioTestResults = results;
   return results;

@@ -166,7 +166,7 @@
       }
       const workspaceTitle = el("h1", { text: "Edit Canvas" });
       const workspaceDesc = el("p");
-      const preview = BC.StudioPreview(), draftBar = el("div", { class: "bcs-draft-bar", hidden: true });
+      const preview = BC.StudioPreview(adapter.preview), draftBar = el("div", { class: "bcs-draft-bar", hidden: true });
       const previewColumn = el("div", { class: "bcs-preview-column" }, [preview.root, draftBar]);
       const workspaceBody = el("div", { class: "bcs-workspace-body" }, [previewColumn, main]);
       const workspace = el("div", { class: "bcs-workspace" }, [el("div", { class: "bcs-workspace-head" }, [workspaceTitle, workspaceDesc, subnav]), workspaceBody]);
