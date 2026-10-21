@@ -508,6 +508,7 @@ test("the toolbar icon opens settings in a Canvas tab, the options page elsewher
     ["bc:openSettings 4", "chrome-extension://test/src/options/options.html?enable=https%3A%2F%2Fcanvas.school.edu&tab=4"]);
   granted = ["https://canvas.school.edu/*"];
   assert.deepEqual(await click({ id: 5, url: "https://canvas.school.edu/" }), ["bc:openSettings 5", "options"]);
+  assert.deepEqual(await click({ id: 6, url: "https://canvas.school.edu:8443/" }), ["bc:openSettings 6", "options"], "a pattern without a port covers every port");
 });
 
 test("review round 1: loose version files are refused and undo bursts stop at history boundaries", () => {

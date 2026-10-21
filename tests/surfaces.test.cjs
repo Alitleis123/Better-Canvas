@@ -54,7 +54,7 @@ test("options page offers to allow the address the toolbar icon sent, then reloa
   chrome.permissions = { request: (query, callback) => { calls.push(query.origins); callback(true); } };
   chrome.tabs = { query: async () => [], reload: (id, callback) => { calls.push("reload " + id); callback(); } };
   const html = fs.readFileSync(path.join(root, "src/options/options.html"), "utf8");
-  for (const [search, offered] of [["?enable=javascript%3Aalert(1)&tab=7", false], ["?enable=https%3A%2F%2Fcanvas.school.edu%2Fcourses&tab=7", true]]) {
+  for (const [search, offered] of [["?enable=javascript%3Aalert(1)&tab=7", false], ["?enable=https%3A%2F%2Fcanvas.school.edu%3A8443%2Fcourses&tab=7", true]]) {
     const { dom, context } = domContext(html, { chrome });
     dom.reconfigure({ url: "http://bc-test.instructure.com/src/options/options.html" + search });
     try {

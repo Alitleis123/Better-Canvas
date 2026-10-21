@@ -388,7 +388,7 @@ async function openSettings(tab) {
   let url = null;
   try { url = new URL(tab.url); } catch (_) {}
   if (url && /^https?:$/.test(url.protocol) && !/(^|\.)instructure\.com$/.test(url.hostname) &&
-      !(await chrome.permissions.contains({ origins: [url.origin + "/*"] }))) {
+      !(await chrome.permissions.contains({ origins: [url.protocol + "//" + url.hostname + "/*"] }))) {
     const query = new URLSearchParams({ enable: url.origin, tab: String(tab.id) });
     chrome.tabs.create({ url: chrome.runtime.getURL("src/options/options.html?" + query) });
     return;

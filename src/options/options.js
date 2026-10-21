@@ -72,7 +72,8 @@
     button.type = "button";
     button.textContent = "Allow on " + site.hostname;
     button.addEventListener("click", () => {
-      chrome.permissions.request({ origins: [site.origin + "/*"] }, (granted) => {
+      // Firefox match patterns can't hold a port, and without one both browsers match any port.
+      chrome.permissions.request({ origins: [site.protocol + "//" + site.hostname + "/*"] }, (granted) => {
         if (chrome.runtime.lastError || !granted) return;
         chrome.runtime.sendMessage({ type: "bc:syncRegistration" }, () => {
           void chrome.runtime.lastError;

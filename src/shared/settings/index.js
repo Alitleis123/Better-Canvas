@@ -2059,7 +2059,7 @@
 @media (prefers-reduced-motion: reduce) { .bcs-main > * { animation: none; } }
 
 /* the options page: same app, full height, centered */
-.bc-app--page { height: 100vh; }
+.bc-app--page { height: 100%; }
 .bc-app--page .bcs-shell { width: 100%; max-width: 1180px; margin: 0 auto; border-left: 1px solid var(--bc-border, #e4e4e7); border-right: 1px solid var(--bc-border, #e4e4e7); }
 .bc-app--page .bcs-header { padding-left: max(var(--bc-space-4, 16px), calc((100% - 1180px) / 2 + 16px)); padding-right: max(var(--bc-space-3, 12px), calc((100% - 1180px) / 2 + 12px)); }
 
