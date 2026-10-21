@@ -11,9 +11,8 @@
   const listeners = new Set();
   const localListeners = new Set();
   let current = null;
-  // A theme being tried in the settings preview, and whether a settings read was
-  // held back while it showed (see refresh).
-  let draft = null, heldBack = false;
+  // A theme being tried in the settings preview. It is never saved.
+  let draft = null;
   let local = null;
   let loadPromise = null;
   let localWrites = Promise.resolve();
@@ -54,7 +53,7 @@
           if (k === KEY) {
             // The drawer previews unsaved edits immediately. A storage read must
             // not replace that preview with its previous saved snapshot.
-            if (current && JSON.stringify(current) !== savedSettings) { if (current === draft) heldBack = true; continue; }
+            if (current && JSON.stringify(current) !== savedSettings) continue;
             current = BC.mergeDefaults(res && res[KEY]);
             savedSettings = JSON.stringify(current);
             for (const cb of listeners) BC.util.guard(() => cb(current), "storage");
@@ -167,7 +166,7 @@
   }
   function acceptSettings(value, before, edited) {
     savedSettings = JSON.stringify(value);
-    current = BC.mergeSettingsEdits(before, edited, value);
+    if (!draft) current = BC.mergeSettingsEdits(before, edited, value);
     refresh(KEY);
     return value;
   }
@@ -204,12 +203,16 @@
     // Adopt an in-memory settings object without waiting for a storage
     // round-trip, so the settings drawer can preview a change in the same frame.
     // `current` is a getter, so assigning BC.storage.current throws in strict mode.
-    // A previewed theme is never saved, so a change from another tab that arrived
-    // while it showed is read again once the preview ends.
+    // While a theme is being tried, only the preview replaces it, with `preview`
+    // true or false. The store's own adopt comes after a paint that already put
+    // the theme back over its edits, and saves leave it showing too. The theme is
+    // never saved, so ending it reads settings again, in case another tab changed
+    // them meanwhile.
     adopt(settings, preview) {
-      if (!settings) return;
+      if (!settings || (draft && preview === undefined)) return;
+      const ended = draft && !preview;
       current = settings; draft = preview ? settings : null; revisions[KEY]++;
-      if (!preview && heldBack) { heldBack = false; refresh(KEY); }
+      if (ended) refresh(KEY);
     },
 
     // UI snapshots carry their baseline so unchanged fields cannot erase edits
@@ -217,7 +220,8 @@
     save(settings, json, options = {}) {
       const edited = JSON.parse(json || JSON.stringify(settings));
       const base = options.base || JSON.parse(savedSettings || JSON.stringify(BC.cloneDefaults()));
-      current = settings; revisions[KEY]++;
+      if (!draft) current = settings;
+      revisions[KEY]++;
       return queueSettings(async () => {
         const value = await transactSettings((fresh) => options.replace ? edited :
           BC.replaceSettingsPaths(BC.mergeSettingsEdits(base, edited, fresh), edited, options.replacePaths || []));

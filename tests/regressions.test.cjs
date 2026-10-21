@@ -145,6 +145,33 @@ test("storage events preserve a drawer preview that has not been saved yet", asy
   assert.equal(mock.persisted.bcSettings.theming.darkMode, "on");
 });
 
+test("a theme preview survives saves and the store's adopt, and ending it reads settings again", async () => {
+  const mock = storageMock(), a = mock.tab();
+  await a.storage.load();
+  const saved = copy(a.storage.current), draft = copy(saved), edit = copy(saved);
+  draft.cosmetics.motion = "rain"; edit.theming.radius = 20;
+  a.storage.adopt(draft, true);
+  a.storage.adopt(edit);
+  await a.storage.save(edit);
+  await settle();
+  assert.equal(a.storage.current.cosmetics.motion, "rain");
+  assert.equal(mock.persisted.bcSettings.theming.radius, 20);
+  // Another tab saves while the theme shows, and the read is still out when it's cancelled.
+  const other = copy(mock.persisted.bcSettings);
+  other.theming.lineHeight = 1.9;
+  mock.persisted.bcSettings = other;
+  a.holdReads = true;
+  a.deliver({ bcSettings: { newValue: other } });
+  await settle();
+  a.holdReads = false;
+  a.storage.adopt(edit, false);
+  mock.reads.splice(0).forEach((release) => release());
+  await settle();
+  assert.equal(a.storage.current.theming.lineHeight, 1.9);
+  assert.equal(a.storage.current.theming.radius, 20);
+  assert.equal(a.storage.current.cosmetics.motion, saved.cosmetics.motion);
+});
+
 test("a no-op local save does not hide a later external change", async () => {
   const mock = storageMock(), a = mock.tab(), b = mock.tab();
   await Promise.all([a.storage.load(), b.storage.load()]);

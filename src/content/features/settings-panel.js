@@ -84,7 +84,8 @@
 
   function ensureDrawer() {
     if (drawerHost && drawerHost.isConnected) return drawerHost;
-    if (store) store.destroy();
+    // A theme still being tried would otherwise stay on the page with nothing to end it.
+    if (store) { store.cancelThemePreview?.(); store.destroy(); }
     drawerHost = document.createElement("div");
     drawerHost.id = DRAWER_ID;
     drawerHost.setAttribute("data-bc-node", DRAWER_ID);

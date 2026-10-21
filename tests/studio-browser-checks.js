@@ -45,7 +45,14 @@
   const lineHeight = root.querySelector('input[type="range"][aria-label="Line height"]');
   lineHeight.value = lineHeight.max; lineHeight.dispatchEvent(new Event("input", { bubbles: true }));
   await until(() => mirror() && getComputedStyle(mirror().body).lineHeight === getComputedStyle(document.body).lineHeight && mirror().querySelector('style[data-better-canvas="bc-theming"]').textContent === document.querySelector('style[data-better-canvas="bc-theming"]').textContent, "Live preview follows a slider as it moves");
+  lineHeight.value = lineHeight.min; lineHeight.dispatchEvent(new Event("input", { bubbles: true }));
   BC.SettingsUI.goto("themes");
+  root.querySelector('[aria-label="Preview theme Rainy After Hours"]').click();
+  await wait(); await wait();
+  check(BC.storage.current.cosmetics.motion === "rain" && JSON.parse(await saved()).theming.lineHeight === 1.1, "A save that lands during a theme preview leaves the theme showing");
+  await until(() => wallpaper().includes("anime-night-wallpaper"), "Live preview keeps the theme through that save");
+  click("Cancel");
+  await until(() => BC.storage.current.cosmetics.motion !== "rain" && BC.storage.current.theming.lineHeight === 1.1, "Cancel then shows the saved settings");
   root.querySelector('[aria-label="Preview theme Rainy After Hours"]').click(); click("Apply theme"); await wait();
   check(BC.storage.current.cosmetics.motion === "rain", "Apply saves the selected full theme");
   const cards = [...document.querySelectorAll(".ic-DashboardCard__header_image")];
