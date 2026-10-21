@@ -172,6 +172,30 @@ test("a theme preview survives saves and the store's adopt, and ending it reads 
   assert.equal(a.storage.current.cosmetics.motion, saved.cosmetics.motion);
 });
 
+test("a commit from this tab during a theme preview reaches the drawer, so later reads still land", async () => {
+  const mock = storageMock(), a = mock.tab();
+  await a.storage.load();
+  let state = copy(a.storage.current);
+  a.storage.subscribe((s) => { state = copy(s); });
+  const draft = copy(state);
+  draft.cosmetics.motion = "rain";
+  a.storage.adopt(draft, true);
+  // Theme rotation commits while the preview shows.
+  await a.storage.update((s) => { s.cosmetics.motion = "snow"; });
+  await settle();
+  assert.equal(a.storage.current.cosmetics.motion, "rain");
+  assert.equal(state.cosmetics.motion, "snow");
+  a.storage.adopt(state, false);
+  await settle();
+  const other = copy(mock.persisted.bcSettings);
+  other.theming.lineHeight = 1.9;
+  mock.persisted.bcSettings = other;
+  a.deliver({ bcSettings: { newValue: other } });
+  await settle();
+  assert.equal(a.storage.current.theming.lineHeight, 1.9);
+  assert.equal(a.storage.current.cosmetics.motion, "snow");
+});
+
 test("a no-op local save does not hide a later external change", async () => {
   const mock = storageMock(), a = mock.tab(), b = mock.tab();
   await Promise.all([a.storage.load(), b.storage.load()]);

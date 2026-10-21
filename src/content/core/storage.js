@@ -51,6 +51,14 @@
           // will request another read when it finishes.
           if (before[k] !== revisions[k] || sequence[k] !== reads[k] || writing[k]) continue;
           if (k === KEY) {
+            // A theme being tried stays on the page, but listeners still get the
+            // saved settings, so the drawer's own state is up to date when it ends.
+            if (current && current === draft) {
+              const stored = BC.mergeDefaults(res && res[KEY]);
+              savedSettings = JSON.stringify(stored);
+              for (const cb of listeners) BC.util.guard(() => cb(stored), "storage");
+              continue;
+            }
             // The drawer previews unsaved edits immediately. A storage read must
             // not replace that preview with its previous saved snapshot.
             if (current && JSON.stringify(current) !== savedSettings) continue;
