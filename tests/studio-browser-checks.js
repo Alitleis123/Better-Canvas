@@ -30,6 +30,17 @@
   click("Cancel");
   check(JSON.stringify(BC.storage.current) === initial && await saved() === initialSaved, "Cancel puts the original theme back");
   await until(() => !wallpaper().includes("anime-night-wallpaper"), "Live preview drops the cancelled theme");
+  const frame = root.querySelector(".bcs-mirror iframe.is-front");
+  check(frame.contentWindow.innerWidth === innerWidth && frame.contentWindow.innerHeight === innerHeight, "The copy has the window's own size");
+  root.querySelector('[aria-label="Preview theme Rainy After Hours"]').click();
+  const other = JSON.parse(await saved()); other.theming.lineHeight = 1.9;
+  await new Promise((resolve) => chrome.storage.local.set({ bcSettings: other }, resolve)); await wait();
+  click("Cancel");
+  await until(() => BC.storage.current.theming.lineHeight === 1.9 && BC.storage.current.cosmetics.motion !== "rain", "A change from another tab during a theme preview lands after Cancel");
+  const title = document.querySelector(".ic-DashboardCard__header-title span").firstChild, oldTitle = title.data;
+  title.data = "Renamed course";
+  await until(() => mirror()?.querySelector(".ic-DashboardCard__header-title span")?.textContent === "Renamed course", "Live preview follows a text change on the page");
+  title.data = oldTitle;
   BC.SettingsUI.goto("theming");
   const lineHeight = root.querySelector('input[type="range"][aria-label="Line height"]');
   lineHeight.value = lineHeight.max; lineHeight.dispatchEvent(new Event("input", { bubbles: true }));
@@ -85,6 +96,9 @@
   check(loaded.every(Boolean), "Both atlases and high-resolution wallpapers decode");
   BC.features.settingsPanel.open("todo");
   await until(() => mirror()?.querySelector('[data-bc-node="bc-todo-widget"]')?.shadowRoot?.querySelector(".bcs-progress-art svg path"), "Live preview copies the planner widget with its heart progress");
+  const marker = planner.querySelector(".bc-root").appendChild(Object.assign(document.createElement("p"), { className: "bc-test-marker", textContent: "Added later" }));
+  await until(() => mirror()?.querySelector('[data-bc-node="bc-todo-widget"]')?.shadowRoot?.querySelector(".bc-test-marker"), "Live preview follows changes inside the planner widget");
+  marker.remove();
   BC.SettingsUI.goto("themes");
   check(!auditErrors.length, "No browser runtime errors");
   window.bcStudioTestResults = results;

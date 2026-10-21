@@ -11,7 +11,7 @@
       save(s, options) { return BC.storage.save(s, undefined, options); },
       // Same JS realm as applyAll, so a change can be reflected on the page in the
       // same frame rather than after the save debounce plus a storage round-trip.
-      preview(s) { BC.storage.adopt(s); if (BC.applyNow) BC.applyNow(); },
+      preview(s, theme) { BC.storage.adopt(s, theme); if (BC.applyNow) BC.applyNow(); },
       subscribe(cb) { return BC.storage.subscribe(cb); },
       // Export/import must round-trip bcLocal too, since planner metadata lives
       // there rather than inside settings.

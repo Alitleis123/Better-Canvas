@@ -11,6 +11,9 @@
   const listeners = new Set();
   const localListeners = new Set();
   let current = null;
+  // A theme being tried in the settings preview, and whether a settings read was
+  // held back while it showed (see refresh).
+  let draft = null, heldBack = false;
   let local = null;
   let loadPromise = null;
   let localWrites = Promise.resolve();
@@ -51,7 +54,7 @@
           if (k === KEY) {
             // The drawer previews unsaved edits immediately. A storage read must
             // not replace that preview with its previous saved snapshot.
-            if (current && JSON.stringify(current) !== savedSettings) continue;
+            if (current && JSON.stringify(current) !== savedSettings) { if (current === draft) heldBack = true; continue; }
             current = BC.mergeDefaults(res && res[KEY]);
             savedSettings = JSON.stringify(current);
             for (const cb of listeners) BC.util.guard(() => cb(current), "storage");
@@ -201,7 +204,13 @@
     // Adopt an in-memory settings object without waiting for a storage
     // round-trip, so the settings drawer can preview a change in the same frame.
     // `current` is a getter, so assigning BC.storage.current throws in strict mode.
-    adopt(settings) { if (settings) { current = settings; revisions[KEY]++; } },
+    // A previewed theme is never saved, so a change from another tab that arrived
+    // while it showed is read again once the preview ends.
+    adopt(settings, preview) {
+      if (!settings) return;
+      current = settings; draft = preview ? settings : null; revisions[KEY]++;
+      if (!preview && heldBack) { heldBack = false; refresh(KEY); }
+    },
 
     // UI snapshots carry their baseline so unchanged fields cannot erase edits
     // from another context. Import/reset explicitly request full replacement.

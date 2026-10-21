@@ -41,7 +41,7 @@
   // importNode copies the tree but not shadow roots, CSS added through the CSSOM
   // (Canvas's own components do that, so their <style> tags are empty), or canvas
   // pixels. Both trees are walked in step to fill those in.
-  function graft(live, copy, doc) {
+  function graft(live, copy, doc, roots) {
     const a = document.createTreeWalker(live, NodeFilter.SHOW_ELEMENT), b = doc.createTreeWalker(copy, NodeFilter.SHOW_ELEMENT), drop = [];
     for (let x = live.nodeType === 1 ? live : a.nextNode(), y = copy.nodeType === 1 ? copy : b.nextNode(); x && y; x = a.nextNode(), y = b.nextNode()) {
       if (x.matches(LEAVE_OUT)) { drop.push(y); continue; }
@@ -56,7 +56,8 @@
         try { root = y.attachShadow({ mode: "open" }); } catch (_) { continue; }
         for (const n of x.shadowRoot.childNodes) root.appendChild(doc.importNode(n, true));
         adoptSheets(x.shadowRoot, root, doc);
-        graft(x.shadowRoot, root, doc);
+        roots.push(x.shadowRoot);
+        graft(x.shadowRoot, root, doc, roots);
       }
     }
     for (const n of drop) n.remove();
@@ -69,7 +70,7 @@
   // 0: nothing the preview shows, 1: only Better Canvas's style tags or the
   // html/body attributes, which patch in place, 2: anything else, a full copy.
   function change(r) {
-    const t = r.target.nodeType === 1 ? r.target : r.target.parentElement;
+    const n = r.target, t = n.nodeType === 1 ? n : n.parentElement || (n.parentNode || n).host;
     if (!t || t.closest(LEAVE_OUT)) return 0;
     // Card motion pauses offscreen. The copy keeps the state it was taken with,
     // which matches what it shows at its starting scroll position.
@@ -78,13 +79,14 @@
     if (r.type === "attributes" && r.oldValue === t.getAttribute(r.attributeName)) return 0;
     if (r.type === "attributes") return t === document.documentElement || t === document.body ? 1 : 2;
     if (t.matches(OWN_STYLES)) return 1;
+    if (r.type === "characterData") return 2;
     const nodes = [...r.addedNodes, ...r.removedNodes];
     if (nodes.every((n) => n.nodeType === 1 && n.matches(LEAVE_OUT))) return 0;
     return nodes.every((n) => n.nodeType === 1 && n.matches("style[data-better-canvas]")) ? 1 : 2;
   }
 
   function pagePreview(show) {
-    const root = el("section", { class: "bcs-live-preview", "aria-label": "Preview of this page" });
+    const root = el("section", { class: "bcs-live-preview bcs-live-preview--page", "aria-label": "Preview of this page" });
     const caption = el("span", { text: "Live preview · this page" });
     const holder = el("div", { class: "bcs-mirror" });
     // Two frames, so a new copy loads its stylesheets behind the one on screen.
@@ -95,10 +97,15 @@
     root.append(el("div", { class: "bcs-preview-toolbar" }, [caption, el("span", { class: "bc-spacer" }), el("span", { text: "Canvas" })]), holder);
 
     let scale = 1, front = null, watching = false, epoch = 0, need = 0, timer = 0, first = 0, built = 0, busy = false, drafted = false, drag = null;
+    // The copy gets the window's own size, so viewport units, fixed elements and
+    // wallpaper cropping match. The holder takes the window's shape, and a short
+    // workspace letterboxes it.
     function fit() {
+      holder.style.aspectRatio = innerWidth + " / " + innerHeight;
       if (!holder.clientWidth) return;
-      scale = holder.clientWidth / innerWidth;
-      for (const f of frames) f.style.cssText = "width:" + innerWidth + "px;height:" + Math.ceil(holder.clientHeight / scale) + "px;transform:scale(" + scale + ")";
+      scale = Math.min(holder.clientWidth / innerWidth, holder.clientHeight / innerHeight);
+      const left = Math.max(0, (holder.clientWidth - innerWidth * scale) / 2);
+      for (const f of frames) f.style.cssText = "width:" + innerWidth + "px;height:" + innerHeight + "px;left:" + left + "px;transform:scale(" + scale + ")";
     }
     new ResizeObserver(fit).observe(holder);
 
@@ -108,8 +115,13 @@
       await loaded.get(back);
       if (mine !== epoch) return;
       const doc = back.contentDocument;
-      const copy = doc.importNode(document.documentElement, true);
-      graft(document.documentElement, copy, doc);
+      const copy = doc.importNode(document.documentElement, true), roots = [];
+      graft(document.documentElement, copy, doc, roots);
+      // Watch the shadow roots this copy shows too, like the planner's. Records
+      // queued so far are already in the copy.
+      observer.takeRecords();
+      observer.disconnect();
+      for (const node of [document.documentElement, ...roots]) observer.observe(node, WATCH);
       adoptSheets(document, copy, doc);
       copy.querySelector("body")?.setAttribute("inert", "");
       doc.replaceChild(copy, doc.documentElement);
@@ -161,6 +173,7 @@
       try { await rebuild(); } catch (e) { BC.diag?.push?.("page preview", e); } finally { busy = false; }
       if (need && watching) want(need);
     }
+    const WATCH = { subtree: true, childList: true, attributes: true, attributeOldValue: true, characterData: true };
     const observer = new MutationObserver((records) => {
       let level = 0;
       for (const r of records) if ((level = Math.max(level, change(r))) === 2) break;
@@ -170,13 +183,15 @@
     function start() {
       if (watching) return;
       watching = true;
-      observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeOldValue: true, characterData: true });
+      observer.observe(document.documentElement, WATCH);
+      addEventListener("resize", fit);
       want(2);
     }
     function stop() {
       watching = false;
       epoch++;
       observer.disconnect();
+      removeEventListener("resize", fit);
       clearTimeout(timer);
       timer = need = 0;
       front = null;
@@ -200,7 +215,7 @@
       caption.textContent = name ? "Previewing " + name : "Live preview · this page";
       // A theme being tried out isn't saved, so the page only shows it through
       // here. Cancel, Apply or closing the workspace paints the saved state back.
-      if (name || drafted) { drafted = !!name; show(settings); }
+      if (name || drafted) { drafted = !!name; show(settings, drafted); }
     } };
   }
 
@@ -290,7 +305,8 @@
   .bcs-preview-toolbar {display:flex;gap:10px;padding:13px 16px;font-size:11px;color:var(--bc-text-muted);border-bottom:1px solid var(--bc-border)}
   .bcs-preview-canvas {position:relative;isolation:isolate;height:calc(100% - 42px);overflow:auto;display:flex;background-color:var(--pv-bg);color:var(--pv-text);font-size:10px;min-height:280px}
   .bcs-preview-wallpaper {position:absolute;inset:0;z-index:-1;pointer-events:none}
-  .bcs-mirror {position:relative;height:calc(100% - 42px);min-height:280px;overflow:hidden;background:var(--bc-surface-2)}
+  .bcs-live-preview--page {flex:0 1 auto;display:flex;flex-direction:column}
+  .bcs-mirror {position:relative;flex:0 1 auto;min-height:0;overflow:hidden;background:var(--bc-surface-2)}
   .bcs-mirror iframe {position:absolute;top:0;left:0;border:0;transform-origin:0 0}
   .bcs-mirror iframe.is-front {z-index:1}
   .bcs-mirror-shield {position:absolute;inset:0;z-index:2;cursor:grab;touch-action:none}.bcs-mirror-shield:active{cursor:grabbing}

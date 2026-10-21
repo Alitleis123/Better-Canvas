@@ -131,7 +131,9 @@ if (!scratch) throw Error("Set BC_BROWSER_SCRATCH to an approved temporary direc
     const rows = () => page.evaluate(() => [...document.querySelector("#bc-drawer").shadowRoot.querySelector(".bcs-sortable").children].map((li) => li.dataset.id));
     await page.evaluate(() => BC.SettingsUI.goto("navigation"));
     await page.waitForTimeout(300);
-    const grips = await page.evaluate(() => {
+    const grips = await page.evaluate(async () => {
+      // The tab slides in over 320ms plus a stagger. Measure after it settles.
+      await Promise.all(document.querySelector("#bc-drawer").shadowRoot.getAnimations().map((animation) => animation.finished));
       const list = document.querySelector("#bc-drawer").shadowRoot.querySelector(".bcs-sortable");
       list.scrollIntoView({ block: "center" });
       return [...list.querySelectorAll(".bcs-sortable__grip")].slice(0, 3)
