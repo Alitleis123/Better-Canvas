@@ -406,7 +406,7 @@
               { value: "high-contrast", label: "High contrast", description: "Yellow on a black edge.", preview: () => ringPreview("high-contrast") },
             ] }) }),
         row({ label: "Cursor", hint: "Links keep their hand and text boxes their I-beam, except under the crosshair.", stacked: true, control: cursorPicker(store) }),
-        row({ label: "Cursor size", hint: "Above 32px, the browser uses its own pointer near the edges of the page.", showWhen: drawn,
+        row({ label: "Cursor size", hint: "Your browser may switch to its own pointer near the edges of the page.", showWhen: drawn,
           control: C.slider({ ariaLabel: "Cursor size", min: 16, max: 48, step: 2, format: (v) => v + "px", get: () => t.cursorSize, set: put((x, v) => { x.cursorSize = v; }) }) }),
         row({ label: "Cursor color", showWhen: drawn,
           control: C.color({ ariaLabel: "Cursor color", presets: ["#000000", "#ffffff", ...ACCENTS], get: () => t.cursorColor, set: put((x, v) => { x.cursorColor = v; }) }) }),

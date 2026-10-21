@@ -253,7 +253,7 @@
       },
       applyPreset(preset) {
         const src = preset.settings || preset;
-        const preserved = ["colorBlind", "reducedMotion", "fontSizeScale", "cursor"];
+        const preserved = BC.THEME_KEEPS;
         const paths = Object.keys(BC.defaults.theming).filter((key) => key !== "rotation" &&
           (!preserved.includes(key) || Object.hasOwn(src.theming || {}, key))).map((key) => ["theming", key]);
         paths.push(["cosmetics"], ["dashboard", "themeImages"], ["dashboard", "courses", "*", "bgImage"], ["dashboard", "courses", "*", "bgGradient"]);

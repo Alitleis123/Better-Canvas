@@ -135,7 +135,7 @@ for (const kind of ["built-in", "custom", "undo", "redo", "reset"]) {
         d.dashboard.themeImages = [{ url: "https://external.test/art" }];
         d.dashboard.courses[42] = { nickname: "Keep me", bgImage: "https://external.test/course" };
         d.theming.accentColor = "#abcdef"; d.theming.rotation.enabled = true;
-        d.theming.cursor = "large"; d.todo.tags.push("external");
+        Object.assign(d.theming, { cursor: "large", cursorSize: 48, cursorColor: "#db2777", focusRing: "high-contrast" }); d.todo.tags.push("external");
       }); await b.store.flush();
       if (kind === "undo") a.store.undo();
       else if (kind === "redo") a.store.redo();
@@ -148,7 +148,8 @@ for (const kind of ["built-in", "custom", "undo", "redo", "reset"]) {
         assert.equal(db.data.bcSettings.dashboard.courses[42].bgImage, undefined);
         assert.equal(db.data.bcSettings.dashboard.courses[42].nickname, "Keep me");
         assert.equal(db.data.bcSettings.theming.rotation.enabled, true);
-        assert.equal(db.data.bcSettings.theming.cursor, "large");
+        const t = db.data.bcSettings.theming;
+        assert.deepEqual([t.cursor, t.cursorSize, t.cursorColor, t.focusRing], ["large", 48, "#db2777", "high-contrast"]);
         assert.deepEqual(db.data.bcSettings.todo.tags, ["external"]);
       }
     } finally { a.close(); b.close(); }

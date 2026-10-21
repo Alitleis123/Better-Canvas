@@ -165,7 +165,7 @@
     const baseTheming = { ...BC.defaults.theming };
     delete baseTheming.rotation;
     const accessibility = {};
-    for (const key of ["colorBlind", "reducedMotion", "fontSizeScale", "cursor", "cursorSize", "cursorColor", "focusRing"]) {
+    for (const key of BC.THEME_KEEPS) {
       if (!src.theming || !(key in src.theming)) accessibility[key] = target.theming[key];
     }
     merge(target.theming, baseTheming);

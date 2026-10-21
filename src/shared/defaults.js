@@ -12,6 +12,9 @@
   BC.SETTINGS_KEY = "bcSettings";
   BC.LOCAL_KEY = "bcLocal";
   BC.PROFILES_KEY = "bcProfiles";
+  // Theming settings that are about how someone uses Canvas, not how it looks, so
+  // applying a theme keeps them unless the theme sets them itself.
+  BC.THEME_KEEPS = ["colorBlind", "reducedMotion", "fontSizeScale", "cursor", "cursorSize", "cursorColor", "focusRing"];
 
   BC.GLOBAL_NAV_ITEMS = [
     { key: "global_nav_dashboard_link", label: "Dashboard" },
