@@ -150,6 +150,20 @@ if (!scratch) throw Error("Set BC_BROWSER_SCRATCH to an approved temporary direc
     assert.deepEqual(await rows(), moved);
     assert.deepEqual(await page.evaluate(() => BC.storage.current.navigation.global.order), moved);
     results.studio.push("Touch drag on a 24px grip reorders and saves the list");
+    // Headless Playwright hides scrollbars, and the settings nav always overflows, so measure with real ones.
+    const plain = await chromium.launch({ executablePath: chromium.executablePath(), headless: true, ignoreDefaultArgs: ["--hide-scrollbars"] });
+    try {
+      const view = await plain.newPage({ viewport: { width: 1440, height: 760 } });
+      await view.goto("http://127.0.0.1:8076/");
+      await view.waitForFunction(() => document.querySelector("#bc-drawer")?.shadowRoot?.querySelector(".bcs-master"));
+      const offsets = await view.evaluate(() => {
+        const r = document.querySelector("#bc-drawer").shadowRoot, nav = r.querySelector(".bcs-nav"), box = nav.getBoundingClientRect();
+        const right = box.right - parseFloat(getComputedStyle(nav).borderRightWidth);
+        return [".bcs-master", ".bcs-nav__item"].map((s) => { const b = r.querySelector(s).getBoundingClientRect(); return Math.round((b.left - box.left) - (right - b.right)); });
+      });
+      assert.deepEqual(offsets, [0, 0], "Off-center by " + offsets + "px");
+    } finally { await plain.close(); }
+    results.studio.push("The on/off card and nav buttons sit centered in the settings nav");
     await page.evaluate(async () => {
       await Promise.all(document.getElementById("bc-drawer").getAnimations().map((animation) => animation.finished));
     });

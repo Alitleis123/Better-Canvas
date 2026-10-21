@@ -276,7 +276,7 @@
   };
   BC.studioCSS = `
   .bc-app .bcs-shell {max-width:none;grid-template-columns:164px minmax(0,1fr);border:0;width:100%}
-  .bc-app .bcs-nav {padding:18px 10px;background:var(--bc-surface-1)}
+  .bc-app .bcs-nav {padding:18px 10px;background:var(--bc-surface-1);scrollbar-width:none}
   .bc-app .bcs-header {height:66px;padding:0 22px;gap:24px}
   .bc-app .bcs-logo {width:36px;height:36px;border-radius:12px;font-size:13px}
   .bc-app .bcs-nav__item {min-height:44px;border-radius:12px;margin:3px 0;font-weight:550}

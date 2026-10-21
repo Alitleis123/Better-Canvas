@@ -34,6 +34,7 @@ Visible changes
 - Study time counts active, focused seconds and is added up in the background, so short visits count and idle tabs don't.
 - Quiz drafts belong to one attempt. Submitting clears every page's draft with one background message, which a fast navigation can't interrupt. A cancelled submit keeps them, and if a submit doesn't go through, saving resumes.
 - Lists in settings reorder by touch from a 24px grip, as well as by mouse and arrow keys.
+- The settings sidebar hides its scrollbar, which pushed the on/off card and the buttons off centre. It still scrolls.
 - The toolbar count clears once no Canvas tab is left to keep it current.
 - The settings workspace and photo theme data load on first use. Each Canvas page parses 638 KB of script instead of 933 KB.
 - The bundled anime artwork ships as WebP: 2.4 MB instead of 13.5 MB. Each package is 2.7 MB.
