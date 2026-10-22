@@ -69,6 +69,7 @@
         fn();
         return true;
       },
+      has(key) { return marks.has(key); },
       listen(el, ev, fn, opts) {
         el.addEventListener(ev, fn, opts);
         listeners.push([el, ev, fn, opts]);

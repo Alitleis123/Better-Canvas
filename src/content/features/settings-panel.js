@@ -1,33 +1,24 @@
-/*
- * Better Canvas — in-page settings drawer.
- * Adds a "Better Canvas" item to the left global nav that opens a right-side
- * drawer hosting the shared settings UI, isolated in a Shadow DOM so Canvas
- * styles never leak in.
- */
+/* Better Canvas - full-window Edit Canvas workspace. Canvas is never reparented or scaled. */
 (function () {
   "use strict";
-  const BC = (globalThis.BC = globalThis.BC || {});
+  const BC = globalThis.BC = globalThis.BC || {};
   BC.features = BC.features || {};
-
   const DRAWER_ID = "bc-drawer";
-  let drawerHost = null;
-  let shadow = null;
-  let store = null;
-  let isOpen = false;
-  let trap = null;
-
+  let drawerHost, shadow, store, isOpen = false, returnFocus, wasInert = false;
   function makeAdapter() {
     return {
       getState() { return BC.storage.current || BC.cloneDefaults(); },
-      save(s) { return BC.storage.save(s); },
+      save(s, options) { return BC.storage.save(s, undefined, options); },
       // Same JS realm as applyAll, so a change can be reflected on the page in the
       // same frame rather than after the save debounce plus a storage round-trip.
-      preview(s) { BC.storage.adopt(s); if (BC.applyNow) BC.applyNow(); },
+      preview(s, theme) { BC.storage.adopt(s, theme); if (BC.applyNow) BC.applyNow(); },
       subscribe(cb) { return BC.storage.subscribe(cb); },
       // Export/import must round-trip bcLocal too, since planner metadata lives
-      // there now rather than inside settings.
+      // there rather than inside settings.
       getLocal() { return BC.storage.loadLocal().then(() => BC.storage.local); },
       saveLocal(obj) { return BC.storage.saveLocal(obj); },
+      updateLocal(mutator) { return BC.storage.updateLocal(mutator); },
+      openOptions() { try { chrome.runtime.sendMessage({ type: "bc:openOptions" }, () => void chrome.runtime.lastError); } catch (_) {} },
       getCourses: () => BC.api.dashboardCards().then((cards) => cards.map((c) => ({ id: String(c.id), name: c.shortName || c.originalName || c.courseCode || ("Course " + c.id), code: c.courseCode || "", color: c.color || "" }))),
       getGpaData: () => BC.api.coursesWithScores().then((courses) => courses.map((c) => {
         const enr = (c.enrollments || [])[0] || {};
@@ -42,6 +33,7 @@
     if (!menu) return;
     if (document.getElementById("bc-open-settings")) return;
     const li = document.createElement("li");
+    li.className = "ic-app-header__menu-list-item";
     li.setAttribute("data-bc-node", "bc-nav-open");
     const a = document.createElement("a");
     a.id = "bc-open-settings";
@@ -49,171 +41,111 @@
     a.className = "ic-app-header__menu-list-link";
     a.setAttribute("role", "button");
     a.setAttribute("aria-expanded", "false");
-    // <a role="button"> activates on Enter but not Space. Adding the handler keeps
-    // Canvas's nav styling (which targets the class, not the tag) exactly as-is
-    // while giving the trigger full button semantics.
+    a.setAttribute("aria-controls", DRAWER_ID);
+    // <a role="button"> activates on Enter but not Space.
     a.addEventListener("keydown", (e) => {
-      if (e.key === " " || e.key === "Spacebar") { e.preventDefault(); open(); }
+      if (e.key === " " || e.key === "Spacebar") { e.preventDefault(); toggle(); }
     });
     a.innerHTML = `<div class="menu-item-icon-container" aria-hidden="true">
       <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
-        <rect x="4" y="4" width="18" height="18" rx="3" fill="currentColor" opacity="0.85"/>
-        <text x="13" y="17" text-anchor="middle" font-size="10" fill="white" font-weight="800">BC</text>
+        <rect x="3" y="3" width="20" height="20" rx="6" stroke="currentColor" stroke-width="1.75"/>
+        <path d="M9 9.5h4.2a2.1 2.1 0 0 1 0 4.2H9zm0 4.2h4.8a2.2 2.2 0 0 1 0 4.3H9z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
       </svg></div>
       <div class="menu-item__text">Better Canvas</div>`;
-    a.addEventListener("click", (e) => { e.preventDefault(); open(); });
+    a.addEventListener("click", (e) => { e.preventDefault(); toggle(); });
+    // Building the panel on hover means the click only has to animate it.
+    const warm = () => {
+      if (!drawerHost || !drawerHost.isConnected) loadUI().then(() => BC.util.guard(ensureDrawer, "drawer warm-up"), () => {});
+    };
+    a.addEventListener("pointerenter", warm, { once: true });
+    a.addEventListener("focus", warm, { once: true });
     li.appendChild(a);
     menu.appendChild(li);
   }
 
+
+  // The workspace code isn't in the page bundle. The background injects it on
+  // first use, and hovering the menu item starts that early.
+  let loading = null;
+  function loadUI() {
+    if (BC.SettingsUI) return Promise.resolve();
+    return loading || (loading = new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage({ type: "bc:loadSettingsUI" }, (r) => {
+          const error = chrome.runtime.lastError;
+          if (BC.SettingsUI) return resolve();
+          loading = null;
+          reject(new Error(error?.message || r?.error || "Settings did not load"));
+        });
+      } catch (e) { loading = null; reject(e); }
+    }));
+  }
+  BC.loadSettingsUI = loadUI;
+
   function ensureDrawer() {
     if (drawerHost && drawerHost.isConnected) return drawerHost;
+    // A theme still being tried would otherwise stay on the page with nothing to end it.
+    if (store) { store.cancelThemePreview?.(); store.destroy(); }
     drawerHost = document.createElement("div");
+    drawerHost.id = DRAWER_ID;
     drawerHost.setAttribute("data-bc-node", DRAWER_ID);
-    // visibility:hidden while closed is load-bearing: previously close() only reset
-    // the transform, so the host stayed pointer-events-active across the right edge
-    // of every Canvas page and silently swallowed clicks there.
-    drawerHost.style.cssText =
-      "position:fixed; top:0; right:0; bottom:0; width:min(720px, 96vw);" +
-      "z-index:var(--bc-z-drawer, 2147482000); transform: translateX(100%); visibility: hidden;" +
-      "box-shadow: var(--bc-shadow-4, -20px 0 60px rgba(0,0,0,.18));";
-    document.body.appendChild(drawerHost);
+    drawerHost.style.cssText = "position:fixed;inset:0;z-index:2147482000;display:none;padding:12px;background:#10131bdd;box-sizing:border-box";
+    document.documentElement.appendChild(drawerHost);
     shadow = drawerHost.attachShadow({ mode: "open" });
-
-    // No hardcoded surface and no prefers-color-scheme block: `all: initial` does
-    // not block custom-property inheritance, so the shadow tree already sees every
-    // --bc-* from :root and tracks the user's theme for free.
     const style = document.createElement("style");
-    style.textContent = `
-      :host { all: initial; }
-      * { box-sizing: border-box; }
-      .root { height: 100%; overflow: auto; background: var(--bc-surface-1, #f6f7fb); }
-      .bc-drawer-close {
-        position: absolute; top: 10px; right: 12px; z-index: 2;
-        width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
-        border: 1px solid var(--bc-border, #e5e7eb); border-radius: var(--bc-radius-md, 8px);
-        background: var(--bc-surface-2, #fff); color: var(--bc-text, #1b2430);
-        font: 15px/1 var(--bc-font-sans, sans-serif); cursor: pointer;
-      }
-      .bc-drawer-close:hover { background: var(--bc-surface-3, #f1f3f7); }
-      .bc-drawer-close:focus-visible {
-        outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px;
-      }
-    `;
-    const root = document.createElement("div");
-    root.className = "root";
-    root.setAttribute("role", "dialog");
-    root.setAttribute("aria-modal", "true");
-    root.setAttribute("aria-label", "Better Canvas settings");
-    shadow.appendChild(style);
-    shadow.appendChild(root);
-
-    // Sibling of .root, not a child: SettingsUI.render() clears .root, which would
-    // wipe a close button placed inside it. There was no close affordance at all
-    // before — Escape and click-outside are undiscoverable.
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "bc-drawer-close";
-    closeBtn.setAttribute("aria-label", "Close settings");
-    closeBtn.textContent = "✕";
-    closeBtn.addEventListener("click", close);
-    shadow.appendChild(closeBtn);
-
-    // Mount unconditionally. This used to sit behind a module-level `mounted` flag
-    // that was never reset, so once the host had been disconnected a fresh shadow
-    // root was built but render() was skipped — leaving a permanently blank white
-    // drawer with no recovery short of a page reload.
-    if (store && store.destroy) BC.util.guard(() => store.destroy(), "drawer store");
-    store = BC.SettingsUI.render(root, makeAdapter());
-
-    // Registered under an id that is NOT in the registry, so teardown's
-    // lifecycle.clear(feature.id) loop can't strip the handlers that close the
-    // drawer — the drawer deliberately survives extension-disable. Previously
-    // these were raw document listeners re-added on every host rebuild and never
-    // removed, stacking up handlers pointed at dead hosts.
-    const bag = BC.lifecycle.bag("settingsPanel-persist");
-    bag.once("global", () => {
-      bag.listen(document, "mousedown", (e) => {
-        if (!isOpen || !drawerHost) return;
-        if (e.target === drawerHost || drawerHost.contains(e.target)) return;
-        close();
+    style.textContent = ":host{all:initial}.frame{height:100%;width:100%;overflow:hidden;border-radius:22px;box-shadow:0 20px 80px #0005}.root{height:100%;min-height:0}@media(max-width:760px){.frame{border-radius:12px}}";
+    const frame = document.createElement("div"); frame.className = "frame";
+    frame.setAttribute("role", "dialog"); frame.setAttribute("aria-modal", "true"); frame.setAttribute("aria-label", "Better Canvas workspace");
+    const root = document.createElement("div"); root.className = "root";
+    frame.appendChild(root); shadow.append(style, frame);
+    store = BC.SettingsUI.render(root, makeAdapter(), { onClose: close, variant: "studio" });
+    BC.lifecycle.bag("settingsPanel-persist").once("keyboard", () => {
+      document.addEventListener("keydown", (e) => {
+        if (!isOpen) return;
+        if (e.key === "Escape" && !e.defaultPrevented) { e.preventDefault(); close(); return; }
+        if (e.key !== "Tab" || !e.composedPath().includes(drawerHost)) return;
+        const nodes = [...shadow.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]')].filter((n) => n.getClientRects().length && n.tabIndex >= 0);
+        const first = nodes[0], last = nodes[nodes.length - 1];
+        if (e.shiftKey && shadow.activeElement === first) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && shadow.activeElement === last) { e.preventDefault(); first?.focus(); }
       });
-      bag.listen(document, "keydown", (e) => { if (e.key === "Escape" && isOpen) close(); });
     });
     return drawerHost;
   }
-
-  // A scrim gives the drawer depth and signals that the page behind is inert.
-  // Sliding in over an unchanged page was the single biggest thing making this feel
-  // unfinished.
-  function ensureScrim() {
-    let s = document.querySelector('[data-bc-node="bc-drawer-scrim"]');
-    if (!s) {
-      s = document.createElement("div");
-      s.setAttribute("data-bc-node", "bc-drawer-scrim");
-      s.style.cssText =
-        "position:fixed; inset:0; z-index:calc(var(--bc-z-drawer, 2147482000) - 1);" +
-        "background: var(--bc-overlay, rgba(15,20,28,.44)); opacity:0; pointer-events:none;" +
-        "transition: opacity var(--bc-dur-3, 220ms) var(--bc-ease-out, ease);";
-      s.addEventListener("mousedown", close);
-      document.body.appendChild(s);
+  function setExpanded(on) { document.getElementById("bc-open-settings")?.setAttribute("aria-expanded", String(on)); }
+  // A close or second toggle while the first load runs cancels the open.
+  let wantOpen = false;
+  function open(tab) {
+    if (!BC.SettingsUI) {
+      wantOpen = true;
+      loadUI().then(() => { if (wantOpen) open(tab); }, (e) => {
+        if (!wantOpen) return;
+        wantOpen = false;
+        BC.diag.push("settings load", e);
+        BC.toast.error("Better Canvas settings couldn't load. Refresh the page and try again.");
+      });
+      return;
     }
-    return s;
-  }
-
-  function setExpanded(v) {
-    const trigger = document.getElementById("bc-open-settings");
-    if (trigger) trigger.setAttribute("aria-expanded", v ? "true" : "false");
-  }
-
-  function open() {
+    wantOpen = false;
     ensureDrawer();
+    if (typeof tab === "string") BC.SettingsUI.goto(tab);
     if (isOpen) return;
-    isOpen = true;
-    const scrim = ensureScrim();
-    // Asymmetric on purpose: slow-in reads as considered, quick-out as responsive.
-    drawerHost.style.transition = "transform var(--bc-dur-4, 300ms) var(--bc-ease-spring, ease), visibility 0s";
-    drawerHost.style.visibility = "visible";
-    scrim.style.pointerEvents = "auto";
-    requestAnimationFrame(() => {
-      if (!drawerHost) return;
-      drawerHost.style.transform = "translateX(0)";
-      scrim.style.opacity = "1";
-    });
-    setExpanded(true);
-    if (BC.ui && BC.ui.focusTrap) trap = BC.ui.focusTrap(shadow, { returnTo: document.getElementById("bc-open-settings") });
+    returnFocus = document.activeElement;
+    wasInert = document.body.inert; document.body.inert = true;
+    isOpen = true; drawerHost.style.display = "block"; setExpanded(true);
+    BC.injector.setStyle("bc-studio-open", "html{overflow:hidden!important}");
+    if (!BC.ui.motion.reduced()) drawerHost.animate([{ opacity: 0, transform: "translateY(8px) scale(.99)" }, { opacity: 1, transform: "none" }], { duration: 180, easing: "ease-out" });
+    requestAnimationFrame(() => shadow.querySelector('.bcs-nav__item[aria-current="page"]')?.focus());
   }
-
   function close() {
+    wantOpen = false;
     if (!isOpen) return;
-    isOpen = false;
-    if (trap) { BC.util.guard(() => trap.release(), "drawer focus"); trap = null; }
-    const scrim = document.querySelector('[data-bc-node="bc-drawer-scrim"]');
-    if (scrim) { scrim.style.opacity = "0"; scrim.style.pointerEvents = "none"; }
-    if (drawerHost) {
-      // Delay visibility until the slide-out finishes, so the panel doesn't vanish
-      // mid-transition but also can't keep eating clicks once it's gone.
-      drawerHost.style.transition =
-        "transform var(--bc-dur-3, 220ms) var(--bc-ease-in, ease), visibility 0s linear var(--bc-dur-3, 220ms)";
-      drawerHost.style.transform = "translateX(100%)";
-      drawerHost.style.visibility = "hidden";
-    }
-    setExpanded(false);
+    store?.cancelThemePreview?.(); BC.ui.closePopovers();
+    isOpen = false; drawerHost.style.display = "none";
+    document.body.inert = wasInert; BC.injector.setStyle("bc-studio-open", ""); setExpanded(false);
+    if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+    returnFocus = null;
   }
-  // An explicit flag, not a string match on style.transform: open() sets the
-  // transform inside requestAnimationFrame, so a toggle() immediately after an
-  // open() read the stale value and re-opened instead of closing.
-  function toggle() {
-    ensureDrawer();
-    isOpen ? close() : open();
-  }
-
-  function apply(settings, ctx) {
-    installNavItem();
-    // Always accessible so the user can re-enable if disabled.
-  }
-
-  // Empty styles/nodes: the drawer must survive extension-disable teardown
-  // so the user can always reach the toggle.
-  BC.registry.register({ id: "settingsPanel", styles: [], nodes: [], apply, open, close, toggle });
+  function toggle() { isOpen || wantOpen ? close() : open(); }
+  BC.registry.register({ id: "settingsPanel", styles: [], nodes: [], apply: installNavItem, open, close, toggle, isOpen: () => isOpen });
 })();

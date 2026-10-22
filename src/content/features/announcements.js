@@ -20,12 +20,14 @@
       const courses = await BC.api.coursesWithScores();
       const active = courses.filter((c) => !c.concluded).slice(0, 15);
       const all = [];
-      await Promise.all(active.map(async (c) => {
+      // Bounded like every other cross-course fan-out: 15 simultaneous requests
+      // from the dashboard is exactly what trips Canvas's rate limiter.
+      await BC.util.mapLimit(active, 4, async (c) => {
         try {
           const anns = await BC.api.courseAnnouncements(c.id, 3);
           for (const a of anns) all.push({ ...a, courseName: c.name, courseId: c.id });
         } catch (e) { BC.diag.push("announcements:course", e); }
-      }));
+      });
       all.sort((a, b) => new Date(b.posted_at || 0) - new Date(a.posted_at || 0));
       return all;
     } catch (e) { BC.util.warn("announcements", e); return []; }

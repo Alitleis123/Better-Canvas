@@ -32,7 +32,6 @@
       const hit =
         !!document.querySelector('meta[name="csrf-param"]') ||
         !!document.querySelector('link[href*="brandable_css"]') ||
-        !!document.querySelector('link[href*="instructure"]') ||
         (() => {
           const app = document.getElementById("application");
           return app && /\bic-app\b/.test(app.className);

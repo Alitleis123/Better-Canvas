@@ -3,48 +3,24 @@
  * The main bundle only runs in the top document, so SpeedGrader submission
  * previews, New Quizzes (LTI), canvadocs, and the rich-content editor iframe
  * stayed white in dark mode. This tiny script runs in every same-origin
- * subframe, reads settings straight from chrome.storage.local, and applies
- * the shared dark palette plus a generic dark sheet. Live-updates on change.
+ * subframe, reads settings straight from chrome.storage.local, and runs the
+ * shared dark mode engine. Live-updates on change.
  */
 (function () {
   "use strict";
   if (window.top === window) return; // top document is handled by the full bundle
+  if (window.name === "bc-mirror") return; // the settings preview, a copy of a page that is already styled
   const BC = globalThis.BC;
-  if (!BC || !BC.color || typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) return;
+  if (!BC || !BC.color || !BC.darkEngine || typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) return;
 
   const STYLE_ID = "bc-frame-style";
   let lastMode = "";
 
-  function buildCss(pd) {
-    return `
-      :root {
-        --bc-surface-1: ${pd.bg}; --bc-surface-2: ${pd.bg2}; --bc-surface-3: ${pd.bg3};
-        --bc-border: ${pd.border}; --bc-text: ${pd.text}; --bc-muted: ${pd.muted};
-        --bc-link: ${pd.link}; --bc-accent: ${pd.accent};
-      }
-      html.bc-dark, html.bc-dark body {
-        background: var(--bc-surface-1) !important; color: var(--bc-text) !important;
-      }
-      html.bc-dark a { color: var(--bc-link) !important; }
-      html.bc-dark input, html.bc-dark select, html.bc-dark textarea, html.bc-dark button {
-        background: var(--bc-surface-3) !important; color: var(--bc-text) !important;
-        border-color: var(--bc-border) !important;
-      }
-      html.bc-dark table, html.bc-dark th, html.bc-dark td {
-        background: var(--bc-surface-2) !important; color: var(--bc-text) !important;
-        border-color: var(--bc-border) !important;
-      }
-      html.bc-dark hr { border-color: var(--bc-border) !important; }
-      html.bc-dark [role="dialog"], html.bc-dark [class*="card" i],
-      html.bc-dark .user_content, html.bc-dark .quiz-header, html.bc-dark .question,
-      html.bc-dark [style*="background-color: rgb(255, 255, 255)"],
-      html.bc-dark [style*="background: rgb(255, 255, 255)"],
-      html.bc-dark [style*="background-color:#fff" i],
-      html.bc-dark [style*="background: #fff" i] {
-        background-color: var(--bc-surface-2) !important; color: var(--bc-text) !important;
-      }
-      html.bc-dark ::selection { background: var(--bc-accent); color: var(--bc-accent-contrast, #fff); }
-    `;
+  // The same tokens, hand-written rules and computed-colour engine as the top
+  // document, so a submission preview or quiz frame matches the page around it.
+  function buildCss(settings) {
+    return BC.tokens.css(settings.theming, { scope: "html.bc-dark", mode: "dark" }) + "\n" +
+      BC.darkEngine.baseCss() + "\n" + BC.darkEngine.tagCss();
   }
 
   function setStyle(cssText) {
@@ -62,16 +38,51 @@
     if (el) el.remove();
   }
 
+  // The rich-content editor's frame holds the user's own writing. The engine never
+  // tags editable content, so pasted dark text vanished on a dark page. Keep it light.
+  const editing = () => document.designMode === "on" || !!(document.body && document.body.isContentEditable);
+  let lastSettings = null, watching = false;
+
   function apply(settings) {
     try {
       const doc = document.documentElement;
       if (!doc) return;
+      lastSettings = settings;
       lastMode = (settings && settings.theming && settings.theming.darkMode) || "";
-      const dark = !!settings && settings.enabled !== false && BC.isDarkActive(settings);
+      const dark = !!settings && settings.enabled !== false && BC.isDarkActive(settings) && !editing();
       doc.classList.toggle("bc-dark", dark);
-      if (!dark) { removeStyle(); return; }
-      setStyle(buildCss(BC.color.themePalettes(settings.theming).dark));
+      if (!dark) { BC.darkEngine.stop(); removeStyle(); return; }
+      setStyle(buildCss(settings));
+      whenBody(() => {
+        if (!watching) {
+          watching = true;
+          new MutationObserver(() => apply(lastSettings)).observe(document.body, { attributes: true, attributeFilter: ["contenteditable"] });
+          // designMode is a property, not an attribute, so nothing can observe it.
+          // Check again when someone starts working in the frame.
+          const recheck = () => { if (editing() && document.documentElement.classList.contains("bc-dark")) apply(lastSettings); };
+          document.addEventListener("focusin", recheck, true);
+          document.addEventListener("pointerdown", recheck, true);
+        }
+        if (editing()) apply(lastSettings); else BC.darkEngine.start();
+      });
     } catch (_) {}
+  }
+
+  // Settings arrive asynchronously, so a frame inside a dark page painted white
+  // first. Borrow the parent's background until they do.
+  try {
+    const parent = window.parent.document.documentElement;
+    if (parent.classList.contains("bc-dark")) {
+      const bg = window.parent.getComputedStyle(parent).getPropertyValue("--bc-surface-1").trim() || "#1b1b1f";
+      document.documentElement.classList.add("bc-dark");
+      setStyle("html.bc-dark, html.bc-dark body { color-scheme: dark; background-color: " + bg + " !important; }");
+    }
+  } catch (_) {}   // a cross-origin parent can't be read
+
+  // Runs at document_start, before <body> exists.
+  function whenBody(fn) {
+    if (document.body) { fn(); return; }
+    document.addEventListener("DOMContentLoaded", fn, { once: true });
   }
 
   function load() {

@@ -14,8 +14,9 @@
     }
     .bc-file a { color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bc-file-ic { text-align: center; opacity: .7; }
-    .bc-file-star { cursor: pointer; opacity: .6; }
+    .bc-file-star { cursor: pointer; opacity: .6; border-radius: var(--bc-radius-sm, 4px); }
     .bc-file-star.on { opacity: 1; }
+    .bc-file-star:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 1px; }
     .bc-files-list .bc-empty, .bc-files-list .bc-error, .bc-files-list .bc-sk { grid-column: 1 / -1; }
   `;
 
@@ -62,21 +63,22 @@
     mount.innerHTML = `
       <div class="bc-files-head">
         <strong>Files</strong>
-        <input placeholder="Search files…" type="search" data-filter>
-        <select data-type>
+        <input placeholder="Search files…" type="search" data-filter aria-label="Search files">
+        <select data-type aria-label="File type">
           <option value="">All types</option>
+          <option value="starred">★ Starred</option>
           <option value="pdf">PDF</option>
           <option value="image">Images</option>
           <option value="video">Video</option>
           <option value="doc">Docs</option>
         </select>
-        <select data-course><option value="">All courses</option></select>
-        <select data-sort>
+        <select data-course aria-label="Course"><option value="">All courses</option></select>
+        <select data-sort aria-label="Sort by">
           <option value="recent">Recent</option>
           <option value="name">Name</option>
           <option value="size">Size</option>
         </select>
-        <button class="bc-btn" data-refresh>Refresh</button>
+        <button type="button" class="bc-btn" data-refresh>Refresh</button>
       </div>
       <div class="bc-files-list"></div>
     `;
@@ -93,7 +95,9 @@
       const course = courseSel.value;
       const sort = sortSel.value;
       let items = files.filter((f) => (f.display_name || "").toLowerCase().includes(q));
-      if (type) items = items.filter((f) => {
+      // Stars used to be purely decorative: nothing could filter or find by them.
+      if (type === "starred") items = items.filter((f) => stars.has(String(f.id)));
+      else if (type) items = items.filter((f) => {
         const ct = (f["content-type"] || f.content_type || "").toLowerCase();
         if (type === "pdf") return ct.includes("pdf");
         if (type === "image") return ct.startsWith("image");
@@ -105,34 +109,52 @@
       if (sort === "name") items.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
       else if (sort === "size") items.sort((a, b) => (b.size || 0) - (a.size || 0));
       else items.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
+      const failedNote = cache.failed ? `<div class="bc-file">Files from ${cache.failed} course${cache.failed === 1 ? "" : "s"} couldn't load. Refresh to try again.</div>` : "";
       if (!items.length) {
         list.replaceChildren(BC.ui.empty(
-          files.length ? "No files match the current filters." : "No files found in your active courses.",
-          files.length ? "" : "Files appear here once your courses have published files."
+          files.length ? "No files match the current filters." : cache.failed ? "No files loaded." : "No files found in your active courses.",
+          files.length ? "" : cache.failed ? "Some courses couldn't be reached. Refresh to try again." : "Files appear here once your courses have published files."
         ));
+        if (failedNote && files.length) list.insertAdjacentHTML("afterbegin", failedNote);
         return;
       }
-      list.innerHTML = items.slice(0, 200).map((f) => `
+      // f.url is the download link, which opened a blank tab and downloaded the
+      // file. The course file page previews it and has its own download button.
+      list.innerHTML = failedNote + items.slice(0, 200).map((f) => `
         <div class="bc-file">
           <span class="bc-file-ic">${iconFor(f)}</span>
-          <a href="${BC.util.escapeHtml(f.url || f.html_url || "#")}" target="_blank" rel="noopener" title="${BC.util.escapeHtml(f.courseName || "")}">${BC.util.escapeHtml(f.display_name || "")}</a>
-          <span class="bc-file-star ${stars.has(String(f.id)) ? "on" : ""}" data-id="${f.id}" title="Star" role="button" tabindex="0">★</span>
+          <a href="${BC.util.escapeHtml(f.courseId && f.id ? "/courses/" + f.courseId + "/files/" + f.id : f.url || f.html_url || "#")}" target="_blank" rel="noopener" title="${BC.util.escapeHtml(f.courseName || "")}">${BC.util.escapeHtml(f.display_name || "")}</a>
+          <span class="bc-file-star ${stars.has(String(f.id)) ? "on" : ""}" data-id="${BC.util.escapeHtml(String(f.id))}" title="Star" role="button" tabindex="0" aria-label="Star ${BC.util.escapeHtml(f.display_name || "file")}" aria-pressed="${stars.has(String(f.id)) ? "true" : "false"}">★</span>
         </div>
       `).join("");
     }
 
-    // Optimistic star toggle, delegated once (list element survives redraws).
-    list.addEventListener("click", (e) => {
-      const star = e.target.closest(".bc-file-star");
-      if (!star) return;
-      star.classList.toggle("on");
-      const id = star.getAttribute("data-id");
-      if (star.classList.contains("on")) stars.add(String(id)); else stars.delete(String(id));
+    // Optimistic star toggle, delegated once (list element survives redraws). The
+    // write sets the state the UI now shows rather than toggling stored state, so
+    // the two can't drift apart.
+    function toggleStar(star) {
+      const on = !star.classList.contains("on");
+      star.classList.toggle("on", on);
+      star.setAttribute("aria-pressed", on ? "true" : "false");
+      const id = String(star.getAttribute("data-id"));
+      if (on) stars.add(id); else stars.delete(id);
       BC.storage.update((d) => {
-        const arr = new Set(d.files.starred || []);
-        if (arr.has(id)) arr.delete(id); else arr.add(id);
+        const arr = new Set((d.files.starred || []).map(String));
+        if (on) arr.add(id); else arr.delete(id);
         d.files.starred = Array.from(arr);
       });
+    }
+    list.addEventListener("click", (e) => {
+      const star = e.target.closest(".bc-file-star");
+      if (star) toggleStar(star);
+    });
+    // role="button" promises Enter/Space — a span gives neither for free, so the
+    // stars were unreachable from the keyboard.
+    list.addEventListener("keydown", (e) => {
+      const star = e.target.closest && e.target.closest(".bc-file-star");
+      if (!star || (e.key !== "Enter" && e.key !== " ")) return;
+      e.preventDefault();
+      toggleStar(star);
     });
 
     function loadAndDraw() {

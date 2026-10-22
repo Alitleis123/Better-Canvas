@@ -18,10 +18,24 @@
     .bc-tts-btn.playing { background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); }
   `;
 
+  const TTS_SCOPE = ".show-content, .description, .assignment-description, .announcement, .discussion-topic-body";
+
+  // The button whose text is being read. speechSynthesis is one global queue, so
+  // pressing Speak on a second block used to just cancel the first — leaving that
+  // first button stuck in its "playing" state and never starting the second.
+  let speakingBtn = null;
+  function setPlaying(btn, on) {
+    btn.classList.toggle("playing", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+  function stopSpeaking() {
+    if (speakingBtn) { setPlaying(speakingBtn, false); speakingBtn = null; }
+    if (window.speechSynthesis && window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+  }
+
   function installTts() {
     if (!("speechSynthesis" in window)) return;
-    const scope = document.querySelectorAll(".show-content, .description, .assignment-description, .announcement, .discussion-topic-body");
-    for (const el of scope) {
+    for (const el of document.querySelectorAll(TTS_SCOPE)) {
       if (el._bcTts) continue; el._bcTts = true;
       const btn = document.createElement("button");
       btn.className = "bc-tts-btn";
@@ -31,22 +45,28 @@
       btn.textContent = "🔊 Speak";
       btn.addEventListener("click", () => {
         try {
-          if (window.speechSynthesis.speaking) {
-            window.speechSynthesis.cancel();
-            btn.classList.remove("playing");
-            btn.setAttribute("aria-pressed", "false");
-            return;
-          }
+          const wasThis = speakingBtn === btn;
+          stopSpeaking();
+          if (wasThis) return;
           const utter = new SpeechSynthesisUtterance((el.textContent || "").slice(0, 20000));
           utter.rate = 1.05;
-          utter.onend = () => { btn.classList.remove("playing"); btn.setAttribute("aria-pressed", "false"); };
-          btn.classList.add("playing");
-          btn.setAttribute("aria-pressed", "true");
+          // onerror too: cancel() reports "interrupted"/"canceled" as an error, not an end.
+          const done = () => { if (speakingBtn === btn) { setPlaying(btn, false); speakingBtn = null; } };
+          utter.onend = done;
+          utter.onerror = done;
+          speakingBtn = btn;
+          setPlaying(btn, true);
           window.speechSynthesis.speak(utter);
         } catch (e) { BC.toast.error("TTS failed"); }
       });
       el.parentNode && el.parentNode.insertBefore(btn, el);
     }
+  }
+
+  function uninstallTts() {
+    stopSpeaking();
+    BC.injector.removeNode("bc-tts-btn");
+    for (const el of document.querySelectorAll(TTS_SCOPE)) delete el._bcTts;
   }
 
   // Color-blind daltonization SVG filters (mount once).
@@ -60,10 +80,15 @@
     svg.setAttribute("aria-hidden", "true");
     svg.setAttribute("width", "0"); svg.setAttribute("height", "0");
     svg.style.position = "absolute";
+    // Correction, not simulation. The old matrices showed the page as a colour-blind
+    // reader already sees it, which helps nobody. These are I + E(I - S): S is the
+    // simulation matrix and E moves the lost difference into channels the reader
+    // can see (red error into green and blue; blue error into red and green).
+    // Rows sum to 1, so white and greys stay put.
     svg.innerHTML = `
-      <filter id="bc-cb-protanopia"><feColorMatrix type="matrix" values="0.567 0.433 0 0 0  0.558 0.442 0 0 0  0 0.242 0.758 0 0  0 0 0 1 0"/></filter>
-      <filter id="bc-cb-deuteranopia"><feColorMatrix type="matrix" values="0.625 0.375 0 0 0  0.7 0.3 0 0 0  0 0.3 0.7 0 0  0 0 0 1 0"/></filter>
-      <filter id="bc-cb-tritanopia"><feColorMatrix type="matrix" values="0.95 0.05 0 0 0  0 0.433 0.567 0 0  0 0.475 0.525 0 0  0 0 0 1 0"/></filter>
+      <filter id="bc-cb-protanopia" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="1 0 0 0 0  -0.255 1.255 0 0 0  0.303 -0.545 1.242 0 0  0 0 0 1 0"/></filter>
+      <filter id="bc-cb-deuteranopia" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="1 0 0 0 0  -0.438 1.438 0 0 0  0.262 -0.563 1.3 0 0  0 0 0 1 0"/></filter>
+      <filter id="bc-cb-tritanopia" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="1.05 -0.382 0.332 0 0  0 1.234 -0.234 0 0  0 0 1 0 0  0 0 0 1 0"/></filter>
     `;
     document.documentElement.appendChild(svg);
   }
@@ -72,7 +97,9 @@
     const a = settings.accessibility || {};
     BC.injector.setStyle("bc-a11y-css", CSS);
     installCbFilters();
+    // Switching TTS off now removes the buttons it added; they used to stay put.
     if (a.tts) installTts();
+    else if (document.querySelector('[data-bc-node="bc-tts-btn"]')) uninstallTts();
   }
 
   BC.registry.register({
@@ -80,11 +107,6 @@
     // The _bcTts expandos outlived teardown, so after a disable/enable cycle
     // installTts() skipped every element it had already marked and the Speak buttons
     // (which teardown had just removed) never came back.
-    unmount() {
-      for (const el of document.querySelectorAll(".show-content, .description, .assignment-description, .announcement, .discussion-topic-body")) {
-        delete el._bcTts;
-      }
-      if (window.speechSynthesis && window.speechSynthesis.speaking) window.speechSynthesis.cancel();
-    },
+    unmount() { uninstallTts(); },
   });
 })();

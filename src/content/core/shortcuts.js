@@ -20,6 +20,25 @@
     ));
   }
 
+  // Events from inside a shadow root are retargeted to the HOST by the time they
+  // reach this document-level listener, so ev.target is the settings drawer's host
+  // <div> — never the input being typed in. Typing "margin" into the drawer's Custom
+  // CSS box fired the "g i" chord and navigated to the inbox.
+  function realTarget(ev) {
+    const path = ev.composedPath ? ev.composedPath() : null;
+    return (path && path[0]) || ev.target;
+  }
+
+  // The drawer owns its keyboard: the keybind recorder there has to receive the
+  // combo being recorded instead of having it fire the existing binding.
+  function fromDrawer(ev) {
+    const path = ev.composedPath ? ev.composedPath() : [];
+    for (const n of path) {
+      if (n && n.nodeType === 1 && n.getAttribute("data-bc-node") === "bc-drawer") return true;
+    }
+    return false;
+  }
+
   function normalizeCombo(str) {
     return String(str || "").trim();
   }
@@ -40,7 +59,13 @@
     const altOK   = need.alt ? ev.altKey : !ev.altKey;
     if (!modOK || !shiftOK || !altOK) return false;
     const evKey = (ev.key || "").toLowerCase();
-    return evKey === key;
+    if (evKey === key) return true;
+    // macOS turns Option+letter into a different character (⌥⇧T reports "ˇ"), so
+    // with Alt held fall back to the physical key.
+    if (ev.altKey && /^[a-z0-9]$/.test(key)) {
+      return ev.code === (/[a-z]/.test(key) ? "Key" + key.toUpperCase() : "Digit" + key);
+    }
+    return false;
   }
 
   function keyOnly(ev) {
@@ -49,7 +74,8 @@
   }
 
   function onKey(ev) {
-    if (isTypingTarget(ev.target)) return;
+    // A held key repeats keydown. Toggles flipped on and off for as long as it was held.
+    if (ev.repeat || fromDrawer(ev) || isTypingTarget(realTarget(ev))) return;
     const s = BC.storage && BC.storage.current;
     if (!s || !s.shortcuts || !s.shortcuts.enabled) return;
 
@@ -107,10 +133,14 @@
     },
     prettify(combo) {
       if (!combo) return "";
-      return combo.replace(/Mod/g, BC.util.isMac ? "⌘" : "Ctrl").replace(/Shift/g, "⇧").replace(/Alt/g, "⌥");
+      return combo.replace(/Mod/g, BC.util.isMac ? "⌘" : "Ctrl").replace(/Shift/g, "⇧").replace(/Alt/g, BC.util.isMac ? "⌥" : "Alt");
     },
     _install() {
       document.addEventListener("keydown", onKey, true);
+    },
+    stop() {
+      document.removeEventListener("keydown", onKey, true);
+      bindings.clear();
     },
   };
 

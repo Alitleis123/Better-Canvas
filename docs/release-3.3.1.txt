@@ -1,0 +1,49 @@
+Better Canvas 3.3.1 audit fixes
+
+Visible changes
+- Keep all 34 bundled themes when the all-frames content scripts run in the top document.
+- Validate imported and stored grade goals and rubric drafts. Label the goal, target and final-weight inputs.
+- Preserve legacy grade history and planner metadata when popup or options opens first after an upgrade.
+- Serialize local study-data writes in the background with content-hash conflict checks and bounded retries. Store current data in the original bcLocal shape so 3.3.0 can read it. Read only required keys during ordinary edits.
+- Edit sticky notes and planner steps by stable ids. Apply step and tag operations to fresh data so separate details sheets retain both edits. Legacy steps receive deterministic ids on read.
+- Rebase studio and options edits onto current settings and update popup fields independently. Merge list membership and id-keyed records. Give custom navigation links stable ids.
+- Preserve reversals queued behind an in-flight settings save. Keep newer theme, reset, import, Undo and Redo contents when an older save is acknowledged. Theme actions explicitly replace their visual fields, including empty artwork, while retaining unrelated settings and rotation.
+- Read current time estimates when scheduling tasks through retained day-plan menus.
+- Save only edited rubric criteria and recheck snooze expiry against current data before cleanup.
+- Dispose locker editors on navigation and flush pending edits. Explicit creates and background updates prevent a stale autosave in another window from recreating a deleted item.
+- Apply Canvas assignment-group drop-lowest, drop-highest and never-drop rules to totals and predictions. Cache unchanged groups, stop the drop solver when its ratio stabilizes and batch rubric slider updates per animation frame.
+- Refresh dashboard data at its cache TTL, retry failures with backoff and invalidate planner data after successful writes.
+- Keep unsaved settings and the error visible after a failed write. Retry the edited value. Apply, settings import and theme import wait for persistence before reporting success.
+- Export locker items from current storage after flushing edited local editors. Include creates and deletes from other windows.
+- Save every dirty locker item before reporting failures. Keep failed edits dirty through switching and export. Stop retrying items deleted in another window and show the deletion error. Keep failed deletion editors open.
+- Retain failed planner notes, steps, tags and rubric edits for retry. Save the final visible planner note even when it returns to its old or empty value during a pending save. Confirm quiz draft writes before showing saved status or dismissing drafts. Preserve unsaved sticky text during page updates.
+- Confirm recurring-task completion before updating its saved state. Release the pending guard after a failure so the task can retry.
+- Record grade history, navigation snapshots and theme rotation only after their writes succeed. Select rotation themes from current settings. After a rotation failure, wait until the next daily or weekly period before trying again in that page. Prevent older announcement scans from lowering the stored timestamp.
+- Reject background messages whose sender id differs from the extension id. Storage messages only write fixed keys.
+- Remove quiz-draft listeners and cancel pending saves when saving is disabled.
+- Your settings and local study data stay on this device. Image searches send your query to api.openverse.org. Photo themes and previews load images from third-party hosts. No telemetry.
+- Shorten both manifest descriptions and remove unused alarms and notifications permissions.
+
+Verification
+- 127 automated regression tests passed in each of three consecutive runs of node --test "tests/*.test.cjs". All 107 tests from round four remain, with 20 added regression tests for independent locker saves, rotation quota failures, pending planner note reversals and pending settings replacements.
+- All 57 extension JavaScript files passed node --check.
+- Both Chromium and Firefox packages built with versioned zip archives. Each archive passed integrity and root-manifest checks and contains no tests, package files or node_modules.
+- Grade rules matched 2,000 fixed-seed exhaustive subset comparisons and 500 eligibility cases. The performance check measures seven uncached runs for four groups of 100 assignments and requires a median below 100 ms. It also checks cache invalidation.
+- Fifteen planner toggles used 45 targeted bcLocal reads, zero full-storage reads and zero theme or locker reads. One hundred quiz create/delete cycles added zero keys and zero tombstones.
+- 10 unpacked-extension checks passed in headless Chrome for Testing 156.0.8078.4. The top document retained 34 themes and 6 anime themes on version 3.3.1, including after repeated frame injection.
+- All 45 existing studio browser checks passed on the local synthetic 32-course dashboard, with no browser runtime errors.
+- The native Chromium rotation quota repro left eight storage bytes free. It made one settings commit and one rejected local commit in 1.25 seconds, with no repeat loop.
+- Browser profiles and retained browser downloads are in the approved scratch area. The browser and fixture server stopped after the checks.
+
+Scope of verification
+The browser used local synthetic pages and a separate temporary profile. No school login, real Canvas instance or Openverse search was used.
+The Firefox manifest and package passed source checks and build verification. A Firefox browser run was not performed.
+Background conflict checks rerun mutators against fresh local data and settings, with at most eight attempts. Independent note, step, tag, rubric-criterion and settings edits survive. Concurrent edits to the same field or existing locker item use the last accepted write. Locker deletion rejects stale updates. Imports and resets deliberately replace their selected data. Navigation order and artwork collections are deliberate array replacements.
+Old browsers without storage.getKeys use one initial full-storage scan to index existing locker items. Later locker reads and edits use targeted keys.
+Locker data stays on the current browser and device. Use My locker > Export for a separate backup.
+
+Build/install
+Run powershell -ExecutionPolicy Bypass -File build.ps1.
+Load dist/chrome as an unpacked Chromium extension, or dist/firefox/manifest.json in Firefox's temporary add-on loader.
+The build also creates dist/Better-Canvas-3.3.1-Chromium.zip and dist/Better-Canvas-3.3.1-Firefox.zip.
+For an already loaded unpacked extension, reload the extension itself, then refresh the Canvas page.

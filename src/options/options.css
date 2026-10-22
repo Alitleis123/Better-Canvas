@@ -1,10 +1,26 @@
-/* Standalone options page container. Actual styling ships inside settings/index.js.
-   Colours come from the design tokens that options.js paints into this document, so
-   the page tracks the user's theme instead of guessing from prefers-color-scheme. */
-html, body, #bc-settings-root { height: 100%; margin: 0; }
+/* Standalone options page container. The settings UI brings its own layout
+   (settings/index.js) and every colour comes from the design tokens options.js
+   paints into this document, so the page tracks the user's theme. */
+html, body { height: 100%; margin: 0; }
 body {
-  background: var(--bc-surface-1, #f6f7fb);
-  color: var(--bc-text, #1f2937);
-  font-family: var(--bc-font-sans, ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif);
+  display: flex;
+  flex-direction: column;
+  background: var(--bc-surface-1, #fafafa);
+  color: var(--bc-text, #18181b);
+  font-family: var(--bc-font-sans, system-ui, sans-serif);
 }
-#bc-settings-root { max-width: 1080px; margin: 0 auto; padding: 12px; }
+#bc-settings-root { flex: 1; min-height: 0; }
+
+/* Shown above the settings when the toolbar icon was clicked on a site that
+   isn't allowed yet. */
+.bc-site-offer {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+  padding: 10px 16px; font-size: 14px;
+  background: var(--bc-surface-2, #f4f4f5); border-bottom: 1px solid var(--bc-border, #e4e4e7);
+}
+.bc-site-offer button {
+  font: inherit; font-weight: 600; cursor: pointer; padding: 6px 14px; border: none;
+  border-radius: var(--bc-radius, 8px);
+  background: var(--bc-accent, #4f46e5); color: var(--bc-accent-contrast, #fff);
+}
+.bc-site-offer button:focus-visible { outline: 2px solid var(--bc-focus-ring, var(--bc-accent, #4f46e5)); outline-offset: 2px; }

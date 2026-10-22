@@ -2,6 +2,7 @@
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
+  if (BC.dt) return;
 
   const DAY_MS = 24 * 60 * 60 * 1000;
   const WEEKDAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];

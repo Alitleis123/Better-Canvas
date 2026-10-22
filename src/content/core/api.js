@@ -43,7 +43,7 @@
       catch (e) {
         last = e;
         if (e.status && e.status < 500) throw e;
-        await new Promise((r) => setTimeout(r, 200 * (i + 1)));
+        if (i < n - 1) await new Promise((r) => setTimeout(r, 200 * (i + 1)));
       }
     }
     throw last;
@@ -67,8 +67,28 @@
     course: 5 * 60000,
   };
 
+  async function plannerMutation(method, path, body) {
+    const result = await api.mutate(method, path, body);
+    BC.cache && BC.cache.invalidate("LIST " + base + "/api/v1/planner/items");
+    if (BC.dashboard) BC.dashboard.invalidatePlanner();
+    return result;
+  }
+
   const api = (BC.api = {
     TTL,
+
+    // One definition of "done" for a planner item, shared by the planner widget,
+    // the dashboard progress bars and the due-soon scan. Canvas's own planner lets
+    // an explicit override win: un-checking a submitted assignment sets
+    // marked_complete=false, and treating "submitted" as done regardless meant it
+    // could never be un-checked.
+    plannerItemDone(it) {
+      if (!it) return false;
+      const o = it.planner_override;
+      if (o && typeof o.marked_complete === "boolean") return o.marked_complete;
+      const s = it.submissions;
+      return !!(s && (s.submitted || s.graded));
+    },
     async getJSON(path, { ttl } = {}) {
       const url = path.startsWith("http") ? path : base + path;
       const key = "GET " + url;
@@ -115,6 +135,11 @@
       );
     },
 
+    // Past-term courses. enrollment_state=active above leaves them out.
+    completedCourses() {
+      return api.getList("/api/v1/courses?enrollment_state=completed&per_page=100", { maxPages: 5, ttl: TTL.courses });
+    },
+
     assignmentGroups(courseId) {
       return api.getList(
         `/api/v1/courses/${courseId}/assignment_groups?include[]=assignments&include[]=submission&per_page=100`,
@@ -129,8 +154,9 @@
       );
     },
 
-    coursePeople(courseId, roles) {
-      const q = roles ? roles.map((r) => "enrollment_type[]=" + encodeURIComponent(r)).join("&") : "";
+    coursePeople(courseId, roles, include) {
+      const q = (roles || []).map((r) => "enrollment_type[]=" + encodeURIComponent(r))
+        .concat((include || []).map((x) => "include[]=" + encodeURIComponent(x))).join("&");
       return api.getList(
         `/api/v1/courses/${courseId}/users?per_page=100${q ? "&" + q : ""}`,
         { maxPages: 15, ttl: TTL.people }
@@ -188,20 +214,32 @@
       const body = overrideId
         ? { marked_complete: !!complete }
         : { plannable_type: plannableType, plannable_id: plannableId, marked_complete: !!complete };
-      BC.cache && BC.cache.invalidate("LIST " + base + "/api/v1/planner/items");
-      return api.mutate(method, path, body);
+      return plannerMutation(method, path, body);
     },
 
     createPlannerNote({ title, todoDate, courseId, details }) {
-      BC.cache && BC.cache.invalidate("LIST " + base + "/api/v1/planner/items");
       const body = { title: title, todo_date: todoDate };
       if (details) body.details = details;
       if (courseId) body.course_id = courseId;
-      return api.mutate("POST", "/api/v1/planner_notes", body);
+      return plannerMutation("POST", "/api/v1/planner_notes", body);
+    },
+
+    updatePlannerNote(id, { title, todoDate, details } = {}) {
+      const body = {};
+      if (title != null) body.title = title;
+      if (todoDate) body.todo_date = todoDate;
+      if (details != null) body.details = details;
+      return plannerMutation("PUT", "/api/v1/planner_notes/" + encodeURIComponent(id), body);
+    },
+
+    deletePlannerNote(id) {
+      return plannerMutation("DELETE", "/api/v1/planner_notes/" + encodeURIComponent(id), {});
     },
 
     async mutate(method, path, body) {
       const url = path.startsWith("http") ? path : base + path;
+      // Only idempotent writes are retried. A POST that timed out or 5xx'd may still
+      // have been applied server-side, and retrying it created duplicate planner notes.
       const res = await fetchRetry(url, {
         method, credentials: "include",
         headers: Object.assign({}, jsonHeaders, {
@@ -209,7 +247,7 @@
           "X-CSRF-Token": csrfToken(),
         }),
         body: JSON.stringify(body),
-      }, 2);
+      }, method === "POST" ? 1 : 2);
       const text = await res.text();
       return text ? JSON.parse(stripPrefix(text)) : null;
     },

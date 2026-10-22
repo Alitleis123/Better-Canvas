@@ -1,9 +1,9 @@
 /*
  * Better Canvas — the single design-token emitter.
  *
- * This lives in shared/ because four separate documents need byte-identical
- * tokens: the Canvas page (via theming.js), the settings drawer's shadow root,
- * the standalone options page, and the toolbar popup. Only theming.js is a
+ * This lives in shared/ because three separate documents need byte-identical
+ * tokens: the Canvas page (via theming.js), the settings drawer's shadow root
+ * and the standalone options page. Only theming.js is a
  * content script, so the emitter cannot live there. Before this existed there
  * were four disconnected colour systems and three of them never saw the user's
  * theme at all.
@@ -11,13 +11,14 @@
  * Pure: no DOM, no storage. Depends only on BC.color, BC.DARK_TONES and
  * BC.LIGHT_PRESETS.
  *
- * Design direction is "refined & Canvas-native": quiet borders, a single accent,
- * tabular figures, restraint. Panels at rest get a border and NO shadow;
- * elevation is reserved for things that genuinely float.
+ * Design direction is "clean & minimal": neutral (zinc-like) surfaces, thin quiet
+ * borders, one accent, a strict 4px spacing scale and tabular figures. Panels at
+ * rest get a border and NO shadow; elevation is reserved for things that float.
  */
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
+  if (BC.tokens) return;
 
   // Text contrast floor (WCAG AA). Non-text (rings, bars, chart strokes) uses 3:1
   // per WCAG 1.4.11.
@@ -28,8 +29,8 @@
   // we push the foreground — e.g. darkBg #e8e8e8 yields ~1.05:1, reachable in two
   // clicks today.
   const SAFE_NEUTRAL = {
-    light: { bg: "#f6f7fb", bg2: "#ffffff", bg3: "#f1f3f7", border: "#e2e5ea", text: "#16181d", muted: "#5b6472" },
-    dark:  { bg: "#0f1116", bg2: "#16181d", bg3: "#1e2128", border: "#2b2f38", text: "#eef1f5", muted: "#9aa4b2" },
+    light: { bg: "#fafafa", bg2: "#ffffff", bg3: "#f4f4f5", border: "#e4e4e7", text: "#18181b", muted: "#6b6b74" },
+    dark:  { bg: "#111113", bg2: "#1b1b1e", bg3: "#26262a", border: "#2f2f34", text: "#f4f4f5", muted: "#a1a1aa" },
   };
 
   // Semantic fills. These differ from the values previously hardcoded around the
@@ -70,18 +71,20 @@
     dark:  { bg: "#3a3421", border: "#5a4f2c", text: "#f0e6c8" },
   };
 
+  // 1 = resting lift (segmented thumb, switch knob), 2 = menus and popovers,
+  // 3 = dialogs and sheets, 4 = the settings panel against the page.
   const SHADOW = {
     light: {
-      1: "0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.06)",
-      2: "0 2px 4px rgba(16,24,40,.05), 0 4px 12px rgba(16,24,40,.08)",
-      3: "0 8px 16px rgba(16,24,40,.08), 0 16px 40px rgba(16,24,40,.12)",
-      4: "0 12px 24px rgba(16,24,40,.10), 0 32px 72px rgba(16,24,40,.18)",
+      1: "0 1px 2px rgba(24,24,27,.08)",
+      2: "0 4px 12px rgba(24,24,27,.08), 0 1px 3px rgba(24,24,27,.06)",
+      3: "0 12px 32px rgba(24,24,27,.12), 0 2px 8px rgba(24,24,27,.06)",
+      4: "0 0 0 1px rgba(24,24,27,.04), -12px 0 40px rgba(24,24,27,.10)",
     },
     dark: {
-      1: "0 1px 2px rgba(0,0,0,.40)",
-      2: "0 2px 6px rgba(0,0,0,.45), 0 8px 20px rgba(0,0,0,.35)",
-      3: "0 10px 24px rgba(0,0,0,.50), 0 24px 56px rgba(0,0,0,.42)",
-      4: "0 16px 32px rgba(0,0,0,.55), 0 40px 96px rgba(0,0,0,.50)",
+      1: "0 1px 2px rgba(0,0,0,.5)",
+      2: "0 4px 16px rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.4)",
+      3: "0 16px 40px rgba(0,0,0,.6), 0 2px 8px rgba(0,0,0,.4)",
+      4: "0 0 0 1px rgba(255,255,255,.04), -12px 0 48px rgba(0,0,0,.5)",
     },
   };
 
@@ -149,9 +152,17 @@
       "text-inverse": dark ? "#16181d" : "#ffffff",
       "overlay": dark ? "rgba(0,0,0,.62)" : "rgba(15,20,28,.44)",
 
+      // Interaction states for anything sitting on a panel.
+      "surface-hover": dark ? C.lighten(S2, 0.06) : C.darken(S2, 0.04),
+      "surface-pressed": dark ? C.lighten(S2, 0.1) : C.darken(S2, 0.075),
+
       border: border,
       "border-subtle": C.mix(border, S2, 0.5),
-      "border-strong": C.ensureContrast(border, S2, AA_NONTEXT),
+      // A hover/selected step up from `border`; still quiet.
+      "border-strong": C.mix(border, text, 0.2),
+      // Non-text UI that must be perceivable on its own (checkbox outline, the
+      // unchecked switch track): 3:1 per WCAG 1.4.11.
+      "border-contrast": C.ensureContrast(border, S2, AA_NONTEXT),
 
       text: text,
       muted: muted,
@@ -192,6 +203,14 @@
     return Object.keys(t).map((k) => pad + "--bc-" + k + ": " + t[k] + ";").join("\n");
   }
 
+  // The settings-surface override: the neutral set, scoped to `sel`.
+  function emitSafe(sel, s) {
+    return sel + " {\n" +
+      "  --bc-surface-1: " + s.bg + "; --bc-surface-2: " + s.bg2 + "; --bc-surface-3: " + s.bg3 + ";\n" +
+      "  --bc-border: " + s.border + "; --bc-text: " + s.text + "; --bc-muted: " + s.muted + ";\n" +
+      "  --bc-text-subtle: " + s.muted + ";\n}";
+  }
+
   // Back-compat aliases. Older feature CSS (and any user custom CSS) still
   // references these; they resolve per-mode via the canonical names.
   const ALIASES = `
@@ -219,8 +238,8 @@
     },
 
     // scope: selector for the light/base block (default ":root").
-    // mode: "both" (default) | "light" | "dark" — the popup and options page render
-    // a single mode, the Canvas page needs both.
+    // mode: "both" (default) | "light" | "dark" — the options page renders a
+    // single mode, the Canvas page needs both.
     css(theming, opts) {
       const o = opts || {};
       const scope = o.scope || ":root";
@@ -237,63 +256,72 @@
       // settings panel must stay operable, so it gets the safe neutral set and an
       // honest notice (rendered by the Appearance tab).
       if (r.guard.surfaceFallback) {
-        const safeLight = { ...SAFE_NEUTRAL.light };
-        const safeDark = { ...SAFE_NEUTRAL.dark };
-        const emit = (sel, s) => sel + " {\n" +
-          "  --bc-surface-1: " + s.bg + "; --bc-surface-2: " + s.bg2 + "; --bc-surface-3: " + s.bg3 + ";\n" +
-          "  --bc-border: " + s.border + "; --bc-text: " + s.text + "; --bc-muted: " + s.muted + ";\n" +
-          "  --bc-text-subtle: " + s.muted + ";\n}";
-        out.push(emit(".bc-app", safeLight));
-        out.push(emit("html.bc-dark .bc-app, .bc-app.bc-dark", safeDark));
+        out.push(emitSafe(".bc-app", SAFE_NEUTRAL.light));
+        out.push(emitSafe("html.bc-dark .bc-app, .bc-app.bc-dark", SAFE_NEUTRAL.dark));
       }
       return out.join("\n");
+    },
+
+    // The same override on its own, for a document css() can't reach: rules
+    // emitted on the Canvas page never match .bc-app inside the settings drawer's
+    // shadow root. "" when no fallback is needed.
+    fallbackCss(theming, dark) {
+      if (!BC.tokens.resolve(theming).guard.surfaceFallback) return "";
+      return emitSafe(".bc-app", SAFE_NEUTRAL[dark ? "dark" : "light"]);
     },
 
     // Mode-independent scales. Written once and never rebuilt.
     staticCss() {
       return `
 :root {
-  /* spacing — the only consumer of the density setting for our own surfaces */
+  /* spacing: one strict 4px scale. Density multiplies it (data-bc-density). */
   --bc-space-scale: 1;
   --bc-space-unit: calc(4px * var(--bc-space-scale, 1));
-  --bc-space-1: var(--bc-space-unit);
-  --bc-space-2: calc(var(--bc-space-unit) * 1.5);
-  --bc-space-3: calc(var(--bc-space-unit) * 2);
-  --bc-space-4: calc(var(--bc-space-unit) * 2.5);
-  --bc-space-5: calc(var(--bc-space-unit) * 3);
-  --bc-space-6: calc(var(--bc-space-unit) * 3.5);
-  --bc-space-7: calc(var(--bc-space-unit) * 4);
-  --bc-space-8: calc(var(--bc-space-unit) * 5);
-  --bc-space-9: calc(var(--bc-space-unit) * 6);
+  --bc-space-1: calc(4px * var(--bc-space-scale, 1));
+  --bc-space-2: calc(8px * var(--bc-space-scale, 1));
+  --bc-space-3: calc(12px * var(--bc-space-scale, 1));
+  --bc-space-4: calc(16px * var(--bc-space-scale, 1));
+  --bc-space-5: calc(20px * var(--bc-space-scale, 1));
+  --bc-space-6: calc(24px * var(--bc-space-scale, 1));
+  --bc-space-7: calc(32px * var(--bc-space-scale, 1));
+  --bc-space-8: calc(40px * var(--bc-space-scale, 1));
+  --bc-space-9: calc(48px * var(--bc-space-scale, 1));
 
-  /* radius, derived from the user's slider */
+  /* controls share one height so rows of mixed controls line up */
+  --bc-control-h: 32px;
+  --bc-control-h-sm: 28px;
+  --bc-control-h-lg: 36px;
+
+  /* radius, derived from the user's slider (default 8px) */
   --bc-radius: 8px;
-  --bc-radius-sm: calc(var(--bc-radius) * 0.5);
+  --bc-radius-sm: calc(var(--bc-radius) * 0.75);
   --bc-radius-md: var(--bc-radius);
-  --bc-radius-lg: calc(var(--bc-radius) * 1.25);
-  --bc-radius-xl: calc(var(--bc-radius) * 1.5);
+  --bc-radius-lg: calc(var(--bc-radius) * 1.5);
+  --bc-radius-xl: calc(var(--bc-radius) * 2);
   --bc-radius-pill: 999px;
   --bc-radius-circle: 50%;
 
   /* type */
-  --bc-font-sans: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --bc-font-sans: "Inter var", Inter, system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --bc-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --bc-font-scale: 1;
-  --bc-text-3xs: calc(10px * var(--bc-font-scale));
+  --bc-text-3xs: calc(11px * var(--bc-font-scale));
   --bc-text-2xs: calc(11px * var(--bc-font-scale));
   --bc-text-xs:  calc(12px * var(--bc-font-scale));
   --bc-text-sm:  calc(13px * var(--bc-font-scale));
   --bc-text-md:  calc(14px * var(--bc-font-scale));
-  --bc-text-lg:  calc(15px * var(--bc-font-scale));
-  --bc-text-xl:  calc(17px * var(--bc-font-scale));
-  --bc-text-2xl: calc(20px * var(--bc-font-scale));
-  --bc-text-figure: calc(24px * var(--bc-font-scale));
+  --bc-text-lg:  calc(16px * var(--bc-font-scale));
+  --bc-text-xl:  calc(20px * var(--bc-font-scale));
+  --bc-text-2xl: calc(24px * var(--bc-font-scale));
+  --bc-text-figure: calc(28px * var(--bc-font-scale));
   --bc-line-height: 1.5;
   --bc-leading-tight: 1.25;
+  --bc-leading-snug: 1.4;
   --bc-leading-body: var(--bc-line-height);
   --bc-letter-spacing: 0px;
   --bc-tracking: var(--bc-letter-spacing);
   --bc-tracking-caps: 0.04em;
+  --bc-weight-regular: 400;
   --bc-weight-medium: 500;
   --bc-weight-semibold: 600;
   --bc-weight-bold: 700;
@@ -301,7 +329,7 @@
   /* motion — dividing by the speed slider means 2x really is twice as fast */
   --bc-anim-speed: 1;
   --bc-dur-1: calc(90ms / var(--bc-anim-speed, 1));
-  --bc-dur-2: calc(160ms / var(--bc-anim-speed, 1));
+  --bc-dur-2: calc(150ms / var(--bc-anim-speed, 1));
   --bc-dur-3: calc(220ms / var(--bc-anim-speed, 1));
   --bc-dur-4: calc(300ms / var(--bc-anim-speed, 1));
   --bc-ease-standard: cubic-bezier(.2,0,.2,1);
@@ -309,8 +337,7 @@
   --bc-ease-in: cubic-bezier(.3,0,.8,.15);
   --bc-ease-spring: cubic-bezier(.22,.61,.36,1);
 
-  /* z-index scale, replacing a dozen ad-hoc literals; order matches what
-     shipped before (dock < notes < hud < popover < drawer < modal < palette < toast) */
+  /* z-index scale (dock < notes < hud < popover < drawer < modal < palette < toast) */
   --bc-z-base: 1;
   --bc-z-raised: 10;
   --bc-z-sticky: 100;
@@ -324,13 +351,11 @@
   --bc-z-toast: 2147483200;
 }
 
-/* A gentler curve than the legacy --bc-density multiplier: at 0.6 a 4px gap
-   would collapse to 2.4px. */
-:root[data-bc-density="compact"]  { --bc-space-scale: 0.82; }
-:root[data-bc-density="spacious"] { --bc-space-scale: 1.22; }
-:root[data-bc-density="cozy"]     { --bc-space-scale: 1.45; }
+:root[data-bc-density="compact"]  { --bc-space-scale: 0.85; }
+:root[data-bc-density="spacious"] { --bc-space-scale: 1.15; }
+:root[data-bc-density="cozy"]     { --bc-space-scale: 1.3; }
 
-/* "Rounded UI off" now squares our own components too, not just Canvas's. */
+/* "Rounded UI off" squares our own components too, not just Canvas's. */
 :root[data-bc-rounded="0"] { --bc-radius: 0px; }
 
 :root[data-bc-motion="0"] {
@@ -343,16 +368,38 @@
 }`;
     },
 
+    // The Cursor setting as a CSS cursor value, drawn in the user's colour with a
+    // black or white edge, whichever stands out. "" keeps the system pointer.
+    cursor(theming) {
+      const t = theming || {};
+      const shape = t.cursor === "large" ? "arrow" : ["arrow", "dot", "ring", "precise"].includes(t.cursor) ? t.cursor : "default";
+      if (shape === "default") return { shape, css: "" };
+      const size = Math.round(Math.min(48, Math.max(16, Number(t.cursorSize) || 32)));
+      const fill = BC.color.normalizeHex(t.cursorColor) || "#000000";
+      const edge = BC.color.contrastText(fill) === "#ffffff" ? "#ffffff" : "#000000";
+      const cross = "M16 2v10M16 20v10M2 16h10M20 16h10";
+      const art = {
+        arrow: `<polygon points='2,2 2,29 9,22 13,30 17,28 13,20 22,20' fill='${fill}' stroke='${edge}' stroke-width='2' stroke-linejoin='round'/>`,
+        dot: `<circle cx='16' cy='16' r='8' fill='${fill}' stroke='${edge}' stroke-width='2'/>`,
+        ring: `<circle cx='16' cy='16' r='10' fill='none' stroke='${edge}' stroke-width='6'/><circle cx='16' cy='16' r='10' fill='none' stroke='${fill}' stroke-width='3'/>`,
+        precise: `<path d='${cross}' stroke='${edge}' stroke-width='5' stroke-linecap='round'/><path d='${cross}' stroke='${fill}' stroke-width='2.5' stroke-linecap='round'/>`,
+      }[shape];
+      const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${size}' height='${size}' viewBox='0 0 32 32'>${art}</svg>`;
+      const hot = shape === "arrow" ? Math.round(size / 16) : Math.round(size / 2);
+      const src = "data:image/svg+xml," + encodeURIComponent(svg);
+      return { shape, src, css: `url("${src}") ${hot} ${hot}, ${shape === "precise" ? "crosshair" : "auto"}` };
+    },
+
     // Memo key so theming.js can skip rebuilding a multi-KB string on every tick.
     signature(theming) {
       const t = theming || {};
       return [
-        t.darkMode, t.darkTone, t.darkBg, t.lightPreset, t.accentColor,
+        t.darkMode, t.darkTone, t.darkBg, t.lightBg, t.lightPreset, t.accentColor, t.experience,
         t.font, t.fontSizeScale, t.lineHeight, t.letterSpacing, t.density,
         t.radius, t.roundedUI, t.cursor, t.focusRing, t.colorBlind,
         t.highContrast, t.reducedMotion, t.animSpeed, t.sidebarWidth,
         t.logo && t.logo.mode, t.logo && t.logo.url, t.logo && t.logo.text,
-      ].join("");
+      ].join("\u0001");
     },
 
     // theming.js interpolates the user's font stack into a declaration, and

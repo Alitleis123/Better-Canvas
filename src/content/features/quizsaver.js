@@ -29,13 +29,40 @@
 
   const MAX_DRAFTS = 10;
   const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+  let saverEnabled = false, saveTimer = null, submitted = false;
+
+  function stop() {
+    saverEnabled = submitted = false;
+    clearTimeout(saveTimer); saveTimer = null;
+    BC.lifecycle.clear("quizsaver");
+  }
 
   function onTakePage(path) {
     return /^\/courses\/\d+\/quizzes\/\d+\/take/.test(path);
   }
 
+  // Keyed by attempt as well as page. A timed auto-submit never clicks Submit, so
+  // the next attempt used to open with a banner offering the old answers.
   function draftKey() {
-    return location.pathname.replace(/\/$/, "");
+    const attempt = document.querySelector('#submit_quiz_form input[name="attempt"], #submit_quiz_form [name="attempt"]');
+    const path = location.pathname.replace(/\/$/, "");
+    return attempt && attempt.value ? path + "#attempt-" + attempt.value : path;
+  }
+  // Every page of a one-question-at-a-time quiz has its own draft.
+  const quizRoot = () => (location.pathname.match(/^\/courses\/\d+\/quizzes\/\d+/) || [""])[0];
+
+  // The page is about to navigate, so this is one message to the background rather
+  // than a read and a commit. `submitted` stops a save already in flight from
+  // writing the draft back after it. If the page is still here 10 seconds later,
+  // or the clear failed, the submit didn't go through and saving resumes.
+  const SUBMIT_GRACE_MS = 10000;
+  function deleteQuizDrafts() {
+    const root = quizRoot();
+    clearTimeout(saveTimer); saveTimer = null;
+    if (!root) return Promise.resolve();
+    submitted = true;
+    BC.lifecycle.bag("quizsaver").timeout(() => { submitted = false; }, SUBMIT_GRACE_MS);
+    return BC.storage.request({ type: "bc:quizSubmitted", root }).catch((e) => { submitted = false; throw e; });
   }
 
   function collectInputs() {
@@ -68,14 +95,15 @@
     const dot = document.querySelector('[data-bc-node="bc-quiz-dot"]');
     if (!dot) return;
     dot.classList.add("show");
-    setTimeout(() => dot.classList.remove("show"), 1200);
+    BC.lifecycle.bag("quizsaver").timeout(() => dot.classList.remove("show"), 1200);
   }
 
   function saveDraft() {
-    if (!onTakePage(location.pathname)) return;
+    if (!saverEnabled || submitted || !onTakePage(location.pathname)) return;
     const answers = snapshot();
     const key = draftKey();
     BC.storage.updateLocal((d) => {
+      if (!saverEnabled || submitted) return;
       const q = (d.quizDrafts = d.quizDrafts || {});
       if (!Object.keys(answers).length) { delete q[key]; return; }
       q[key] = { savedAt: Date.now(), answers };
@@ -84,12 +112,12 @@
         keys.sort((a, b) => ((q[a] && q[a].savedAt) || 0) - ((q[b] && q[b].savedAt) || 0));
         for (const k of keys.slice(0, keys.length - MAX_DRAFTS)) delete q[k];
       }
-    });
-    flashSaved();
+    }).then(() => { if (saverEnabled && draftKey() === key) flashSaved(); }).catch(() => {});
   }
 
   function deleteDraft(key) {
-    BC.storage.updateLocal((d) => {
+    clearTimeout(saveTimer); saveTimer = null;
+    return BC.storage.updateLocal((d) => {
       if (d.quizDrafts) delete d.quizDrafts[key];
     });
   }
@@ -146,13 +174,14 @@
     yes.addEventListener("click", () => { restore(draft); BC.injector.removeNode("bc-quiz-banner"); });
     const no = document.createElement("button");
     no.className = "bc-btn"; no.textContent = "Discard draft";
-    no.addEventListener("click", () => { deleteDraft(draftKey()); BC.injector.removeNode("bc-quiz-banner"); });
+    no.addEventListener("click", () => { deleteDraft(draftKey()).then(() => BC.injector.removeNode("bc-quiz-banner")).catch(() => {}); });
     banner.appendChild(msg); banner.appendChild(yes); banner.appendChild(no);
   }
 
   const debouncedSave = () => {
-    if (!debouncedSave._fn) debouncedSave._fn = BC.util.debounce(saveDraft, 800);
-    debouncedSave._fn();
+    if (!saverEnabled) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => { saveTimer = null; saveDraft(); }, 800);
   };
 
   function pruneOld() {
@@ -161,7 +190,7 @@
     const cutoff = Date.now() - MAX_AGE_MS;
     const stale = Object.keys(q).filter((k) => !q[k] || (q[k].savedAt || 0) < cutoff);
     if (stale.length) BC.storage.updateLocal((d) => {
-      for (const k of stale) if (d.quizDrafts) delete d.quizDrafts[k];
+      for (const k of stale) if (d.quizDrafts?.[k] && (d.quizDrafts[k].savedAt || 0) < cutoff) delete d.quizDrafts[k];
     });
   }
 
@@ -169,11 +198,13 @@
     const enabled = settings.productivity && settings.productivity.quizDraftSaver;
     const active = enabled && onTakePage(ctx.path) && !!document.querySelector("#questions");
     if (!active) {
+      stop();
       BC.injector.removeNode("bc-quiz-banner");
       BC.injector.removeNode("bc-quiz-dot");
       BC.injector.setStyle("bc-quiz-css", "");
       return;
     }
+    saverEnabled = true;
     BC.injector.setStyle("bc-quiz-css", CSS);
     BC.injector.ensureNode("bc-quiz-dot", document.body, () => {
       const dot = document.createElement("div");
@@ -188,10 +219,16 @@
       const inQuestions = (t) => t && t.closest && t.closest("#questions");
       bag.listen(document, "change", (e) => { if (inQuestions(e.target)) debouncedSave(); }, true);
       bag.listen(document, "input", (e) => { if (inQuestions(e.target)) debouncedSave(); }, true);
-      // Submitting the quiz makes the draft obsolete.
-      bag.listen(document, "click", (e) => {
-        if (e.target && e.target.closest && e.target.closest("#submit_quiz_button")) deleteDraft(draftKey());
+      // Submitting the quiz makes every draft of it obsolete, on every page. Wait
+      // until the event has run: a cancelled "submit anyway?" prompt prevents it,
+      // and the drafts must survive that. A timed auto-submit sends no event, which
+      // is why drafts are keyed by attempt.
+      bag.listen(document, "submit", (e) => {
+        if (!e.target || e.target.id !== "submit_quiz_form") return;
+        setTimeout(() => { if (!e.defaultPrevented) deleteQuizDrafts().catch(() => {}); });
       }, true);
+      // Back from a failed submit through the back/forward cache.
+      bag.listen(window, "pageshow", (e) => { if (e.persisted) submitted = false; });
     });
 
     pruneOld();
@@ -204,5 +241,6 @@
     styles: ["bc-quiz-css"],
     nodes: ["bc-quiz-banner", "bc-quiz-dot"],
     apply,
+    unmount: stop,
   });
 })();

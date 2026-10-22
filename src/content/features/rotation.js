@@ -11,19 +11,8 @@
 
   const DAY = 864e5;
 
-  function deepMerge(target, src) {
-    for (const k of Object.keys(src)) {
-      const v = src[k];
-      if (Array.isArray(v)) target[k] = v.slice();
-      else if (v && typeof v === "object") {
-        if (!target[k] || typeof target[k] !== "object") target[k] = {};
-        deepMerge(target[k], v);
-      } else target[k] = v;
-    }
-    return target;
-  }
-
   let rotating = false;
+  let failedPeriod = null;
 
   function apply(settings) {
     const r = settings.theming && settings.theming.rotation;
@@ -34,26 +23,43 @@
     if (!BC.storage.local) return;
     if (rotating) return;
 
-    const idx = Math.floor(Date.now() / (r.mode === "weekly" ? 7 * DAY : DAY));
+    // Periods count LOCAL days: dividing raw epoch ms rotated at UTC midnight, which
+    // is mid-afternoon or evening across the Americas.
+    const localDay = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / DAY);
+    const idx = r.mode === "weekly" ? Math.floor(localDay / 7) : localDay;
     const period = (r.mode || "daily") + ":" + idx;
     const last = BC.storage.local.lastRotation;
-    if (last && last.period === period) return;
+    if (last?.period === period || failedPeriod === period) return;
 
-    const pool = (settings.customThemes || []).concat(BC.PRESET_THEMES || []);
-    const id = r.themeIds[idx % r.themeIds.length];
-    const theme = pool.find((t) => t && t.id === id);
+    // Photo presets arrive with the settings workspace, not the page bundle.
+    const wanted = r.themeIds[idx % r.themeIds.length];
+    if (!BC.SettingsUI && BC.loadSettingsUI && !(settings.customThemes || []).concat(BC.PRESET_THEMES || []).some((t) => t && t.id === wanted)) {
+      rotating = true;
+      BC.loadSettingsUI().catch((e) => { failedPeriod = period; BC.diag.push("rotation", e); })
+        .then(() => { rotating = false; if (BC.requestApply) BC.requestApply(); });
+      return;
+    }
 
-    // Await the period record before writing settings: the settings write re-enters
-    // apply(), and this used to work only because saveLocal happens to assign
-    // `local` before its first await.
+    // The in-flight guard blocks re-entry until the theme and period both save.
+    // Record successful rotations in storage. Failed attempts wait for the next period.
     rotating = true;
-    BC.storage.updateLocal((d) => { d.lastRotation = { period, themeId: id }; })
-      .then(() => {
-        if (!theme || !theme.settings) return;
-        return BC.storage.update((d) => { deepMerge(d, theme.settings); })
-          .then(() => BC.toast.info("Theme rotated: " + (theme.name || id)));
+    let applied;
+    BC.storage.update((d) => {
+      applied = null;
+      const rotation = d.theming.rotation;
+      if (!rotation.enabled || !rotation.themeIds?.length) return;
+      const index = rotation.mode === "weekly" ? Math.floor(localDay / 7) : localDay;
+      const id = rotation.themeIds[index % rotation.themeIds.length];
+      const theme = (d.customThemes || []).concat(BC.PRESET_THEMES || []).find((t) => t && t.id === id);
+      if (!theme?.settings) return;
+      BC.applyTheme(d, theme);
+      applied = { period: (rotation.mode || "daily") + ":" + index, themeId: id, name: theme.name || id };
+    }).then(() => {
+        if (!applied) return;
+        return BC.storage.updateLocal((d) => { d.lastRotation = { period: applied.period, themeId: applied.themeId }; })
+          .then(() => BC.toast.info("Theme rotated: " + applied.name));
       })
-      .catch((e) => BC.diag.push("rotation", e))
+      .catch((e) => { failedPeriod = applied?.period || period; BC.diag.push("rotation", e); })
       .then(() => { rotating = false; });
   }
 

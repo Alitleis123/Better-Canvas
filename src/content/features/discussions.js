@@ -1,45 +1,103 @@
 /*
  * Better Canvas — discussion enhancements.
- * Collapse reply threads, jump to next unread, post/word stats, and
- * instructor-post highlighting on classic discussion topic pages.
+ * Jump to the next unread reply and see reply / word counts on a discussion topic,
+ * plus (classic discussions only) collapsing reply threads and highlighting
+ * instructor posts.
+ *
+ * Canvas has two discussion UIs. The redesign (#discussion-redesign-layout, React)
+ * already has its own Collapse Threads button, an Unread filter and TEACHER / AUTHOR
+ * tags, so only what it lacks is added there. The classic page keeps the full set.
  */
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
   BC.features = BC.features || {};
 
+  const REDESIGN = "#discussion-redesign-layout";
+  const CLASSIC = "#discussion_container";
+  const R_ENTRY = '[data-testid="discussion-entry-container"]';
+  const R_UNREAD = '[data-testid="is-unread"]';
+
+  // Classic-page decorations live on Canvas's own nodes, so they stay in the page.
   const CSS = `
-    .bc-disc-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
-    .bc-disc-meta { font-size: 12px; color: var(--bc-muted, #6b7280); }
     .bc-instr-post { border-left: 3px solid var(--bc-accent, #0374b5) !important; padding-left: 8px; }
     .bc-instr-tag {
       display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px;
       background: var(--bc-accent, #0374b5); color: var(--bc-accent-contrast, #fff); font-size: var(--bc-text-3xs, 10px); font-weight: 700; vertical-align: middle;
     }
-    .bc-flash { outline: 2px solid var(--bc-accent, #0374b5); outline-offset: 2px; }
   `;
   const COLLAPSE_CSS = "#discussion_subentries .discussion-entries .discussion-entries { display: none !important; }";
 
+  const BAR_CSS = `
+:host { display: block; margin: 0 0 var(--bc-space-3, 12px); }
+.db { display: flex; align-items: center; gap: var(--bc-space-2, 8px); flex-wrap: wrap; animation: db-in var(--bc-dur-3, 220ms) var(--bc-ease-out, ease); }
+.db__meta { display: inline-flex; align-items: center; gap: 6px; font-size: var(--bc-text-xs, 12px); color: var(--bc-muted, #6b6b74); font-variant-numeric: tabular-nums; }
+.db__meta b { color: var(--bc-text, #18181b); font-weight: var(--bc-weight-semibold, 600); }
+.db__meta .db__unread { color: var(--bc-accent-text, #4338ca); }
+@keyframes db-in { from { opacity: 0; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .db { animation: none; } }
+`;
+
   let collapsed = false;
 
-  function jumpToUnread() {
-    const unread = Array.from(document.querySelectorAll(".discussion_entry.unread, .entry.unread .discussion_entry"));
-    if (!unread.length) { BC.toast.info("No unread replies"); return; }
-    const y = window.scrollY;
-    const next = unread.find((el) => el.getBoundingClientRect().top + window.scrollY > y + 60) || unread[0];
-    next.scrollIntoView({ behavior: "smooth", block: "center" });
-    next.classList.add("bc-flash");
-    setTimeout(() => next.classList.remove("bc-flash"), 1600);
+  function layout() {
+    if (document.querySelector(REDESIGN)) return "redesign";
+    if (document.querySelector(CLASSIC)) return "classic";
+    return null;   // not rendered yet — never fall back to <body>
   }
 
-  function stats() {
-    const posts = document.querySelectorAll("#discussion_subentries .discussion_entry").length;
-    const unread = document.querySelectorAll(".discussion_entry.unread, .entry.unread").length;
-    let words = 0;
-    document.querySelectorAll("#discussion_subentries .message, #discussion_topic .message").forEach((m) => {
-      words += (m.textContent.trim().match(/\S+/g) || []).length;
-    });
-    return { posts, unread, words };
+  function unreadEntries(kind) {
+    if (kind === "redesign") {
+      return [...document.querySelectorAll(R_UNREAD)].map((u) => u.closest(R_ENTRY)).filter(Boolean);
+    }
+    return [...document.querySelectorAll(".discussion_entry.unread, .entry.unread .discussion_entry")];
+  }
+
+  function jumpToUnread(kind) {
+    const unread = unreadEntries(kind);
+    if (!unread.length) {
+      // Canvas's counter can still show unread replies inside collapsed threads or
+      // on other pages. Say where they are rather than "none" beside "3 unread".
+      const counted = stats(kind).unread > 0;
+      BC.toast.info(counted ? "The unread replies are in collapsed threads or on another page."
+        : document.querySelector('[data-testid="pagination"]') ? "No unread replies on this page" : "No unread replies");
+      return;
+    }
+    const y = window.scrollY;
+    const next = unread.find((el) => el.getBoundingClientRect().top + window.scrollY > y + 80) || unread[0];
+    const reduced = BC.ui && BC.ui.motion.reduced();
+    next.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
+    // A brief ring on the reply, drawn with the animation API so nothing is written
+    // to Canvas's element.
+    if (!reduced && next.animate) {
+      next.animate([{ boxShadow: "0 0 0 2px var(--bc-accent, #4f46e5)" }, { boxShadow: "0 0 0 2px transparent" }],
+        { duration: 1600, easing: "ease-out", delay: 250 });
+    }
+  }
+
+  const countWords = (nodes) => [...nodes].reduce((n, m) => n + (m.textContent.trim().match(/\S+/g) || []).length, 0);
+
+  function stats(kind) {
+    if (kind === "redesign") {
+      const entries = document.querySelectorAll(R_ENTRY);
+      // Canvas's own counter covers every page of replies; the DOM only holds one.
+      const text = (document.querySelector('[data-testid="replies-counter"]') || {}).textContent || "";
+      const num = (re) => { const m = text.match(re); return m ? parseInt(m[1].replace(/,/g, ""), 10) : null; };
+      const posts = num(/([\d,]+)\s*repl/i);
+      const unread = num(/([\d,]+)\s*unread/i);
+      return {
+        posts: posts != null ? posts : entries.length,
+        unread: unread != null ? unread : document.querySelectorAll(R_ENTRY + " " + R_UNREAD).length,
+        words: countWords(document.querySelectorAll(R_ENTRY + " .user_content")),
+        paged: !!document.querySelector('[data-testid="pagination"]'),
+      };
+    }
+    return {
+      posts: document.querySelectorAll("#discussion_subentries .discussion_entry").length,
+      unread: document.querySelectorAll(".discussion_entry.unread, .entry.unread").length,
+      words: countWords(document.querySelectorAll("#discussion_subentries .message, #discussion_topic .message")),
+      paged: false,
+    };
   }
 
   async function highlightInstructors(courseId) {
@@ -57,6 +115,7 @@
         if (!entry.querySelector(".bc-instr-tag")) {
           const tag = document.createElement("span");
           tag.className = "bc-instr-tag";
+          tag.setAttribute("data-bc-node", "bc-instr-tag");   // declared below, so teardown removes it
           tag.textContent = "Instructor";
           a.insertAdjacentElement("afterend", tag);
         }
@@ -64,75 +123,90 @@
     } catch (e) { BC.diag.push("discussions", e); }
   }
 
-  function buildBar(bar, d) {
-    bar.innerHTML = "";
-    if (d.collapse) {
-      const btn = document.createElement("button");
-      btn.className = "bc-btn";
-      btn.textContent = collapsed ? "Expand replies" : "Collapse replies";
+  // Undoes the highlight on Canvas's own entries — the class and the "checked"
+  // stamp live on nodes we don't own, so no node/style teardown reaches them.
+  function clearInstructorMarks() {
+    BC.injector.removeNode("bc-instr-tag");
+    for (const el of document.querySelectorAll("[data-bc-instr-checked]")) {
+      el.classList.remove("bc-instr-post");
+      delete el.dataset.bcInstrChecked;
+    }
+  }
+
+  function buildBar(body, d, kind) {
+    const kids = [];
+    // The redesign has its own Collapse Threads button.
+    if (d.collapse && kind === "classic") {
+      const btn = BC.ui.button(collapsed ? "Expand replies" : "Collapse replies", { size: "sm", icon: collapsed ? "maximize" : "minus" });
       btn.addEventListener("click", () => {
         collapsed = !collapsed;
         BC.injector.setStyle("bc-disc-collapse", collapsed ? COLLAPSE_CSS : "");
-        btn.textContent = collapsed ? "Expand replies" : "Collapse replies";
+        btn.replaceChildren(BC.ui.icon(collapsed ? "maximize" : "minus"), BC.ui.el("span", { text: collapsed ? "Expand replies" : "Collapse replies" }));
       });
-      bar.appendChild(btn);
+      kids.push(btn);
     }
-    if (d.jumpToUnread) {
-      const btn = document.createElement("button");
-      btn.className = "bc-btn";
-      btn.textContent = "Next unread ↓";
-      btn.addEventListener("click", jumpToUnread);
-      bar.appendChild(btn);
-    }
-    if (d.wordCount) {
-      const meta = document.createElement("span");
-      meta.className = "bc-disc-meta";
-      bar.appendChild(meta);
-    }
+    if (d.jumpToUnread) kids.push(BC.ui.button("Next unread", { size: "sm", icon: "chevron-down", onClick: () => jumpToUnread(kind) }));
+    if (d.wordCount) kids.push(BC.ui.el("span", { class: "db__meta", "aria-live": "polite" }));
+    body.replaceChildren(BC.ui.el("div", { class: "db" }, kids));
+  }
+
+  function paintMeta(body, s) {
+    const meta = body.querySelector(".db__meta");
+    if (!meta) return;
+    const sig = s.posts + "/" + s.unread + "/" + s.words + "/" + s.paged;
+    if (meta.dataset.sig === sig) return;
+    meta.dataset.sig = sig;
+    const b = (t) => BC.ui.el("b", { text: t });
+    meta.replaceChildren(...[
+      b(s.posts.toLocaleString()), BC.ui.el("span", { text: s.posts === 1 ? "reply" : "replies" }),
+      s.unread ? BC.ui.el("span", { class: "db__unread", text: "· " + s.unread.toLocaleString() + " unread" }) : null,
+      s.words ? BC.ui.el("span", { text: "· " + s.words.toLocaleString() + " words" + (s.paged ? " on this page" : "") }) : null,
+    ].filter(Boolean));
+  }
+
+  function removeBar() {
+    BC.injector.removeNode("bc-disc-bar");
   }
 
   function apply(settings, ctx) {
     const d = settings.discussions || {};
     const anyOn = d.collapse || d.jumpToUnread || d.wordCount || d.instructorHighlight;
     const onTopic = ctx.page === "discussions" && /\/discussion_topics\/\d+/.test(ctx.path);
-    if (!anyOn || !onTopic) {
+    const kind = onTopic ? layout() : null;
+    if (!anyOn || !kind) {
       collapsed = false;
-      BC.injector.removeNode("bc-disc-bar");
+      removeBar();
       BC.injector.setStyle("bc-disc-css", "");
       BC.injector.setStyle("bc-disc-collapse", "");
+      clearInstructorMarks();
       return;
     }
-    BC.injector.setStyle("bc-disc-css", CSS);
+    BC.injector.setStyle("bc-disc-css", kind === "classic" ? CSS : "");
 
-    if (d.collapse || d.jumpToUnread || d.wordCount) {
-      const host = document.querySelector("#discussion_container, #content") || document.body;
-      const bar = BC.injector.ensureNode("bc-disc-bar", host, () => {
-        const div = document.createElement("div");
-        div.className = "bc-disc-bar";
-        host.prepend(div);
-        return div;
-      });
-      const sig = [!!d.collapse, !!d.jumpToUnread, !!d.wordCount].join(",");
-      if (bar.dataset.bcSig !== sig) { bar.dataset.bcSig = sig; buildBar(bar, d); }
-      if (d.wordCount) {
-        const s = stats();
-        const meta = bar.querySelector(".bc-disc-meta");
-        if (meta) meta.textContent =
-          s.posts + " repl" + (s.posts === 1 ? "y" : "ies") +
-          (s.unread ? " · " + s.unread + " unread" : "") +
-          " · " + s.words.toLocaleString() + " words";
-      }
+    const s = stats(kind);
+    const wantBar = (d.jumpToUnread || d.wordCount || (d.collapse && kind === "classic")) && s.posts > 0;
+    if (wantBar) {
+      const anchor = kind === "redesign" ? document.querySelector(REDESIGN) : document.querySelector(CLASSIC).firstElementChild;
+      const parent = kind === "redesign" ? anchor.parentNode : document.querySelector(CLASSIC);
+      const m = BC.ui.mount("bc-disc-bar", { css: BAR_CSS, place: (host) => parent.insertBefore(host, anchor) });
+      const sig = [kind, !!d.collapse, !!d.jumpToUnread, !!d.wordCount].join(",");
+      if (m.host.dataset.bcSig !== sig) { m.host.dataset.bcSig = sig; buildBar(m.body, d, kind); }
+      paintMeta(m.body, s);
     } else {
-      BC.injector.removeNode("bc-disc-bar");
+      // Nothing to jump to or count on a topic without replies (most announcements).
+      removeBar();
     }
 
-    if (d.instructorHighlight && ctx.courseId) highlightInstructors(ctx.courseId);
+    // The redesign tags instructors itself.
+    if (d.instructorHighlight && kind === "classic" && ctx.courseId) highlightInstructors(ctx.courseId);
+    else clearInstructorMarks();
   }
 
   BC.registry.register({
     id: "discussions",
     styles: ["bc-disc-css", "bc-disc-collapse"],
-    nodes: ["bc-disc-bar"],
+    nodes: ["bc-disc-bar", "bc-instr-tag"],
     apply,
+    unmount() { collapsed = false; clearInstructorMarks(); },
   });
 })();

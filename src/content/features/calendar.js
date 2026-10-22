@@ -5,8 +5,30 @@
   BC.features = BC.features || {};
 
   function icsEscape(s) {
-    return String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+    return String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,")
+      .replace(/\r\n|\r|\n/g, "\\n");
   }
+
+  // RFC 5545 §3.1: content lines longer than 75 octets must be folded (CRLF plus
+  // one space). Long assignment titles produced lines strict importers reject.
+  const utf8 = new TextEncoder();
+  function icsFold(line) {
+    if (utf8.encode(line).length <= 75) return line;
+    const out = [];
+    let cur = "", len = 0;
+    for (const ch of line) {
+      const n = utf8.encode(ch).length;
+      // Continuation lines start with the folding space, so they hold 74 octets.
+      if (len + n > (out.length ? 74 : 75)) { out.push(cur); cur = ""; len = 0; }
+      cur += ch; len += n;
+    }
+    out.push(cur);
+    return out.join("\r\n ");
+  }
+
+  // Announcements are posts, not things that happen or come due.
+  function isDated(it) { return it.plannable_type !== "announcement"; }
+
   function icsDate(d) {
     const x = new Date(d);
     const pad = (n) => String(n).padStart(2, "0");
@@ -25,15 +47,28 @@
       const local = (BC.storage.local && BC.storage.local.calendarEvents) || [];
       const lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Better Canvas//EN","CALSCALE:GREGORIAN"];
       for (const it of items) {
-        const due = it.plannable_date || (it.plannable && it.plannable.due_at); if (!due) continue;
-        const uid = "bc-" + (it.plannable_id || (it.plannable && it.plannable.id) || Math.random()) + "@better-canvas";
+        if (!isDated(it)) continue;
+        const pl = it.plannable || {};
+        const due = it.plannable_date || pl.due_at; if (!due) continue;
+        // Ids are only unique per type: an assignment and a discussion can share one.
+        const uid = "bc-" + (it.plannable_type || "item") + "-" + (it.plannable_id || pl.id || Math.random()) + "@" + location.host;
+        // Calendar events keep their real span, and all-day events stay all-day.
+        // Due work is a 30-minute block from the due time.
+        const allDay = it.plannable_type === "calendar_event" && pl.all_day;
+        const ymd = (d) => BC.dt.ymd(new Date(d)).replace(/-/g, "");   // the local calendar day
+        // The end date is exclusive: the next calendar day, by date rather than by
+        // adding 24 hours, which lands on the same day when clocks go back.
+        const dayAfter = (d) => { const x = new Date(d); x.setDate(x.getDate() + 1); return x; };
+        const span = allDay ? ["DTSTART;VALUE=DATE:" + ymd(pl.start_at || due), "DTEND;VALUE=DATE:" + ymd(dayAfter(pl.end_at || pl.start_at || due))]
+          : ["DTSTART:" + icsDate(pl.start_at || due), "DTEND:" + icsDate(pl.end_at || new Date(new Date(due).getTime() + 30 * 60 * 1000))];
+        const url = it.html_url ? new URL(it.html_url, location.origin).href : "";
         lines.push("BEGIN:VEVENT",
           "UID:" + uid,
           "DTSTAMP:" + icsDate(new Date()),
-          "DTSTART:" + icsDate(due),
-          "DTEND:" + icsDate(new Date(new Date(due).getTime() + 30 * 60 * 1000)),
-          "SUMMARY:" + icsEscape((it.plannable && it.plannable.title) || "Assignment"),
+          ...span,
+          "SUMMARY:" + icsEscape(pl.title || "Assignment"),
           "DESCRIPTION:" + icsEscape(it.context_name || ""),
+          ...(url ? ["URL:" + url] : []),
           "END:VEVENT");
       }
       for (const ev of local) {
@@ -47,12 +82,14 @@
           "END:VEVENT");
       }
       lines.push("END:VCALENDAR");
-      const blob = new Blob([lines.join("\r\n")], { type: "text/calendar" });
+      const blob = new Blob([lines.map(icsFold).join("\r\n") + "\r\n"], { type: "text/calendar" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = "better-canvas.ics"; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
-      BC.toast.success("Exported " + items.length + " events");
+      // Counted from what was written: items without a date are skipped above.
+      const n = lines.filter((l) => l === "BEGIN:VEVENT").length;
+      BC.toast.success("Exported " + n + " event" + (n === 1 ? "" : "s"));
     } catch (e) { BC.toast.error("Export failed: " + e.message); }
   }
 
@@ -79,9 +116,12 @@
     const today = new Date();
     const first = new Date(today.getFullYear(), today.getMonth(), 1);
     const last  = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    // The query runs to the START of next month. Ending it at `last` (00:00 on the
+    // last day) silently dropped everything due on the final day of the month.
+    const next  = new Date(today.getFullYear(), today.getMonth() + 1, 1);
     let items = [];
     try {
-      items = await BC.api.plannerItems(first.toISOString(), last.toISOString());
+      items = await BC.api.plannerItems(first.toISOString(), next.toISOString());
     } catch (e) {
       // A swallowed failure rendered an empty month grid, which is indistinguishable
       // from "nothing is due" — the most misleading failure mode in the extension.
@@ -94,7 +134,9 @@
     const dueByDay = new Set();
     for (const it of items) {
       const d = it.plannable_date || (it.plannable && it.plannable.due_at);
-      if (d) dueByDay.add(new Date(d).getDate());
+      if (!d || !isDated(it)) continue;
+      const when = new Date(d);
+      if (when.getMonth() === today.getMonth() && when.getFullYear() === today.getFullYear()) dueByDay.add(when.getDate());
     }
     let html = `<h4>${BC.dt.MONTHS[today.getMonth()]} ${today.getFullYear()}</h4><div class="bc-mini-grid">`;
     const startDow = first.getDay();
@@ -117,7 +159,7 @@
       return;
     }
     BC.injector.setStyle("bc-mini-cal-css", CSS);
-    const target = document.querySelector("#right-side, #dashboard, #DashboardCard_Container");
+    const target = BC.util.firstOf(["#right-side", "#dashboard", "#DashboardCard_Container"]);
     if (!target) return;
     const panel = BC.injector.ensureNode("bc-mini-cal", target.parentNode || target, () => {
       const d = document.createElement("div");

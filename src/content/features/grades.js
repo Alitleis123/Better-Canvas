@@ -17,31 +17,88 @@
     return { points: 0, letter: "F" };
   };
 
-  BC.grades.computeTotal = function (groups) {
-    // Weighted (sum of group_weight) or points-based.
-    const hasWeights = groups.some((g) => g.group_weight);
-    if (hasWeights) {
-      let num = 0, denom = 0;
-      for (const g of groups) {
-        const asns = (g.assignments || []).filter((a) => !a.omit_from_final_grade);
-        let pts = 0, poss = 0;
-        for (const a of asns) {
-          const sub = a.submission;
-          if (!sub || sub.score == null) continue;
-          pts += sub.score; poss += a.points_possible || 0;
-        }
-        if (poss > 0) { num += (pts / poss) * (g.group_weight || 0); denom += (g.group_weight || 0); }
-      }
-      return denom > 0 ? (num / denom) * 100 : null;
-    }
-    let pts = 0, poss = 0;
-    for (const g of groups) for (const a of (g.assignments || [])) {
-      if (a.omit_from_final_grade) continue;
+  function keptAssignments(group) {
+    const graded = (group.assignments || []).filter((a) => {
       const sub = a.submission;
-      if (!sub || sub.score == null) continue;
-      pts += sub.score; poss += a.points_possible || 0;
+      return !a.omit_from_final_grade && a.workflow_state !== "unpublished" &&
+        !(a.submission_types || []).includes("not_graded") && sub && !sub.excused &&
+        sub.workflow_state !== "pending_review" && sub.score != null && sub.score !== "" && Number.isFinite(Number(sub.score));
+    });
+    const rules = group.rules || {};
+    const never = new Set((rules.never_drop || []).map(String));
+    const fixed = graded.filter((a) => never.has(String(a.id)));
+    let eligible = graded.filter((a) => !never.has(String(a.id)));
+    if (!eligible.length) return fixed;
+    const count = (n) => Number.isFinite(Number(n)) ? Math.max(0, Math.floor(Number(n))) : 0;
+    const low = Math.min(count(rules.drop_lowest), eligible.length - 1);
+    const high = low + count(rules.drop_highest) >= eligible.length ? 0 : count(rules.drop_highest);
+    // Canvas drops by impact on the group's points ratio, not by assignment
+    // percentage. Apply lowest first, then highest, and retain a droppable score.
+    // https://community.instructure.com/en/kb/articles/660670-how-do-i-create-rules-for-an-assignment-group
+    // Order and limits match Instructure's AssignmentGroupGradeCalculator:
+    // https://github.com/instructure/canvas-lms/blob/master/ui/shared/grading/AssignmentGroupGradeCalculator.ts
+    if (low) eligible = selectRatio(eligible, fixed, eligible.length - low, true);
+    if (high) eligible = selectRatio(eligible, fixed, eligible.length - high, false);
+    return fixed.concat(eligible);
+  }
+  const points = (a) => Math.max(0, Number(a.points_possible) || 0);
+  const score = (a) => Number(a.submission.score);
+  const idCollator = new Intl.Collator("en", { numeric: true });
+  function selectRatio(eligible, fixed, keep, maximize) {
+    const candidates = eligible.map((a) => ({ assignment: a, earned: score(a), possible: points(a), id: String(a.id) }));
+    const fixedEarned = fixed.reduce((sum, a) => sum + score(a), 0);
+    const fixedPossible = fixed.reduce((sum, a) => sum + points(a), 0);
+    const tie = (a, b) => idCollator.compare(a.id, b.id);
+    const totalPossible = fixedPossible + candidates.reduce((sum, a) => sum + a.possible, 0);
+    if (!totalPossible) return candidates.sort((a, b) => (maximize ? b.earned - a.earned : a.earned - b.earned) || tie(a, b)).slice(0, keep).map((a) => a.assignment);
+    // Fractional programming: rank score - q * possible, then try the selected
+    // subset's exact ratio. Its zero residual proves the subset is optimal.
+    // Usually this takes two or three sorts instead of 80 binary-search sorts.
+    let q = (fixedEarned + candidates.reduce((sum, a) => sum + a.earned, 0)) / totalPossible;
+    let best = null, bestRatio = maximize ? -Infinity : Infinity;
+    for (let iteration = 0; iteration < 80; iteration++) {
+      for (const a of candidates) a.residual = a.earned - q * a.possible;
+      const ranked = candidates.slice().sort((a, b) => (maximize ? b.residual - a.residual : a.residual - b.residual) || tie(a, b));
+      const chosen = ranked.slice(0, keep);
+      if (!fixedPossible && !chosen.some((a) => a.possible > 0)) {
+        const pointed = ranked.find((a) => a.possible > 0);
+        if (pointed) chosen[chosen.length - 1] = pointed;
+      }
+      const possible = fixedPossible + chosen.reduce((sum, a) => sum + a.possible, 0);
+      const earned = fixedEarned + chosen.reduce((sum, a) => sum + a.earned, 0);
+      const ratio = earned / possible;
+      if (best === null || (maximize ? ratio > bestRatio : ratio < bestRatio)) { best = chosen; bestRatio = ratio; }
+      if (Math.abs(ratio - q) <= 1e-12 * Math.max(1, Math.abs(ratio))) break;
+      q = ratio;
     }
-    return poss > 0 ? (pts / poss) * 100 : null;
+    return best.map((a) => a.assignment);
+  }
+
+  const groupTotals = new WeakMap();
+  function groupTotal(group) {
+    // Include the fields that affect eligibility and drops. In-place API updates
+    // invalidate this entry too; object identity alone would keep stale grades.
+    const signature = JSON.stringify([group.rules, (group.assignments || []).map((a) => [a.id, a.points_possible,
+      a.omit_from_final_grade, a.workflow_state, a.submission_types, a.submission?.score,
+      a.submission?.excused, a.submission?.workflow_state])]);
+    const cached = groupTotals.get(group);
+    if (cached?.signature === signature) return cached;
+    const kept = keptAssignments(group);
+    const result = { signature, pts: kept.reduce((sum, a) => sum + score(a), 0), poss: kept.reduce((sum, a) => sum + points(a), 0) };
+    groupTotals.set(group, result);
+    return result;
+  }
+
+  BC.grades.computeTotal = function (groups) {
+    const weighted = groups.some((g) => g.group_weight);
+    let earned = 0, possible = 0;
+    for (const group of groups) {
+      const { pts, poss } = groupTotal(group);
+      if (weighted) {
+        if (poss > 0) { earned += pts / poss * (group.group_weight || 0); possible += group.group_weight || 0; }
+      } else { earned += pts; possible += poss; }
+    }
+    return possible > 0 ? earned / possible * 100 : null;
   };
 
   const CSS = `
@@ -78,6 +135,18 @@
     return BC.api.assignmentGroups(courseId);
   }
 
+  // Same rule as the dashboard pill and notifications: current score, else final.
+  function canvasScore(courseId) {
+    return Promise.resolve().then(() => BC.api.coursesWithScores()).then((list) => {
+      const c = list.find((x) => String(x.id) === String(courseId));
+      const e = (c && c.enrollments || [])[0] || {};
+      const s = e.computed_current_score != null ? e.computed_current_score : e.computed_final_score;
+      return s == null ? null : Number(s);
+    }).catch(() => null);
+  }
+
+  const finalInputs = new Map();   // courseId -> the "need on final" inputs as typed
+
   function donutSVG(groups, hasWeights) {
     // Show weight distribution
     if (!hasWeights) return "";
@@ -94,8 +163,8 @@
     groups.forEach((g, i) => {
       const w = (g.group_weight || 0) / total;
       const dash = C * w;
-      const off = C - dash - cum;
-      arcs += `<circle cx="30" cy="30" r="${R}" fill="none" stroke="${palette[i%palette.length]}" stroke-width="8" stroke-dasharray="${dash} ${C-dash}" stroke-dashoffset="${off}" transform="rotate(-90 30 30)"/>`;
+      // A negative offset starts this arc where the previous one ended.
+      arcs += `<circle cx="30" cy="30" r="${R}" fill="none" stroke="${palette[i%palette.length]}" stroke-width="8" stroke-dasharray="${dash} ${C-dash}" stroke-dashoffset="${-cum}" transform="rotate(-90 30 30)"/>`;
       cum += dash;
       items += `<li><span style="background:${palette[i%palette.length]}"></span>${BC.util.escapeHtml(g.name)} — ${Math.round(w*100)}%</li>`;
     });
@@ -133,7 +202,7 @@
   }
 
   function render(courseId, settings) {
-    const target = document.querySelector("#grades_summary, #student-grades-right-content, #GradeSummarySelectMenuGroup, #main");
+    const target = BC.util.firstOf(["#grades_summary", "#student-grades-right-content", "#GradeSummarySelectMenuGroup", "#main"]);
     if (!target) return;
     BC.injector.setStyle("bc-grade-tools", CSS);
     const panel = BC.injector.ensureNode("bc-grade-tools", target.parentNode || target, () => {
@@ -143,10 +212,13 @@
       return d;
     });
     if (!panel.childElementCount) panel.replaceChildren(BC.ui.skeleton(4));
-    ensureGroups(courseId).then((groups) => {
-      const total = BC.grades.computeTotal(groups);
+    Promise.all([ensureGroups(courseId), canvasScore(courseId)]).then(([groups, canvas]) => {
+      // Canvas's own current score, the number the dashboard, goal alerts and
+      // history use too. Our estimate only fills in when Canvas hides it.
+      const total = canvas != null ? canvas : BC.grades.computeTotal(groups);
+      const estimated = canvas == null && total != null;
       const hasWeights = groups.some((g) => g.group_weight);
-      const goal = ((settings.grades.goals || {})[courseId] || {}).target || "";
+      const goal = BC.gradeNumber(((settings.grades.goals || {})[courseId] || {}).target);
       const missing = [];
       for (const g of groups) for (const a of (g.assignments || [])) {
         const sub = a.submission;
@@ -157,13 +229,13 @@
 
       // History plus a virtual point for today (the write above lands async).
       let hist = ((BC.storage.local && BC.storage.local.gradeHistory) || {})[courseId] || [];
-      const today = new Date().toISOString().slice(0, 10);
+      const today = BC.dt.ymd(new Date());
       if (total != null && !hist.some((e) => e.date === today)) {
         hist = hist.concat([{ date: today, score: +total.toFixed(3) }]);
       }
 
       // Skip the rebuild when nothing changed or while the user is typing in the panel.
-      const sig = [courseId, total == null ? "" : total.toFixed(3), goal, missing.length, hist.length,
+      const sig = [courseId, total == null ? "" : total.toFixed(3), estimated ? 1 : 0, goal, missing.length, hist.length,
                    settings.grades.showWeightDonut ? 1 : 0, settings.grades.showMissingWarning ? 1 : 0,
                    settings.grades.showTrendChart ? 1 : 0].join("|");
       const ae = document.activeElement;
@@ -175,15 +247,15 @@
         <h3>Grade Tools</h3>
         <div class="bc-gt-row">
           <div class="bc-gt-card">
-            <div class="bc-gt-label">Current course grade</div>
+            <div class="bc-gt-label">${estimated ? "Estimated course grade" : "Current course grade"}</div>
             <div class="bc-gt-total">${total != null ? total.toFixed(2) + "%" : "—"}</div>
             <div class="bc-gt-goal">Goal:
-              <input type="number" min="0" max="150" step="0.5" value="${goal}" data-goal>
+              <input type="number" min="0" max="150" step="0.5" aria-label="Course grade goal percent" data-goal>
               <span data-goal-status></span>
             </div>
             <div class="bc-gt-final">
-              Need on final: <input type="number" placeholder="target %" data-target>
-              of weight <input type="number" placeholder="weight %" data-weight>
+              Need on final: <input type="number" min="0" max="150" placeholder="target %" aria-label="Final course target percent" data-target>
+              of weight <input type="number" min="0" max="100" placeholder="weight %" aria-label="Final exam weight percent" data-weight>
               <span data-final-needed></span>
             </div>
           </div>
@@ -197,34 +269,41 @@
       `;
 
       const goalInp = panel.querySelector("[data-goal]");
+      goalInp.value = goal === null ? "" : String(goal);
       const goalStatus = panel.querySelector("[data-goal-status]");
       function refreshGoalStatus() {
-        const g = parseFloat(goalInp.value);
-        if (!isFinite(g) || total == null) { goalStatus.textContent = ""; return; }
+        const g = BC.gradeNumber(goalInp.value);
+        if (g === null || total == null) { goalStatus.textContent = ""; return; }
         goalStatus.textContent = total >= g ? "  ✓ on track" : "  ✗ below goal";
         goalStatus.style.color = total >= g ? "var(--bc-success)" : "var(--bc-danger)";
       }
       refreshGoalStatus();
       goalInp.addEventListener("change", () => {
-        const g = parseFloat(goalInp.value);
-        BC.storage.update((d) => { d.grades.goals[courseId] = { target: isFinite(g) ? g : null, notify: true }; });
+        const g = BC.gradeNumber(goalInp.value);
+        BC.storage.update((d) => { d.grades.goals[courseId] = { target: g, notify: true }; });
         refreshGoalStatus();
       });
 
       const target2 = panel.querySelector("[data-target]");
       const weight = panel.querySelector("[data-weight]");
       const out = panel.querySelector("[data-final-needed]");
+      // The panel rebuilds after a goal save or an auto-refresh. Keep what was typed.
+      const kept = finalInputs.get(courseId) || {};
+      target2.value = kept.t || ""; weight.value = kept.w || "";
       function compute() {
-        const t = parseFloat(target2.value), w = parseFloat(weight.value);
-        if (!isFinite(t) || !isFinite(w) || w <= 0 || total == null) { out.textContent = ""; return; }
+        finalInputs.set(courseId, { t: target2.value, w: weight.value });
+        const t = BC.gradeNumber(target2.value), w = BC.gradeNumber(weight.value, 100);
+        if (t === null || w === null || w <= 0 || total == null) { out.textContent = ""; return; }
         // needed = (target - current * (1 - w/100)) / (w/100)
         const wf = w / 100;
         const current = total;
         const needed = (t - current * (1 - wf)) / wf;
-        out.textContent = ` = ${needed.toFixed(1)}%`;
+        out.textContent = needed > 100 ? ` = ${needed.toFixed(1)}%, more than a perfect score` :
+          needed <= 0 ? " = already secured" : ` = ${needed.toFixed(1)}%`;
       }
       target2.addEventListener("input", compute);
       weight.addEventListener("input", compute);
+      compute();
     }).catch((e) => {
       BC.util.warn("grades", e);
       panel.dataset.bcSig = "";
@@ -235,7 +314,7 @@
   // ---- Rubric predictor (assignment pages) ----
 
   function computeTotalWith(groups, assignmentId, score) {
-    const cloned = groups.map((g) => Object.assign({}, g, {
+    const cloned = groups.map((g) => !(g.assignments || []).some((a) => String(a.id) === String(assignmentId)) ? g : Object.assign({}, g, {
       assignments: (g.assignments || []).map((a) =>
         String(a.id) === String(assignmentId) ? Object.assign({}, a, { submission: { score } }) : a),
     }));
@@ -251,12 +330,13 @@
     let rows = "";
     for (const c of rubric) {
       const assessed = assessment[c.id] && assessment[c.id].points;
-      const start = draft[c.id] != null ? draft[c.id] : (assessed != null ? assessed : c.points || 0);
+      const max = BC.gradeNumber(c.points, Number.MAX_SAFE_INTEGER) || 0;
+      const start = BC.gradeNumber(draft[c.id], max) ?? BC.gradeNumber(assessed, max) ?? max;
       rows += `
         <div class="bc-rubric-crit" data-crit="${BC.util.escapeHtml(String(c.id))}" data-max="${c.points || 0}">
           <label><span>${BC.util.escapeHtml(c.description || "Criterion")}</span>
             <span><b data-val>${start}</b> / ${c.points || 0}</span></label>
-          <input type="range" min="0" max="${c.points || 0}" step="0.5" value="${start}">
+          <input type="range" min="0" max="${max}" step="0.5" value="${start}" aria-label="${BC.util.escapeHtml(c.description || "Criterion")} points">
         </div>`;
     }
 
@@ -267,22 +347,25 @@
       <div class="bc-rubric-impact" data-impact></div>
     `;
 
-    const saveDraft = BC.util.debounce((values) => {
+    let edits = {};
+    const saveDraft = BC.util.debounce(() => {
+      const patch = { ...edits };
       BC.storage.updateLocal((d) => {
         const rd = (d.rubricDrafts = d.rubricDrafts || {});
-        rd[aid] = values;
-      });
+        Object.assign((rd[aid] = rd[aid] || {}), patch);
+      }).then(() => {
+        for (const key of Object.keys(patch)) if (edits[key] === patch[key]) delete edits[key];
+      }).catch(() => {});
     }, 500);
 
     const totalEl = panel.querySelector("[data-total]");
     const impactEl = panel.querySelector("[data-impact]");
+    const current = groups ? BC.grades.computeTotal(groups) : null;
     function refresh() {
-      const values = {};
       let sum = 0;
       for (const row of panel.querySelectorAll(".bc-rubric-crit")) {
         const v = parseFloat(row.querySelector("input").value) || 0;
         row.querySelector("[data-val]").textContent = v;
-        values[row.dataset.crit] = v;
         sum += v;
       }
       const pct = maxTotal > 0 ? (sum / maxTotal) * 100 : 0;
@@ -290,23 +373,26 @@
       if (groups) {
         const points = asn.points_possible || maxTotal;
         const scaled = maxTotal > 0 ? (sum / maxTotal) * points : 0;
-        const current = BC.grades.computeTotal(groups);
         const projected = computeTotalWith(groups, aid, scaled);
         if (projected != null) {
           impactEl.textContent = `Course grade if scored: ${projected.toFixed(2)}%` +
             (current != null ? ` (now ${current.toFixed(2)}%)` : "");
         }
       }
-      saveDraft(values);
+      if (Object.keys(edits).length) saveDraft();
     }
+    let frame = null;
     panel.addEventListener("input", (e) => {
-      if (e.target && e.target.type === "range") refresh();
+      if (e.target?.type !== "range") return;
+      edits[e.target.closest(".bc-rubric-crit").dataset.crit] = parseFloat(e.target.value) || 0;
+      if (frame !== null) return;
+      frame = requestAnimationFrame(() => { frame = null; if (panel.isConnected) refresh(); });
     });
     refresh();
   }
 
   function renderRubric(courseId, assignmentId, settings) {
-    const host = document.querySelector("#right-side, #assignment_show, #content");
+    const host = BC.util.firstOf(["#right-side", "#assignment_show", "#content"]);
     if (!host) return;
     BC.injector.setStyle("bc-grade-tools", CSS);
     const panel = BC.injector.ensureNode("bc-rubric", host, () => {
@@ -339,18 +425,23 @@
   // course, not just ones whose grades page happens to get visited. That single
   // caller is what makes the trend chart, dashboard sparklines and the Insights tab
   // actually accumulate data.
-  BC.grades.recordScore = function (courseId, total) { recordHistory(String(courseId), total); };
+  BC.grades.recordScore = function (courseId, total) { return recordHistory(String(courseId), total); };
+  // Days are LOCAL calendar days. toISOString() is UTC, so in the Americas the "day"
+  // rolled over in the late afternoon and an evening visit was filed under tomorrow.
   function recordHistory(courseId, total) {
-    const key = courseId + ":" + new Date().toISOString().slice(0, 10);
+    const today = BC.dt.ymd(new Date());
+    const key = courseId + ":" + today;
     if (total == null || historyRecorded.has(key)) return;
-    historyRecorded.add(key);
-    BC.storage.updateLocal((d) => {
+    // Today's point is usually there already, from an earlier page. Each page load
+    // used to make a storage round trip per course to find that out.
+    const known = ((BC.storage.local && BC.storage.local.gradeHistory) || {})[courseId];
+    if (Array.isArray(known) && known.some((e) => e.date === today)) { historyRecorded.add(key); return; }
+    return BC.storage.updateLocal((d) => {
       const gh = (d.gradeHistory = d.gradeHistory || {});
       const arr = gh[courseId] || [];
-      const today = new Date().toISOString().slice(0, 10);
       if (!arr.some((e) => e.date === today)) arr.push({ date: today, score: +total.toFixed(3) });
       gh[courseId] = arr.slice(-90);
-    });
+    }).then(() => { historyRecorded.add(key); }).catch(() => {});
   }
 
   function apply(settings, ctx) {
@@ -359,25 +450,35 @@
     const onGrades = ctx.page === "grades" && !!ctx.courseId &&
       settings.grades.panelEnabled;
 
+    syncAutoRefresh(onGrades, settings, ctx);
+
     if (!onAssignment) BC.injector.removeNode("bc-rubric");
     if (!onGrades) BC.injector.removeNode("bc-grade-tools");
     if (!onAssignment && !onGrades) { BC.injector.setStyle("bc-grade-tools", ""); return; }
 
     if (onGrades) render(ctx.courseId, settings);
     if (onAssignment) renderRubric(ctx.courseId, m[1], settings);
+  }
 
-    // Auto-refresh was a headline README claim wired to nothing. No page reload
-    // needed — invalidate the cached groups and re-render the existing panel.
-    // pageBag means the interval dies on SPA navigation for free, and render()
-    // already declines to rebuild while the user is typing in the panel.
-    if (onGrades && settings.grades.autoRefresh) {
-      const bag = BC.lifecycle.pageBag("grades");
-      const mins = Math.max(1, settings.grades.autoRefreshMin | 0);
-      bag.once("auto:" + mins, () => bag.interval(() => {
-        BC.cache.invalidate("LIST " + location.origin + "/api/v1/courses/" + ctx.courseId + "/assignment_groups");
-        render(ctx.courseId, BC.storage.current);
-      }, mins * 60000));
-    }
+  // Auto-refresh was a headline README claim wired to nothing. No page reload
+  // needed — invalidate the cached groups and re-render the existing panel.
+  // pageBag means the interval dies on SPA navigation for free, and render()
+  // already declines to rebuild while the user is typing in the panel. Switching it
+  // off, or changing the interval, now replaces the timer: before, the first one
+  // kept firing until the page was left, and a new interval stacked on top of it.
+  function syncAutoRefresh(onGrades, settings, ctx) {
+    const bag = BC.lifecycle.pageBag("grades");
+    const want = onGrades && settings.grades.autoRefresh
+      ? "auto:" + ctx.courseId + ":" + Math.max(1, settings.grades.autoRefreshMin | 0) : "";
+    if (want ? bag.has(want) : !bag.has("armed")) return;
+    bag.clear();
+    if (!want) return;
+    const mins = Math.max(1, settings.grades.autoRefreshMin | 0);
+    bag.once("armed", () => {});
+    bag.once(want, () => bag.interval(() => {
+      BC.cache.invalidate("LIST " + location.origin + "/api/v1/courses/" + ctx.courseId + "/assignment_groups");
+      render(ctx.courseId, BC.storage.current);
+    }, mins * 60000));
   }
 
   BC.registry.register({ id: "grades", styles: ["bc-grade-tools"], nodes: ["bc-grade-tools", "bc-rubric"], apply });

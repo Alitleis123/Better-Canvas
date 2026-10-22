@@ -14,17 +14,22 @@
       box-shadow: var(--bc-shadow-3, 0 10px 30px rgba(0,0,0,.18));
       max-width: 340px;
       font-family: var(--bc-font-sans); font-size: var(--bc-text-sm, 13px);
+      /* It sits just below the hovered link, over the next links in the list, so it
+         must never catch the pointer, and it leaves the page once faded out. */
+      pointer-events: none; visibility: hidden;
       opacity: 0; transform: translateY(4px);
       transition: opacity var(--bc-dur-2, 150ms) var(--bc-ease-out, ease),
-                  transform var(--bc-dur-2, 150ms) var(--bc-ease-out, ease);
+                  transform var(--bc-dur-2, 150ms) var(--bc-ease-out, ease),
+                  visibility 0s linear var(--bc-dur-2, 150ms);
     }
-    .bc-preview.show { opacity: 1; transform: translateY(0); }
+    .bc-preview.show { opacity: 1; transform: translateY(0); visibility: visible; transition-delay: 0s; }
     .bc-preview h5 { margin: 0 0 4px; font-size: var(--bc-text-md, 14px); }
     .bc-preview p { margin: 0; color: var(--bc-muted, #6b7280); }
   `;
 
   let previewEl = null;
   let hoverTimer = null;
+  let showSeq = 0;           // the latest show(); older fetches resolve into nothing
 
   function ensure() {
     if (previewEl && previewEl.isConnected) return previewEl;
@@ -37,17 +42,22 @@
   }
 
   function hide() {
+    showSeq++;
     if (previewEl) previewEl.classList.remove("show");
     clearTimeout(hoverTimer);
   }
 
   async function show(a, courseId, id) {
+    const seq = ++showSeq;
     const el = ensure();
     el.innerHTML = `<h5>Loading…</h5>`;
     positionAt(a, el);
     el.classList.add("show");
     try {
       const asn = await BC.api.assignment(courseId, id);
+      // Hovering A then B quickly left whichever request finished LAST on screen,
+      // so the card could describe the wrong assignment.
+      if (seq !== showSeq) return;
       const due = asn.due_at ? BC.dt.dueLabel(asn.due_at) : "No due date";
       const points = asn.points_possible != null ? " · " + asn.points_possible + " pts" : "";
       const sub = asn.submission || {};
@@ -56,13 +66,24 @@
         <h5>${BC.util.escapeHtml(asn.name || "Assignment")}</h5>
         <p>${BC.util.escapeHtml(due + points)}</p>
         ${score}
-        <p style="margin-top:6px;">${BC.util.escapeHtml((asn.description || "").replace(/<[^>]+>/g, " ").slice(0, 180) || "")}</p>
+        <p style="margin-top:6px;">${BC.util.escapeHtml(plainText(asn.description).slice(0, 180))}</p>
       `;
     } catch (e) {
+      if (seq !== showSeq) return;
       // Was swallowed silently, leaving the card reading "Loading…" forever.
       el.innerHTML = `<h5>Couldn't load</h5><p>Open the assignment to see details.</p>`;
       BC.diag.push("previews", e);
     }
+  }
+
+  // Canvas descriptions are HTML. An inert parsed document decodes &nbsp; and
+  // &amp; without loading images or running anything.
+  function plainText(html) {
+    if (!html) return "";
+    const body = new DOMParser().parseFromString(html, "text/html").body;
+    // Paragraphs and line breaks would otherwise run together: "FirstSecond".
+    for (const n of body.querySelectorAll("p, div, li, br, h1, h2, h3, h4, h5, h6, td")) { n.before(" "); n.after(" "); }
+    return (body.textContent || "").replace(/\s+/g, " ").trim();
   }
 
   function positionAt(target, el) {
@@ -83,7 +104,11 @@
   }
 
   function onOut(ev) {
-    if (!ev.target.closest || !ev.target.closest('a[href*="/assignments/"]')) return;
+    const a = ev.target.closest && ev.target.closest('a[href*="/assignments/"]');
+    if (!a) return;
+    // mouseout also fires when moving onto a child of the same link (an icon, a
+    // <span>), which hid the card and re-fetched it after a flicker.
+    if (ev.relatedTarget && a.contains(ev.relatedTarget)) return;
     hide();
   }
 
@@ -98,6 +123,8 @@
     const bag = BC.lifecycle.bag("previews");
     bag.listen(document, "mouseover", onOver);
     bag.listen(document, "mouseout", onOut);
+    bag.listen(document, "keydown", (e) => { if (e.key === "Escape") hide(); });
+    bag.listen(window, "scroll", hide, { capture: true, passive: true });
   }
   function uninstall() {
     if (!installed) return;

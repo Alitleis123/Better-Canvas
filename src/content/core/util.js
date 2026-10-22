@@ -3,6 +3,7 @@
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
   const PREFIX = "[Better Canvas]";
+  const cssUrlMemo = new Map();
 
   const util = (BC.util = {
     log(...a) { try { console.log(PREFIX, ...a); } catch (_) {} },
@@ -106,10 +107,35 @@
 
     cssSafe(s) { return String(s == null ? "" : s).replace(/[<>]/g, ""); },
 
+    // For interpolation inside url("..."). cssSafe leaves quotes, backslashes and
+    // newlines alone, so a URL containing `")` closed the string and the rest of an
+    // imported setting became live CSS.
+    cssUrl(s) {
+      // A scene reference resolves to a ~20 KB data URI. Escaping it again for
+      // every card on every observer tick was most of the dashboard's apply time.
+      const ref = BC.themeMedia && BC.themeMedia.parse(s) ? String(s) : null;
+      if (ref && cssUrlMemo.has(ref)) return cssUrlMemo.get(ref);
+      if (BC.themeMedia) s = BC.themeMedia.resolve(s);
+      const out = String(s == null ? "" : s).trim()
+        .replace(/[\r\n\f]/g, "")
+        .replace(/[\\"'()<>]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0"));
+      if (ref) { if (cssUrlMemo.size > 512) cssUrlMemo.clear(); cssUrlMemo.set(ref, out); }
+      return out;
+    },
+
+    // Priority-ordered lookup. querySelector("#a, #b") returns whichever match comes
+    // first in DOCUMENT order, so when #b is an ancestor of #a (e.g. "#grades_summary,
+    // #main") the fallback always wins and the preferred target is never used.
+    firstOf(selectors, root) {
+      const scope = root || document;
+      for (const sel of selectors) { const n = scope.querySelector(sel); if (n) return n; }
+      return null;
+    },
+
     isSafeUrl(url) {
       if (!url) return false;
       const s = String(url).trim();
-      return /^(https?:|data:image\/)/i.test(s);
+      return /^(https?:|data:image\/)/i.test(s) || !!(BC.themeMedia && BC.themeMedia.parse(s));
     },
 
     isSafeHttpUrl(url) {

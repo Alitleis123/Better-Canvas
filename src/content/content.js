@@ -2,7 +2,7 @@
  * Better Canvas — content entry point.
  * Confirms Canvas, applies every feature (idempotent apply(settings, ctx)),
  * survives Canvas SPA re-renders via the observer, registers shortcuts
- * and command-palette entries, and responds to popup/options messages.
+ * and command-palette entries, and responds to toolbar icon and options messages.
  */
 (function () {
   "use strict";
@@ -11,7 +11,8 @@
   let shortcutSig = null;
 
   BC.applyAll = function (settings) {
-    if (!settings) return;
+    if (!settings || retired) return;
+    if (orphaned()) { retire(); return; }
     const ctx = BC.detect.context();
 
     // Settings panel always applies, even when the extension is "off",
@@ -95,6 +96,31 @@
 
   let tornDown = false;
 
+  // ---- updates ----------------------------------------------------------------
+  // When the extension is updated or reloaded, Chrome leaves this copy running in
+  // tabs that were already open but cuts it off from the extension (no storage, no
+  // messages), and the service worker injects a fresh copy alongside it. Left alone
+  // the old copy kept painting the old UI over the page until a manual refresh.
+  // The new copy asks it to step aside on start-up; a copy that notices it has been
+  // cut off does the same by itself.
+  let retired = false;
+  function orphaned() {
+    try { return !(chrome.runtime && chrome.runtime.id); } catch (_) { return true; }
+  }
+  function retire() {
+    if (retired) return;
+    retired = true;
+    BC.util.guard(() => { tornDown = false; teardown(); }, "retire:teardown");
+    BC.util.guard(() => BC.darkEngine && BC.darkEngine.stop(), "retire:dark");
+    BC.util.guard(() => BC.observer && BC.observer.stop && BC.observer.stop(), "retire:observer");
+    BC.util.guard(() => BC.shortcuts && BC.shortcuts.stop && BC.shortcuts.stop(), "retire:shortcuts");
+    BC.util.guard(() => BC.lifecycle.clear("settingsPanel-persist"), "retire:panel");
+    // Everything we ever put on the page, including the settings panel and its
+    // nav item, which ordinary teardown deliberately keeps.
+    for (const n of document.querySelectorAll("[data-bc-node], style[data-better-canvas]")) n.remove();
+    document.documentElement.style.removeProperty("margin-right");
+  }
+
   const ROOT_ATTRS = [
     "data-bc-accent", "data-bc-density", "data-bc-radius", "data-bc-focus",
     "data-bc-cursor", "data-bc-hc", "data-bc-motion", "data-bc-rounded",
@@ -133,6 +159,7 @@
     // reload.
     doc.style.filter = "";
     doc.style.removeProperty("--bc-anim-speed");
+    doc.style.removeProperty("--bc-cursor");
     doc.style.removeProperty("--bc-sidebar-w");
     for (const a of ROOT_ATTRS) doc.removeAttribute(a);
   }
@@ -151,7 +178,15 @@
     startAlarms();
   }
 
-  const requestApply = BC.util.debounce(() => BC.applyAll(BC.storage.current), 120);
+  // 120ms after the last change, but never more than a second behind it: a page
+  // that kept mutating used to hold every feature back indefinitely.
+  let applyTimer = null, firstAsk = 0;
+  const requestApply = () => {
+    const now = Date.now();
+    if (!applyTimer) firstAsk = now;
+    clearTimeout(applyTimer);
+    applyTimer = setTimeout(() => { applyTimer = null; BC.applyAll(BC.storage.current); }, now - firstAsk >= 1000 ? 0 : 120);
+  };
   BC.requestApply = requestApply;
 
   // Zero-latency path for the settings drawer. Coalesced by requestAnimationFrame
@@ -165,7 +200,7 @@
     requestAnimationFrame(() => { rafPending = false; BC.applyAll(BC.storage.current); });
   };
 
-  // Messages from popup / options page
+  // Messages from the toolbar icon and the options page
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg || !msg.type) return;
     if (msg.type === "bc:ping") {
@@ -214,13 +249,33 @@
   }
 
   function boot() {
-    Promise.all([BC.storage.load(), BC.storage.loadLocal()]).then(([settings]) => {
+    // Hand over from a copy left behind by an update, then listen for our own
+    // successor. Events on window reach every content-script world.
+    try { window.dispatchEvent(new CustomEvent("bc:retire")); } catch (_) {}
+    // The dispatch is synchronous, so anything still on the page is a dead copy's:
+    // Firefox stops old content scripts on update without letting them answer. Its
+    // settings button stayed and did nothing, and blocked ours from being added.
+    for (const n of document.querySelectorAll("[data-bc-node], style[data-better-canvas]")) n.remove();
+    window.addEventListener("bc:retire", retire);
+    // Tells the service worker this page's copy knows how to hand over.
+    document.documentElement.setAttribute("data-bc-handover", "");
+    const begin = (settings) => {
       let tries = 0;
       const tryStart = () => {
         if (BC.detect.isCanvas()) return start(settings);
         if (tries++ < 24) setTimeout(tryStart, 250);
       };
       BC.util.whenBody(tryStart);
+    };
+    // A failed load or migration used to leave the page with no features and no
+    // word why. Run on defaults for this page and say so.
+    Promise.all([BC.storage.load(), BC.storage.loadLocal()]).then(([settings]) => begin(settings), (error) => {
+      BC.diag.push("boot", error);
+      // Adopted, so observer ticks and shortcuts, which read BC.storage.current, run too.
+      const defaults = BC.cloneDefaults();
+      BC.storage.adopt(defaults);
+      begin(defaults);
+      BC.util.whenBody(() => BC.toast && BC.toast.error("Better Canvas couldn't read its settings, so this page uses the defaults. Refresh to try again."));
     });
   }
 

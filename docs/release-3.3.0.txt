@@ -1,0 +1,31 @@
+Better Canvas 3.3.0 — Edit Canvas workspace
+
+Visible changes
+- Full-window, responsive settings workspace with Edit Canvas tabs and a separate study locker.
+- Read-only layout preview with course names from the dashboard and explicitly labeled sample tasks.
+- Theme preview, Apply and Cancel. Online collections use the same staged workflow.
+- Six original anime looks, 64 different course scenes in two collections, and two full-size wallpapers.
+- Firefly, rain, star and petal motion layers. Still/reduced-motion controls; offscreen card animations pause.
+- 22 complete bundled themes, 12 classic palettes, and searchable Openverse images with credits.
+- Progress shapes: circle, rainbow, bar, heart, cloud, or none; absolute/relative due dates.
+- Widgets tab for dashboard panels, mini calendar, notes and focus timer.
+- Local notes, bookmarks, folders, pinned items, flashcard editing and study sessions; locker import/export.
+
+Verification
+- 28 automated regression tests passed.
+- 45 interactive browser checks passed in the synthetic 32-course dashboard.
+- 7 additional online-gallery checks passed with mocked API responses, including cancellation, Apply and Undo.
+- All 19 sections fit at 390px without horizontal content overflow. Laptop layouts checked at 1280x800 and 1440x900.
+- All 57 extension JavaScript files passed syntax checks; Chromium and Firefox folders built.
+- The real planner renderer was exercised in the fixture with a synthetic assignment, including heart progress and absolute dates.
+
+Scope of verification
+These checks use the local fixture, not a signed-in school account or the installed Mac extension.
+The preview is an isolated representation of the dashboard, not an embedded Canvas session.
+Anime motion uses animated CSS layers over original illustrations; these are not video wallpapers.
+Locker data stays on the current browser/device. Use My locker > Export for a separate backup.
+No account-backed cloud locker or Google Calendar OAuth sync was added; existing calendar export remains available.
+
+Build/install
+Run build.ps1. Load dist/chrome as an unpacked Chromium extension, or dist/firefox/manifest.json in Firefox's temporary add-on loader.
+For an already loaded unpacked extension, reload the extension itself, then refresh the Canvas page.

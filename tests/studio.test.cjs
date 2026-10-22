@@ -1,0 +1,84 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const { randomUUID } = require('node:crypto');
+const root = path.resolve(__dirname, '..');
+function context(data = {}) {
+  const db = data.__testDatabase || require('./storage-harness.cjs').database(data);
+  if (!data.__testDatabase) {
+    Object.defineProperty(db.data, '__testDatabase', { value: db }); data = db.data;
+  }
+  const chrome = db.client().chrome;
+  const ctx = vm.createContext({ URL, navigator: { platform: "MacIntel" }, chrome, crypto: { randomUUID }, setTimeout, clearTimeout, structuredClone });
+  for (const file of ['shared/defaults', 'shared/themes', 'shared/theme-library', 'shared/theme-scenes', 'shared/theme-artwork', 'shared/theme-media', 'content/core/util', 'content/core/storage', 'shared/settings/locker'])
+    vm.runInContext(fs.readFileSync(path.join(root, 'src/' + file + '.js'), 'utf8'), ctx);
+  return { BC: ctx.BC, chrome, data, db };
+}
+test('bundled anime artwork is portable, distinct per course and present in both browser packages', () => {
+  const { BC } = context();
+  const packs = BC.PRESET_THEMES.filter((p) => p.category === 'anime');
+  assert.equal(packs.length, 6);
+  for (const pack of packs) {
+    const imported = BC.themeOnly(JSON.parse(JSON.stringify(pack.settings)));
+    assert.equal(imported.dashboard.themeImages.length, 32);
+    const assigned = BC.assignThemeImages(imported.dashboard.themeImages, Array.from({ length: 32 }, (_, i) => String(i * 32)));
+    assert.equal(new Set([...assigned.values()].map((a) => BC.themeMedia.resolve(a.url))).size, 32);
+    assert.match(BC.themeMedia.resolve(imported.cosmetics.background.image), /-wallpaper\.webp$/);
+    for (const url of [imported.cosmetics.background.image, ...imported.dashboard.themeImages.map((i) => i.url)]) {
+      const resolved = BC.themeMedia.resolve(url).replace('chrome-extension://test/', '').split('#')[0];
+      assert.ok(fs.existsSync(path.join(root, resolved)));
+    }
+    const state = BC.cloneDefaults();
+    state.theming.reducedMotion = true;
+    BC.applyTheme(state, { settings: imported });
+    assert.equal(state.theming.reducedMotion, true);
+    assert.equal(state.cosmetics.motion, pack.settings.cosmetics.motion);
+  }
+  for (const file of ['manifest.json', 'manifest.firefox.json']) {
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, file)));
+    assert.ok(manifest.web_accessible_resources.some((r) => r.resources.includes('src/assets/themes/*.webp')));
+  }
+});
+test('asset references cannot escape the bundled artwork allowlist', () => {
+  const { BC } = context();
+  for (const url of ['bc-art:../../secret#0', 'bc-art:anime-garden#32', 'bc-art:anime-night#-1', 'bc-wall:../../other', 'chrome-extension://other/private.png', 'javascript:alert(1)']) {
+    assert.equal(BC.themeMedia.parse(url), null);
+    assert.equal(BC.themeImages([{ url }]).length, 0);
+  }
+  assert.equal(BC.themeMedia.position('bc-art:anime-garden#31'), '100% 100%');
+  assert.equal(BC.themeMedia.position('bc-wall:anime-night'), 'center');
+});
+test('locker items persist across contexts and separate item writes preserve unrelated notes and planner data', async () => {
+  const data = { bcLocal: { todo: { keep: true } } };
+  const a = context(data), b = context(a.data);
+  await Promise.all([
+    a.BC.Locker.create({ id: 'note-a', type: 'note', title: 'Biology', body: 'Study photosynthesis' }),
+    b.BC.Locker.create({ id: 'set-b', type: 'set', title: 'Cells', cards: [{ front: 'Powerhouse?', back: 'Mitochondria' }] }),
+  ]);
+  const restored = await context(a.data).BC.Locker.list();
+  assert.equal(restored.length, 2);
+  assert.equal(restored.find((i) => i.id === 'set-b').cards[0].back, 'Mitochondria');
+  await a.BC.Locker.remove('note-a');
+  assert.equal((await b.BC.Locker.list()).length, 1);
+  assert.deepEqual(data.bcLocal, { todo: { keep: true } });
+});
+test('locker rejects malformed items and unsafe bookmark URLs and reports storage failures', async () => {
+  const { BC, db } = context();
+  assert.equal(BC.Locker.normalize({ type: 'script' }), null);
+  const note = BC.Locker.normalize({ type: 'link', url: 'javascript:alert(1)', body: 'x'.repeat(110000), cards: [null, { front: '<img src=x onerror=alert(1)>', back: 'plain text' }] });
+  assert.equal(note.url, ''); assert.equal(note.body.length, 100000); assert.equal(note.cards.length, 1);
+  db.fail('Quota exceeded');
+  await assert.rejects(BC.Locker.create({ id: 'test', type: 'note', title: 'Keep this draft' }), /Quota exceeded/);
+});
+test('locker import validates the whole batch before writing and never overwrites existing IDs', async () => {
+  const { BC, data } = context();
+  await BC.Locker.create({ id: 'original', type: 'note', title: 'Keep me' });
+  await assert.rejects(BC.Locker.importBatch([{ type: 'note', title: 'Valid' }, { type: 'invalid' }]));
+  assert.equal((await BC.Locker.list()).length, 1);
+  const imported = await BC.Locker.importBatch([{ id: 'original', type: 'note', title: 'Imported copy' }]);
+  assert.notEqual(imported[0].id, 'original');
+  assert.equal(data['bcLocker:item:original'].title, 'Keep me');
+  assert.equal((await BC.Locker.list()).length, 2);
+});

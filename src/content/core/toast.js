@@ -23,11 +23,18 @@
       background: #1f2937; color: #fff;
       box-shadow: var(--bc-shadow-3, 0 8px 30px rgba(0,0,0,.28));
       display: flex; align-items: flex-start; gap: var(--bc-space-4, 10px);
-      opacity: 0; transform: translateY(10px) scale(.98);
-      transition: opacity var(--bc-dur-3, 180ms) var(--bc-ease-out, ease),
-                  transform var(--bc-dur-3, 180ms) var(--bc-ease-out, ease);
+      opacity: 0; transform: translateY(12px) scale(.97); filter: blur(4px);
+      transition: opacity 260ms cubic-bezier(.22, 1, .36, 1), transform 380ms cubic-bezier(.22, 1, .36, 1),
+                  filter 240ms cubic-bezier(.3, 0, .2, 1);
     }
-    .bc-toast.show { opacity: 1; transform: translateY(0) scale(1); }
+    .bc-toast.show { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+    /* The focus timer dock shares this corner. Stack toasts above it. */
+    html:has([data-bc-node="bc-pom-dock"]) .bc-toast-host { bottom: 80px; }
+    /* Toasts sit over the bottom of the To Do sidebar, where its Done column is, so
+       while something is being dragged they fade and let the drop through. */
+    html[data-bc-dragging] .bc-toast-host .bc-toast { pointer-events: none; }
+    html[data-bc-dragging] .bc-toast-host .bc-toast.show { opacity: .25; }
+    @media (prefers-reduced-motion: reduce) { .bc-toast { transition: none; filter: none; } }
     .bc-toast.info    { background: #1f2937; }
     .bc-toast.success { background: #0f5132; }
     .bc-toast.warn    { background: #8a5a00; }
@@ -53,6 +60,16 @@
     .bc-toast .bc-toast-action:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
   `;
 
+  // The options page loads this too but has no injector, so it gets a plain tag.
+  function ensureCss() {
+    if (BC.injector) { BC.injector.setStyle("bc-toast-css", CSS); return; }
+    if (!document.head || document.querySelector('style[data-better-canvas="bc-toast-css"]')) return;
+    const tag = document.createElement("style");
+    tag.setAttribute("data-better-canvas", "bc-toast-css");
+    tag.textContent = CSS;
+    document.head.appendChild(tag);
+  }
+
   // Two hosts, because one region cannot serve both politeness levels: info and
   // success are polite, warn and error are assertive. Before this there was no
   // aria-live at all, so every toast was completely silent to screen readers.
@@ -62,14 +79,15 @@
     const id = assertive ? "bc-toast-host-alert" : "bc-toast-host";
     let h = document.querySelector('[data-bc-node="' + id + '"]');
     if (!h) {
-      BC.injector && BC.injector.setStyle("bc-toast-css", CSS);
+      ensureCss();
       h = document.createElement("div");
       h.className = "bc-toast-host";
       h.setAttribute("data-bc-node", id);
       h.setAttribute("role", assertive ? "alert" : "status");
       h.setAttribute("aria-live", assertive ? "assertive" : "polite");
       h.setAttribute("aria-atomic", "false");
-      document.body.appendChild(h);
+      // Off <html>, so toasts stay full size while the settings panel scales the page.
+      document.documentElement.appendChild(h);
     }
     return h;
   }
@@ -125,10 +143,22 @@
       if (reduced) el.classList.add("show");
       else requestAnimationFrame(() => el.classList.add("show"));
       if (timeout > 0) {
-        setTimeout(() => {
-          el.classList.remove("show");
-          setTimeout(() => el.remove(), reduced ? 0 : 240);
-        }, timeout);
+        // Hovering or focusing a toast holds it, so an Undo can still be reached.
+        let timer = null;
+        const held = () => el.matches(":hover") || el.contains(el.getRootNode().activeElement);
+        const arm = () => {
+          clearTimeout(timer);
+          if (held()) return;
+          timer = setTimeout(() => {
+            el.classList.remove("show");
+            setTimeout(() => el.remove(), reduced ? 0 : 240);
+          }, timeout);
+        };
+        el.addEventListener("mouseenter", () => clearTimeout(timer));
+        el.addEventListener("focusin", () => clearTimeout(timer));
+        el.addEventListener("mouseleave", () => setTimeout(arm));
+        el.addEventListener("focusout", () => setTimeout(arm));
+        arm();
       }
       return el;
     },

@@ -2,6 +2,7 @@
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
+  if (BC.color) return;
 
   const color = (BC.color = {
     isHex(s) {
@@ -101,15 +102,17 @@
       return "rgba(" + c.r + "," + c.g + "," + c.b + "," + alpha + ")";
     },
 
-    // Given a base dark background, derive a coherent surface palette.
+    // Given a base dark background, derive a coherent surface palette. Neutral
+    // (zinc-like) text so a tinted base doesn't tint the type as well; surfaces step
+    // up in small, even increments for the clean & minimal look.
     darkSurface(base) {
       return {
         bg: base,
-        bg2: color.lighten(base, 0.05),
+        bg2: color.lighten(base, 0.055),
         bg3: color.lighten(base, 0.10),
-        border: color.lighten(base, 0.15),
-        text: "#e6e9ee",
-        muted: "#9aa4b2",
+        border: color.lighten(base, 0.13),
+        text: "#f4f4f5",
+        muted: "#a1a1aa",
       };
     },
 
@@ -118,10 +121,10 @@
       return {
         bg: base,
         bg2: "#ffffff",
-        bg3: color.darken(base, 0.04),
-        border: color.darken(base, 0.14),
-        text: "#1b2430",
-        muted: "#5c6675",
+        bg3: color.darken(base, 0.035),
+        border: color.darken(base, 0.10),
+        text: "#18181b",
+        muted: "#6b6b74",
       };
     },
 
@@ -138,7 +141,7 @@
       const accent = color.normalizeHex(t.accentColor) || color.normalizeHex(lp.accent) || "#4f46e5";
       return {
         dark:  { ...color.darkSurface(darkBase), accent, link: color.lighten(accent, 0.15) },
-        light: { ...color.lightSurface(lp.bg),   accent, link: accent },
+        light: { ...color.lightSurface(color.isHex(t.lightBg) ? t.lightBg : lp.bg), accent, link: accent },
       };
     },
 

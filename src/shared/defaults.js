@@ -1,16 +1,20 @@
 /*
  * Better Canvas — default settings schema.
  * Single source of truth. Loaded as a classic script by every surface
- * (content scripts, popup, options) and attaches to globalThis.BC.
+ * (content scripts, options) and attaches to globalThis.BC.
  */
 (function () {
   "use strict";
   const BC = (globalThis.BC = globalThis.BC || {});
+  if (BC.cloneDefaults) return;
 
-  BC.VERSION = "3.1.0";
+  BC.VERSION = "3.3.2";
   BC.SETTINGS_KEY = "bcSettings";
   BC.LOCAL_KEY = "bcLocal";
   BC.PROFILES_KEY = "bcProfiles";
+  // Theming settings that are about how someone uses Canvas, not how it looks, so
+  // applying a theme keeps them unless the theme sets them itself.
+  BC.THEME_KEEPS = ["colorBlind", "reducedMotion", "fontSizeScale", "cursor", "cursorSize", "cursorColor", "focusRing"];
 
   BC.GLOBAL_NAV_ITEMS = [
     { key: "global_nav_dashboard_link", label: "Dashboard" },
@@ -74,7 +78,7 @@
   };
 
   BC.defaults = {
-    version: 4,
+    version: 5,
     enabled: true,
     activeProfile: "default",
     firstRun: true,
@@ -98,21 +102,39 @@
         todo: true,
         comingUp: true,
         recentFeedback: true,
+        viewGrades: true,
         gpa: false,
       },
       hideSidebar: false,
       courses: {},                 // per-course: {hidden, nickname, color, bgImage, bgGradient, note}
+      themeImages: [],             // theme artwork, assigned consistently across courses
     },
 
     todo: {
       mode: "default",             // default | clean | custom
-      view: "list",                // list | day | week | kanban | timeblock
-      rangeDays: 7,                // 3 | 7 | 14 | 30 | custom
+      view: "list",                // list | kanban | timeblock
+      rangeDays: 7,                // 3 | 7 | 14 | 30
+      startOn: "today",            // today | sunday | monday — where the window begins
       showCompleted: false,
+      showOverdue: true,           // unfinished work from the last two weeks, on top
+      starredFirst: true,
+      collapseAfter: 0,            // 0 = show every item; else "Show N more" per group
+      compact: false,              // one-line rows
+      showViewSwitch: false,       // List / Board / Day buttons on the list itself
+      // Which kinds of planner item to list. Unknown kinds always show.
+      types: {
+        assignment: true, quiz: true, discussion_topic: true, announcement: true,
+        wiki_page: true, calendar_event: true, planner_note: true,
+      },
+      rowDetails: { course: true, time: true, points: true, icon: true },
       accent: "",
       allowNewTask: true,
+      newTaskDay: "today",         // today | tomorrow
+      celebrate: true,             // a small burst when the window is cleared
       groupBy: "day",              // day | course | priority | tag | none
-      ring: true,                  // weekly progress ring
+      ring: true,                  // show progress at all
+      dueFormat: "relative",
+      progressStyle: "ring",       // ring | bar
       streaks: {
         enabled: true,
         graceDays: 2,
@@ -126,7 +148,7 @@
         longEvery: 4,
         sound: true,
       },
-      recurring: [],               // [{id, title, courseId, rule, at, until}]
+      recurring: [],               // [{id, title, courseId, rule, days, day, at, until, from}]
       tags: [],                    // user-defined tag names
       // Per-task augmentation (stars, snoozes, subtasks, kanban status, …) lives in
       // bcLocal.todo, NOT here. Every one of those is written on a micro-interaction,
@@ -139,6 +161,8 @@
       darkSchedule: { start: "20:00", end: "07:00" },
       darkTone: "neutral",         // neutral | slate | black | nord | dracula | solarized
       darkBg: "",
+      lightBg: "",
+      experience: "",             // coordinated wallpaper, navigation and surfaces
       lightPreset: "default",      // default | rose | forest | ocean | sand | solarized
       accentColor: "",
       font: "",
@@ -147,7 +171,9 @@
       letterSpacing: 0,            // px
       density: "default",          // compact | default | spacious | cozy
       radius: 8,                   // global corner radius
-      cursor: "default",           // default | large | precise
+      cursor: "default",           // default | arrow | dot | ring | precise ("large", before 3.3.2, is arrow)
+      cursorSize: 32,              // px, 16-48, for the drawn cursors
+      cursorColor: "#000000",
       focusRing: "default",        // default | bold | high-contrast
       colorBlind: "off",           // off | protanopia | deuteranopia | tritanopia
       highContrast: false,
@@ -168,6 +194,7 @@
     },
 
     cosmetics: {
+      motion: "none",
       background: {
         mode: "none",              // none | color | gradient | image | pattern
         color: "#0b1220",
@@ -176,6 +203,7 @@
         pattern: "none",           // none | dots | grid | diagonal | topography
         blur: 0,
         opacity: 100,
+        when: "always",            // always | dark | light — which mode shows it
       },
       customCss: "",
     },
@@ -247,13 +275,14 @@
       autoSaveDrafts: true,
       quizDraftSaver: true,
       wordCount: true,
-      printFriendly: true,
-      copyUrlButton: true,
-      readingProgress: true,
+      quickActions: true,          // "Tools" in Canvas's menu; a round button where the menu is hidden
+      printFriendly: true,         // …its "Print this page" item
+      copyUrlButton: true,         // …its "Copy link" item
+      readingProgress: false,      // a bar over the top of every page; opt-in
     },
 
     accessibility: {
-      tts: true,                   // show TTS buttons on text
+      tts: false,                  // "Speak" buttons on assignment, announcement and discussion text; opt-in
       largeTargets: false,
       dyslexiaFont: false,
     },
@@ -270,8 +299,10 @@
         commandPalette: "Mod+K",
         settings: "Mod+Shift+S",
         toggleDark: "Mod+Shift+D",
-        quickTask: "Mod+Shift+T",
-        quickNote: "Mod+Shift+N",
+        // Not Mod+Shift+T / Mod+Shift+N: Chrome and Firefox reserve those (reopen
+        // tab, incognito/private window) and never deliver them to the page.
+        quickTask: "Alt+Shift+T",
+        quickNote: "Alt+Shift+N",
         gotoDashboard: "g d",
         gotoGrades: "g g",
         gotoInbox: "g i",
@@ -298,9 +329,55 @@
     return JSON.parse(JSON.stringify(BC.defaults));
   };
 
+  // Backups and shared themes are data, including objects nested inside arrays.
+  // Never allow imported keys to change an object's prototype during a merge.
+  BC.cleanData = function cleanData(value) {
+    if (Array.isArray(value)) return value.map(cleanData);
+    if (!value || typeof value !== "object") return value;
+    const out = {};
+    for (const k of Object.keys(value)) {
+      if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
+      out[k] = cleanData(value[k]);
+    }
+    return out;
+  };
+
+  BC.gradeNumber = function (value, max = 150) {
+    if (typeof value !== "number" && typeof value !== "string") return null;
+    if (typeof value === "string" && !value.trim()) return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 && number <= max ? number : null;
+  };
+
+  BC.cleanLocalData = function (value) {
+    const data = BC.cleanData(value);
+    if (data && data.rubricDrafts) {
+      for (const draft of Object.values(data.rubricDrafts)) {
+        if (!draft || typeof draft !== "object") continue;
+        for (const key of Object.keys(draft)) {
+          const number = BC.gradeNumber(draft[key], Number.MAX_SAFE_INTEGER);
+          if (number === null) delete draft[key]; else draft[key] = number;
+        }
+      }
+    }
+    // Assign legacy steps the same ids in every reader before any operation.
+    for (const steps of Object.values(data?.todo?.subtasks || {})) {
+      if (!Array.isArray(steps)) continue;
+      const used = new Set(steps.map((step) => step.id).filter(Boolean));
+      steps.forEach((step, index) => {
+        if (step.id) return;
+        let id = "legacy-step-" + index;
+        while (used.has(id)) id += "-";
+        step.id = id; used.add(id);
+      });
+    }
+    return data;
+  };
+
   BC.mergeDefaults = function (stored, carry) {
     const base = BC.cloneDefaults();
     if (!stored || typeof stored !== "object") return base;
+    stored = BC.cleanData(stored);
     const merge = (target, src) => {
       for (const k of Object.keys(src)) {
         const sv = src[k];
@@ -312,10 +389,84 @@
       return target;
     };
     const merged = merge(base, stored);
-    return BC.migrate(merged, carry);
+    // The version must come from what was STORED. Merging onto the defaults first
+    // meant an object without a version field (an old bare export, a hand-edited
+    // file) inherited the current schema version and skipped every migration.
+    merged.version = typeof stored.version === "number" ? stored.version : 2;
+    const settings = BC.migrate(merged, carry);
+    if (settings.grades && settings.grades.goals) {
+      for (const [id, goal] of Object.entries(settings.grades.goals)) {
+        const target = BC.gradeNumber(goal && goal.target);
+        if (target === null) delete settings.grades.goals[id];
+        else settings.grades.goals[id] = { target, notify: !!goal.notify };
+      }
+    }
+    for (const scope of ["global", "course"]) {
+      const links = settings.navigation[scope].customLinks || [];
+      const used = new Set(links.map((link) => link.id).filter(Boolean));
+      links.forEach((link, index) => {
+        if (link.id) return;
+        let id = "legacy-link-" + index;
+        while (used.has(id)) id += "-";
+        link.id = id; used.add(id);
+      });
+    }
+    // Loaded only where the scene drawings are (not subframes).
+    if (BC.compactSceneArt) BC.compactSceneArt(settings);
+    return settings;
   };
 
-  BC.SETTINGS_VERSION = 4;
+  // Rebase only the editor's changes onto the latest committed settings.
+  // Membership lists and id-keyed records retain independent additions/removals.
+  // Ordering and artwork arrays are deliberate replacements.
+  BC.mergeSettingsEdits = function merge(before, edited, fresh, key) {
+    const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    if (equal(before, edited)) return BC.cleanData(fresh);
+    if (Array.isArray(before) && Array.isArray(edited) && Array.isArray(fresh)) {
+      if (!["order", "courseOrder"].includes(key) && [...before, ...edited].every((v) => typeof v === "string" || typeof v === "number")) {
+        return fresh.filter((v) => !before.includes(v) || edited.includes(v))
+          .concat(edited.filter((v) => !before.includes(v) && !fresh.includes(v)));
+      }
+      if ([...before, ...edited].every((v) => v && typeof v === "object" && v.id)) {
+        const old = new Map(before.map((v) => [v.id, v])), next = new Map(edited.map((v) => [v.id, v]));
+        const out = fresh.filter((v) => !old.has(v.id) || next.has(v.id)).map((v) =>
+          old.has(v.id) && next.has(v.id) ? merge(old.get(v.id), next.get(v.id), v) : BC.cleanData(v));
+        for (const v of edited) if (!old.has(v.id) && !out.some((x) => x.id === v.id)) out.push(BC.cleanData(v));
+        return out;
+      }
+      return BC.cleanData(edited);
+    }
+    if ((before === undefined || before && typeof before === "object" && !Array.isArray(before)) && edited && typeof edited === "object" && !Array.isArray(edited)) {
+      const out = fresh && typeof fresh === "object" && !Array.isArray(fresh) ? BC.cleanData(fresh) : {};
+      for (const k of new Set([...Object.keys(before || {}), ...Object.keys(edited)])) {
+        if (equal(before?.[k], edited[k])) continue;
+        if (!Object.hasOwn(edited, k)) delete out[k];
+        else out[k] = merge(before?.[k], edited[k], out[k], k);
+      }
+      return out;
+    }
+    return BC.cleanData(edited);
+  };
+
+  // Explicit actions can replace fields even when they equal the editor baseline.
+  BC.replaceSettingsPaths = function (target, source, paths) {
+    const replace = (to, from, path) => {
+      const [key, ...rest] = path;
+      if (key === "*") {
+        for (const id of new Set([...Object.keys(to), ...Object.keys(from || {})])) {
+          if (to[id]) replace(to[id], from?.[id], rest);
+        }
+      } else if (rest.length) {
+        if (!to[key]) to[key] = {};
+        replace(to[key], from?.[key], rest);
+      } else if (from && Object.hasOwn(from, key)) to[key] = BC.cleanData(from[key]);
+      else delete to[key];
+    };
+    for (const path of paths) replace(target, source, path);
+    return target;
+  };
+
+  BC.SETTINGS_VERSION = 5;
 
   // Each entry upgrades settings from (v-1) to v. `carry` collects data that
   // must move to the bcLocal store — storage.load() persists it there.
@@ -379,6 +530,15 @@
 
       // Sanitize a stored value whose options no longer exist.
       if (s.todo && ["list", "kanban", "timeblock"].indexOf(s.todo.view) === -1) s.todo.view = "list";
+    },
+
+    5(s) {
+      // The old quick-task / quick-note defaults were browser-reserved combos that
+      // could never fire. Move only users still on them; a custom binding is theirs.
+      const b = s.shortcuts && s.shortcuts.bindings;
+      if (!b) return;
+      if (b.quickTask === "Mod+Shift+T") b.quickTask = "Alt+Shift+T";
+      if (b.quickNote === "Mod+Shift+N") b.quickNote = "Alt+Shift+N";
     },
   };
 

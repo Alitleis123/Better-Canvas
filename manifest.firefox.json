@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Better Canvas",
-  "version": "3.0.0",
-  "description": "The most comprehensive Canvas LMS customizer. Dark mode everywhere, theme creator + rotation, kanban planner, Pomodoro, GPA + rubric predictor, quiz draft saver, module progress, study insights — free, local, no telemetry.",
+  "version": "3.3.2",
+  "description": "Customize Canvas LMS with dark mode, themes, a planner, grade tools and a local study locker. Free, no telemetry.",
   "browser_specific_settings": {
     "gecko": {
       "id": "better-canvas@local.extension",
@@ -15,20 +15,37 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "permissions": ["storage", "scripting", "alarms", "contextMenus", "notifications"],
-  "optional_host_permissions": ["*://*/*"],
-  "host_permissions": ["*://*.instructure.com/*"],
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "contextMenus"
+  ],
+  "optional_host_permissions": [
+    "*://*/*"
+  ],
+  "host_permissions": [
+    "*://*.instructure.com/*",
+    "https://api.openverse.org/*"
+  ],
   "background": {
-    "scripts": ["src/background/service-worker.js"]
+    "scripts": [
+      "src/background/service-worker.js"
+    ]
   },
   "content_scripts": [
     {
-      "matches": ["*://*.instructure.com/*"],
+      "matches": [
+        "*://*.instructure.com/*"
+      ],
       "run_at": "document_start",
       "all_frames": false,
       "js": [
         "src/shared/defaults.js",
         "src/shared/themes.js",
+        "src/shared/theme-library.js",
+        "src/shared/theme-scenes.js",
+        "src/shared/theme-media.js",
         "src/content/core/util.js",
         "src/content/core/datetime.js",
         "src/content/core/color.js",
@@ -37,6 +54,8 @@
         "src/content/core/detect.js",
         "src/content/core/injector.js",
         "src/content/core/lifecycle.js",
+        "src/content/core/icons.js",
+        "src/content/core/darkengine.js",
         "src/content/core/ui.js",
         "src/content/core/cache.js",
         "src/content/core/api.js",
@@ -44,9 +63,7 @@
         "src/content/core/toast.js",
         "src/content/core/shortcuts.js",
         "src/content/core/commandPalette.js",
-        "src/shared/settings/state.js",
-        "src/shared/settings/components.js",
-        "src/shared/settings/index.js",
+        "src/shared/settings/studio.js",
         "src/content/features/theming.js",
         "src/content/features/cosmetics.js",
         "src/content/features/navigation.js",
@@ -75,7 +92,9 @@
       ]
     },
     {
-      "matches": ["*://*.instructure.com/*"],
+      "matches": [
+        "*://*.instructure.com/*"
+      ],
       "run_at": "document_start",
       "all_frames": true,
       "match_about_blank": true,
@@ -85,12 +104,12 @@
         "src/content/core/datetime.js",
         "src/content/core/color.js",
         "src/shared/tokens.js",
+        "src/content/core/darkengine.js",
         "src/content/frame.js"
       ]
     }
   ],
   "action": {
-    "default_popup": "src/popup/popup.html",
     "default_title": "Better Canvas",
     "default_icon": {
       "16": "icons/icon-16.png",
@@ -102,5 +121,15 @@
   "options_ui": {
     "page": "src/options/options.html",
     "open_in_tab": false
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/assets/themes/*.webp"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
 }
