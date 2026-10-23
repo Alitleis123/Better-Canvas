@@ -89,15 +89,8 @@ if (!scratch) throw Error("Set BC_BROWSER_SCRATCH to an approved temporary direc
         return BC.storage.request({ type: "bc:localCommit", base: snapshot.base, value: snapshot.values.bcLocal });
       } });
       if (!stale.result.conflict) throw Error("Stale background commit was accepted");
-      await chrome.scripting.executeScript({ target: { tabId: tabs[0].id }, func: async () => BC.Locker.create({ id: "browser-check", type: "note", title: "Original" }) });
-      await chrome.scripting.executeScript({ target: { tabId: tabs[1].id }, func: async () => BC.Locker.remove("browser-check") });
-      const [deleted] = await chrome.scripting.executeScript({ target: { tabId: tabs[0].id }, func: async () => {
-        try { await BC.Locker.save({ id: "browser-check", type: "note", title: "Stale" }); return false; }
-        catch (error) { return error.message.includes("deleted in another window"); }
-      } });
-      if (!deleted.result || (await chrome.storage.local.get(["bcLocker:item:browser-check"]))["bcLocker:item:browser-check"]) throw Error("Locker delete was undone");
       return ["Concurrent extension tab edits survive", "Raw bcLocal contains current downgrade-compatible data",
-        "Background rejects stale content hashes", "Deleted locker item rejects a stale cross-context save"];
+        "Background rejects stale content hashes"];
     });
     results.extension.push(...storageChecks);
     await secondPage.close();

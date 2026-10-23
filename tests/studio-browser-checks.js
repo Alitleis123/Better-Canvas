@@ -15,10 +15,6 @@
     const button = [...root.querySelectorAll("button")].find((b) => b.textContent.trim() === text);
     if (!button) throw Error("Missing button: " + text); button.click();
   };
-  const fill = (label, value) => {
-    const input = root.querySelector('[aria-label="' + label + '"]');
-    input.value = value; input.dispatchEvent(new Event("input", { bubbles: true }));
-  };
   BC.SettingsUI.goto("themes");
   const initial = JSON.stringify(BC.storage.current), initialSaved = await saved();
   await until(() => mirror()?.querySelectorAll(".ic-DashboardCard").length === 32 && !mirror().querySelector("script, #bc-drawer"), "Live preview is a copy of this page without its scripts or the workspace");
@@ -67,18 +63,6 @@
   await BC.storage.update((s) => { s.theming.reducedMotion = true; }); BC.applyNow();
   check(getComputedStyle(bg, "::after").animationName === "none", "Reduced-motion preference stops animation");
   await BC.storage.update((s) => { s.theming.reducedMotion = false; }); BC.applyNow();
-  click("My locker"); await wait(); click("New note"); await wait();
-  fill("Title", "Browser test note"); fill("Your notes", "Remember the photosynthesis equation."); await wait();
-  check((await BC.Locker.list()).some((i) => i.title === "Browser test note" && i.body.includes("photosynthesis")), "Note autosaves");
-  click("Edit Canvas"); click("My locker"); await wait(); click("Browser test noteNote");
-  check(root.querySelector('[aria-label="Your notes"]').value.includes("photosynthesis"), "Note survives leaving and reopening locker");
-  click("Study set"); await wait(); fill("Title", "Browser test cards");
-  fill("Card 1 question", "Powerhouse of a cell?"); fill("Card 1 answer", "Mitochondria"); click("Study this set");
-  check(root.querySelector(".bcs-study-flip").textContent.includes("Powerhouse"), "Study session shows the question");
-  root.querySelector(".bcs-study-flip").click();
-  check(root.querySelector(".bcs-study-flip").textContent === "Mitochondria", "Flashcard reveals the answer");
-  click("Show again later"); root.querySelector(".bcs-study-flip").click(); click("Got it");
-  check(root.querySelector(".bcs-locker-editor").textContent.includes("Set complete"), "Review-again queue completes after learning the card");
   BC.SettingsUI.goto("theming");
   root.querySelector('[aria-label="Cursor"] [data-value="dot"]').click();
   await until(() => document.documentElement.getAttribute("data-bc-cursor") === "dot" && getComputedStyle(document.documentElement).cursor.startsWith('url("data:image/svg+xml') && getComputedStyle(document.querySelector("a")).cursor === "pointer", "A drawn cursor applies to the page and links keep their hand");
@@ -86,7 +70,7 @@
   root.querySelector('[aria-label="Cursor"] [data-value="default"]').click();
   await until(() => document.documentElement.getAttribute("data-bc-cursor") === "default" && getComputedStyle(document.documentElement).cursor === "auto", "The system cursor setting clears it");
   check(root.querySelectorAll('[aria-label="Focus ring"] .bcs-ring-demo').length === 3, "Focus ring choices each show the ring on a sample button");
-  for (const id of ["themes", "theming", "cosmetics", "dashboard", "widgets", "todo", "navigation", "accessibility", "locker", "grades", "calendar", "files", "announcements", "productivity", "notifications", "shortcuts", "instructor", "insights", "about"]) {
+  for (const id of ["themes", "theming", "cosmetics", "dashboard", "widgets", "todo", "navigation", "accessibility", "grades", "calendar", "files", "announcements", "productivity", "notifications", "shortcuts", "instructor", "insights", "about"]) {
     BC.SettingsUI.goto(id); check(root.querySelector(".bcs-main").childElementCount > 0, id + " section renders");
   }
   // Canvas's own sidebar markup (users/dashboard_sidebar.html.erb, shared/_event_list.html.erb)

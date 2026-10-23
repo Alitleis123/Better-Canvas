@@ -34,7 +34,6 @@
   // ============ TABS =====================================================
 
   const TABS = [
-    { id: "locker", group: "Library", label: "My locker", icon: "book", description: "Notes, bookmarks and study sets. Saved privately on this device.", render: (_store, _adapter, ctx) => ctx.searching ? [] : [BC.renderLocker()] },
     { id: "theming",       group: "Look",    label: "Appearance",       icon: "contrast",     description: "Dark mode, colors, type and spacing for all of Canvas.", render: renderTheming },
     { id: "themes",        group: "Look",    label: "Themes",           icon: "layers",       description: "Image themes, an online gallery, and your saved looks.", render: renderThemes },
     { id: "cosmetics",     group: "Look",    label: "Background & CSS", icon: "image",        description: "A page background behind Canvas, and your own CSS.", render: renderCosmetics },
@@ -61,11 +60,10 @@
   const SETTINGS_SECTIONS = ["theming", "dashboard", "todo", "navigation", "cosmetics", "grades"];
   BC.SettingsUI = {
     // What a chosen JSON file is: "backup" (settings + local data), "settings" (a
-    // bare older export), "locker", "theme", or null. Any other object used to
+    // bare older export), "theme", or null. Any other object used to
     // import as defaults and silently reset everything.
     backupKind(j) {
       if (!j || typeof j !== "object" || Array.isArray(j)) return null;
-      if (j.format === "better-canvas-locker") return "locker";
       const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
       if ((j.kind === "better-canvas-backup" || "local" in j) && isObj(j.settings)) return "backup";
       if (j.kind === "better-canvas-backup") return null;   // a backup whose settings are missing
@@ -148,15 +146,11 @@
         navBtns.set(id, b); nav.appendChild(b);
       }
       navButton("edit", "Edit Canvas", "layers");
-      navButton("locker", "My locker", "book");
       for (const g of ["Courses", "Tools", "More"]) {
         nav.appendChild(el("div", { class: "bcs-nav__group", text: g === "Courses" ? "Keep track" : g }));
         for (const t of TABS.filter((x) => x.group === g && !EDIT_TABS.includes(x.id))) navButton(t.id, t.label, t.icon);
       }
       const main = el("main", { class: "bcs-main" });
-      const disposeTab = () => { for (const node of main.querySelectorAll(".bcs-locker")) node.dispose?.().catch(() => {}); };
-      const destroyStore = store.destroy;
-      store.destroy = () => { disposeTab(); destroyStore(); };
       root.dispose = store.destroy;
       const subnav = el("nav", { class: "bcs-subnav", "aria-label": "Edit Canvas sections" });
       for (const id of EDIT_TABS) {
@@ -202,14 +196,11 @@
       // `still` skips the entrance animation, for rebuilds the user didn't ask for
       // (undo, reset, a change made in another tab).
       function showTab(id, still) {
-        disposeTab();
         const tab = TABS.find((t) => t.id === id) || TABS[0];
         main.classList.toggle("bcs-main--still", !!still);
         active = lastTab = tab.id;
         cancelDraft();
         const editing = EDIT_TABS.includes(active);
-        // Undo and Redo cover settings, which the locker doesn't show.
-        undoBtn.hidden = redoBtn.hidden = active === "locker";
         workspaceBody.classList.toggle("is-editing", editing);
         previewColumn.hidden = subnav.hidden = !editing;
         workspaceTitle.textContent = editing ? "Edit Canvas" : tab.label;
@@ -227,9 +218,7 @@
       // Search covers EVERY section, not just the open tab: each tab is rendered
       // (without its network-backed parts) and only matching rows are kept.
       function showSearch(q) {
-        disposeTab();
         cancelDraft(); previewColumn.hidden = subnav.hidden = true; workspaceBody.classList.remove("is-editing");
-        undoBtn.hidden = redoBtn.hidden = false;
         workspaceTitle.textContent = "Search settings"; workspaceDesc.textContent = "Find a control anywhere in Better Canvas.";
         const query = q.trim().toLowerCase();
         for (const b of navBtns.values()) b.removeAttribute("aria-current");
@@ -286,8 +275,7 @@
         redoBtn.disabled = !store.canRedo();
         // Wholesale replacement (reset / import / undo / redo / external change) can
         // alter anything including list lengths, so rebuild — preserving scroll.
-        // My locker doesn't read settings. Rebuilding it closed the note being edited.
-        if (kind === "structural" && !search.input.value.trim() && active !== "locker") {
+        if (kind === "structural" && !search.input.value.trim()) {
           const top = main.scrollTop;
           showTab(active, true);
           main.scrollTop = top;
@@ -1692,8 +1680,7 @@
 
         const kind = BC.SettingsUI.backupKind(parsed);
         if (kind !== "backup" && kind !== "settings") {
-          BC.toast && BC.toast.error(kind === "locker" ? "That's a My locker export. Import it from My locker."
-            : kind === "theme" ? "That's a theme file. Import it from Edit Canvas > Themes." : "That isn't a settings file");
+          BC.toast && BC.toast.error(kind === "theme" ? "That's a theme file. Import it from Edit Canvas > Themes." : "That isn't a settings file");
           return;
         }
         const settingsPart = kind === "backup" ? parsed.settings : parsed;

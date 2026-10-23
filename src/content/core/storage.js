@@ -247,7 +247,7 @@
       return queueLocal(async () => { await storage.load(); return transact(() => replacement); });
     },
 
-    request, // Locker uses the same background writer and error handling.
+    request, // The quiz saver uses the same background writer and error handling.
 
     update(mutator) {
       return queueSettings(async () => {
