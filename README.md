@@ -246,6 +246,7 @@ src/
 ## Development
 
 - After editing source, run `build.ps1` and reload the unpacked extension, then refresh Canvas.
+- Pushing to GitHub doesn't update the Chrome Web Store copy. To ship a release there, follow [RELEASING.md](RELEASING.md).
 - `build.ps1` runs `node --check` on every `.js` file before copying.
 - Install test dependencies with `npm ci`, then run `npm test` to run every `tests/*.test.cjs` suite.
 - Suites cover storage concurrency and targeted reads, sticky notes, grade rules and brute-force equivalence, grade input validation and slider batching, settings failures, options migrations, frame bundles, quiz toggles, dashboard loaders, privacy/manifests, themes and studio artwork.
