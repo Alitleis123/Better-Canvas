@@ -30,6 +30,7 @@ bash run-step.sh steps/upload-package.js
 ```
 
 - The helper waits for the VM desktop lease and then opens that Chrome. It uploads `dist/Better-Canvas-<version>-Chromium.zip` from `C:\Users\alitl\Better-Canvas`, using the version in that checkout's `manifest.json`. If you built somewhere else, set `ZIP` to the zip's full path.
-- It prints the draft version before and after the upload, anything that would block submitting, and whether Submit for review is enabled. Then it closes Chrome and releases the lease.
-- While a version is in review, the store disables uploads. The helper then stops without changing anything.
-- If Google has signed the profile out, run `node signin-viewer.mjs` in that folder and send Ali the link it prints. Google blocks sign-in in automated browsers, so he signs in through that page from his Mac. The page shows a normal Chrome window running on the VM.
+- It prints the zip's version, the draft version before and after the upload, anything that would block submitting, and whether Submit for review is enabled. Then it closes Chrome and releases the lease.
+- It exits with 0 only when the draft shows the zip's version. A missing zip, a rejected or stalled upload, or a lost desktop lease exits with 1.
+- While a version is in review, the store disables uploads. The helper then exits with 1 and changes nothing.
+- If Google has signed the profile out, the helper exits with 2. Run `node signin-viewer.mjs` in that folder and send Ali the link it prints. Google blocks sign-in in automated browsers, so he signs in through that page from his Mac. The page shows a normal Chrome window running on the VM. When the dashboard loads, the viewer closes its Chrome, releases the desktop and exits. It also exits after 30 minutes. Then run the upload again.
