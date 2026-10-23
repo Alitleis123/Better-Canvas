@@ -6,7 +6,7 @@ Visible changes
 - The grade weights donut draws each arc after the previous one instead of stacking them.
 - The hidden assignment preview no longer blocks clicks on the links under it. Escape and scrolling close it, and it has its own switch.
 - Reset keeps recurring tasks, tags, goals, credits, saved themes, custom links, course order, nicknames and hidden courses.
-- Import checks the file first. Locker and theme files get their own messages, and a backup asks before replacing sticky notes, drafts, planner data and grade history on this device.
+- Import checks the file first. A theme file gets its own message, and a backup asks before replacing sticky notes, drafts, planner data and grade history on this device.
 - Tab and Shift+Tab leave the shortcut recorder instead of becoming the shortcut. Backspace or Delete clears a binding.
 - A burst of typing in one settings field is one undo step.
 - Sticky notes are never pruned. Empty lists go, and drafts expire after a week.
@@ -36,6 +36,7 @@ Visible changes
 - Lists in settings reorder by touch from a 24px grip, as well as by mouse and arrow keys.
 - The settings sidebar hides its scrollbar, which pushed the on/off card and the buttons off centre. It still scrolls.
 - The toolbar count clears once no Canvas tab is left to keep it current.
+- My locker is gone. Its notes, bookmarks and flashcards copied a feature from another Canvas extension. Anything saved in it stays in the browser's extension storage, but nothing shows it anymore.
 - The settings workspace and photo theme data load on first use. Each Canvas page parses 638 KB of script instead of 933 KB.
 - The bundled anime artwork ships as WebP: 2.4 MB instead of 13.5 MB. Each package is 2.7 MB.
 - New installs start with the reading bar and Speak buttons off. Switches stay beside their labels at phone width, and Apply theme stays on screen.

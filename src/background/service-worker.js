@@ -62,7 +62,6 @@ const SETTINGS_UI_JS = [
   "src/shared/theme-artwork.js",
   "src/shared/settings/state.js",
   "src/shared/settings/components.js",
-  "src/shared/settings/locker.js",
   "src/shared/settings/index.js",
 ];
 
@@ -203,7 +202,7 @@ function storageCall(method, value) {
       if (error) reject(new Error(error.message)); else resolve(result);
     };
     try {
-      const promise = method === "getKeys" ? chrome.storage.local.getKeys(done) : chrome.storage.local[method](value, done);
+      const promise = chrome.storage.local[method](value, done);
       if (promise?.then) promise.then(done, reject);
     } catch (error) { reject(error); }
   });
@@ -277,50 +276,6 @@ async function commitSettings(msg) {
   return { ok: true };
 }
 
-const LOCKER_PREFIX = "bcLocker:item:", LOCKER_INDEX = "bcLocker:index";
-async function lockerIndex() {
-  const stored = await storageCall("get", [LOCKER_INDEX]);
-  if (Array.isArray(stored[LOCKER_INDEX])) return stored[LOCKER_INDEX];
-  // Only old browsers without getKeys need a one-time scan for 3.3.0 locker
-  // items. Persist the index so ordinary reads and writes stay targeted.
-  const keys = typeof chrome.storage.local.getKeys === "function"
-    ? await storageCall("getKeys") : Object.keys(await storageCall("get", null));
-  const index = keys.filter((key) => key.startsWith(LOCKER_PREFIX));
-  await storageCall("set", { [LOCKER_INDEX]: index });
-  return index;
-}
-async function commitLocker(msg) {
-  let index = await lockerIndex();
-  if (msg.action === "list") {
-    const values = await storageCall("get", index);
-    const live = index.filter((key) => values[key]);
-    if (live.length !== index.length) await storageCall("set", { [LOCKER_INDEX]: live });
-    return { ok: true, items: live.map((key) => values[key]) };
-  }
-  const validId = (id) => typeof id === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(id);
-  if (msg.action === "remove") {
-    if (!validId(msg.id)) throw new Error("Invalid locker item");
-    const key = LOCKER_PREFIX + msg.id;
-    await storageCall("remove", key);
-    await storageCall("set", { [LOCKER_INDEX]: index.filter((k) => k !== key) });
-    return { ok: true };
-  }
-  const incoming = msg.action === "createBatch" ? msg.items : [msg.item];
-  if (!["create", "createBatch", "update"].includes(msg.action) || !Array.isArray(incoming) || incoming.length > 1000 ||
-      incoming.some((item) => !item || !validId(item.id) || !["note", "link", "set"].includes(item.type))) throw new Error("Invalid locker item");
-  const keys = incoming.map((item) => LOCKER_PREFIX + item.id);
-  if (new Set(keys).size !== keys.length) throw new Error("Duplicate locker item");
-  const stored = await storageCall("get", keys);
-  const updating = msg.action === "update";
-  if (keys.some((key) => updating ? !stored[key] : !!stored[key])) {
-    throw new Error(updating ? "This locker item was deleted in another window. Export or copy your changes to keep them." : "This locker item already exists.");
-  }
-  const values = Object.fromEntries(incoming.map((item) => [LOCKER_PREFIX + item.id, item]));
-  if (!updating) values[LOCKER_INDEX] = [...new Set(index.concat(keys))];
-  await storageCall("set", values);
-  return { ok: true };
-}
-
 // Messages from Canvas tabs and the options page.
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (sender?.id !== chrome.runtime.id) { sendResponse({ ok: false, error: "Untrusted message sender" }); return; }
@@ -329,8 +284,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (msg.type === "bc:settingsRead" ? readSettingsSnapshot() : readLocalSnapshot(msg)).then(sendResponse, (error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
-  if (["bc:localCommit", "bc:settingsCommit", "bc:locker", "bc:studyTime", "bc:quizSubmitted"].includes(msg.type)) {
-    const result = storageWrites.then(() => msg.type === "bc:locker" ? commitLocker(msg) : msg.type === "bc:settingsCommit" ? commitSettings(msg)
+  if (["bc:localCommit", "bc:settingsCommit", "bc:studyTime", "bc:quizSubmitted"].includes(msg.type)) {
+    const result = storageWrites.then(() => msg.type === "bc:settingsCommit" ? commitSettings(msg)
       : msg.type === "bc:studyTime" ? addStudyTime(msg) : msg.type === "bc:quizSubmitted" ? clearQuizDrafts(msg) : commitLocal(msg));
     storageWrites = result.catch(() => {});
     result.then(sendResponse, (error) => sendResponse({ ok: false, error: error.message }));

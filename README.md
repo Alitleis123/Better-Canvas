@@ -10,10 +10,9 @@ A customizable study workspace for Instructure Canvas — free forever, settings
 
 ## Features
 
-### Edit Canvas and locker
+### Edit Canvas
 - **Full-window editor** with grouped Themes, Appearance, Background, Dashboard, Widgets, To Do, Sidebar, and Accessibility controls. Responsive at laptop and phone widths.
 - **Live preview** in Edit Canvas is a scaled copy of the Canvas page you opened it on, with your changes applied. Preview a theme, then Apply or Cancel; trying one never changes saved settings. Other controls save immediately and support Undo. The settings tab has no Canvas page to copy, so it shows a labeled sample.
-- **My locker** stores notes, bookmarks, folders, pinned items and flashcard sets on this device without an account. Includes autosave, search, JSON import/export and question/answer study sessions with a review-again queue.
 
 ### Appearance (30+ knobs)
 - Dark mode: Off / On / Auto (system) / Scheduled window.
@@ -160,7 +159,7 @@ Your settings and local study data stay on this device. Image searches send your
 - **Reads (GET):** dashboard cards, courses/scores/terms, planner items, assignment groups, rubrics, modules, files, announcements, course people.
 - **Writes (planner only):** mark a task complete, add a personal task (planner widget + syllabus extract). Uses Canvas's CSRF token — same as the Canvas UI. Nothing else is ever written — no grades, no quiz answers.
 
-Settings live in `bcSettings`. Everything device-local — sticky notes, drafts, quiz drafts, study time, grade history, and planner metadata (stars, snoozes, subtasks, kanban status, streaks) — lives in `bcLocal`. Export/import carries both, so a backup round-trips your planner state as well as your settings. Locker entries use separate `bcLocker:item:<id>` keys so edits to one item cannot overwrite another item or planner metadata. Use **My locker > Export** to back up notes and study sets separately. Telemetry is hard-wired **off**.
+Settings live in `bcSettings`. Everything device-local — sticky notes, drafts, quiz drafts, study time, grade history, and planner metadata (stars, snoozes, subtasks, kanban status, streaks) — lives in `bcLocal`. Export/import carries both, so a backup round-trips your planner state as well as your settings. Telemetry is hard-wired **off**.
 
 ---
 
@@ -249,7 +248,7 @@ src/
 - After editing source, run `build.ps1` and reload the unpacked extension, then refresh Canvas.
 - `build.ps1` runs `node --check` on every `.js` file before copying.
 - Install test dependencies with `npm ci`, then run `npm test` to run every `tests/*.test.cjs` suite.
-- Suites cover storage concurrency and targeted reads, sticky notes, locker lifecycle, grade rules and brute-force equivalence, grade input validation and slider batching, settings failures, options migrations, frame bundles, quiz toggles, dashboard loaders, privacy/manifests, themes and studio artwork.
+- Suites cover storage concurrency and targeted reads, sticky notes, grade rules and brute-force equivalence, grade input validation and slider batching, settings failures, options migrations, frame bundles, quiz toggles, dashboard loaders, privacy/manifests, themes and studio artwork.
 - Run `node tests/headless-browser-check.cjs` after building. It requires a Playwright Chromium installation, `PLAYWRIGHT_BROWSERS_PATH` for its location and `BC_BROWSER_SCRATCH` for temporary browser files. It loads the unpacked Chromium extension and runs the studio browser checks against local synthetic pages.
 - Run `node tests/firefox-check.cjs` after building to load `dist/firefox` in a real Firefox through geckodriver. Set `BC_FIREFOX` to `firefox.exe`, `BC_GECKODRIVER` to `geckodriver.exe` and `BC_BROWSER_SCRATCH`. It resolves every host name to this machine, uses the same local synthetic pages, and checks the settings drawer, a theme save, the WebP artwork and quiz drafts.
 - `node tests/real-canvas-check.cjs` is opt-in. Set `BC_CANVAS_PAGES` to comma-separated `*.instructure.com` pages that open without a login, such as a public course syllabus. It only loads those pages, with dark mode off and then on, and reports extension errors, repeated failing requests and text contrast below WCAG AA.

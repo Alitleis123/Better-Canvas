@@ -39,7 +39,7 @@ test("conflict retries are bounded and failure reaches the existing toast UI", a
   assert.equal(db.data.bcLocal.notes.recovered, true);
 });
 
-test("targeted reads exclude theme and locker payloads and quiz churn adds no keys or tombstones", async (t) => {
+test("targeted reads exclude theme payloads and leftover locker data and quiz churn adds no keys or tombstones", async (t) => {
   const db = database({ bcSettings: { version: 5, customThemes: [{ image: "A".repeat(2 * 1024 * 1024) }] },
     "bcLocker:item:big": { id: "big", type: "note", body: "B".repeat(2 * 1024 * 1024) } });
   const a = db.tab(); await a.storage.load(); await settle(); db.requests.length = 0;
@@ -77,7 +77,7 @@ test("background rejects foreign and missing sender ids before reads or writes",
   for (const sender of [{ id: "foreign-extension" }, {}]) {
     for (const message of [
       { type: "bc:localRead" }, { type: "bc:localCommit", value: { notes: { foreign: true } } },
-      { type: "bc:locker", action: "create", item: { id: "foreign", type: "note" } },
+      { type: "bc:settingsCommit", value: { foreign: true } },
     ]) {
       let response;
       db.message(message, sender, (value) => { response = value; });
